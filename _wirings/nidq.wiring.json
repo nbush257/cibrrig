@@ -1,0 +1,16 @@
+{
+    "SYSTEM": "3B",
+    "SYNC_WIRING_DIGITAL": {
+        "P0.0": "record",
+        "P0.6": "right_camera",
+        "P0.7": "imec_sync"
+    },
+    "SYNC_WIRING_ANALOG": {
+        "AI0": "diaphragm",
+        "AI1": "ekg",
+        "AI4": "pdiff",
+        "AI5": "laser",
+        "AI6": "diaphragm_integrated",
+        "AI7": "temperature"
+    }
+}

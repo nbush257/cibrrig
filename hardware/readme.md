@@ -1,0 +1,1 @@
+TODO: Consolidate my various hardware cad and rig diagrams
