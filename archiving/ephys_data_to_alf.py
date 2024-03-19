@@ -48,15 +48,13 @@ def rename_probe_folders(session_path):
         out_str = f'probe{probe_num:02.0f}'
         return(out_str)
 
-    ephys_files = spikeglx.glob_ephys_files(session_path)
-    for efi in ephys_files:
-        if 'ap' not in efi:
-            continue
-        else:
-            probe_path_orig = efi['ap'].parent
-            probe_path_dest = raw_ephys_folder.joinpath(_get_probe_number(probe_path_orig))
-            probe_path_orig.rename(probe_path_dest)
-            probe_paths.append(probe_path_dest)
+    ap_bin_files = list(session_path.rglob('*.ap.bin'))
+    probe_paths_origs = set([x.parent for x in ap_bin_files])
+    for probe_path_orig in probe_paths_origs:
+        print(probe_path_orig)
+        probe_path_dest = raw_ephys_folder.joinpath(_get_probe_number(probe_path_orig))
+        probe_path_orig.rename(probe_path_dest)
+        probe_paths.append(probe_path_dest)
     return probe_paths
 
 
