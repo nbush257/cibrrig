@@ -27,6 +27,8 @@ import time
 import spikeglx
 from one.alf import spec
 import brainbox.metrics
+import uuid
+from ibldsp.voltage import decompress_destripe_cbin
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 _log = logging.getLogger('SI-Kilosort4')
 _log.setLevel(logging.INFO)
@@ -57,21 +59,25 @@ def print_elapsed_time(start_time):
     _log.info(f'Elapsed time: {time.time()-start_time:0.0f} seconds')
 
 def move_motion_info(motion_path,destination):
-    drift_depths = motion_path.joinpath('spatial_bins.npy')
-    drift = motion_path.joinpath('motion.npy')
-    drift_times = motion_path.joinpath('temporal_bins.npy')
-    
-    drift_depths.rename(destination.joinpath('drift_depths.um.npy'))
-    drift.rename(destination.joinpath('drift.um.npy'))
-    drift_times.rename(destination.joinpath('drift.times.npy'))
+    try:
+        drift_depths = motion_path.joinpath('spatial_bins.npy')
+        drift = motion_path.joinpath('motion.npy')
+        drift_times = motion_path.joinpath('temporal_bins.npy')
+        
+        drift_depths.rename(destination.joinpath('drift_depths.um.npy'))
+        drift.rename(destination.joinpath('drift.um.npy'))
+        drift_times.rename(destination.joinpath('drift.times.npy'))
+    except:
+        _log.warning('SI computed motion not found')
 
 
-def run_probe(probe_src,stream,probe_local,testing=False):
+def run_probe(probe_dir,probe_local,testing=False):
     start_time = time.time()
 
     # Set paths
-    temp_local = probe_local.joinpath('.si')
-    PHY_DEST = probe_local.joinpath('ks4')
+    temp_local = probe_local.joinpath(f'.si_{uuid.uuid1()}')
+    temp_local.mkdir(parents=True)
+    PHY_DEST = probe_local.joinpath('kilosort4')
     # Temporary paths that will not be coming with us?
     SORT_PATH = temp_local.joinpath(f'.ks4')
     WVFM_PATH = temp_local.joinpath('.wvfm')
@@ -79,99 +85,37 @@ def run_probe(probe_src,stream,probe_local,testing=False):
     MOTION_PATH = temp_local.joinpath('.motion')
     probe_local.mkdir(parents=True,exist_ok=True)
 
+
+    PREPROC_PATH.mkdir()
     if PHY_DEST.exists():
-        _log.warning(f'Local phy destination exists ({PHY_DEST}). Skipping this probe {probe_src}')
+        _log.warning(f'Local phy destination exists ({PHY_DEST}). Skipping this probe {probe_dir}')
         return
 
-    # POINT TO RECORDING and concatenate
-    if not PREPROC_PATH.exists():
-        recording = se.read_spikeglx(probe_src,stream_id = stream)
-        _log.info(recording)
-        rec_list =[]
-        curr_samples = 0
-        sample_bounds = []
-        for ii in range(recording.get_num_segments()):
-            seg = recording.select_segments(ii)
-            # THIS LINE CUTS THE SEGMENTS
-            if testing:
-                use_secs = 20
-                _log.warning(f"TESTING: ONLY RUNNING ON {use_secs}s per segment")
-                seg = seg.frame_slice(0,30000*use_secs)
-            rec_list.append(seg)
-            sample_bounds.append([curr_samples,curr_samples + seg.get_num_samples(),seg.sample_index_to_time(curr_samples),
-                                  seg.sample_index_to_time(curr_samples+seg.get_num_samples())])
-            curr_samples +=seg.get_num_samples()
-        recording = si.concatenate_recordings(rec_list)
-
-
-        # Preprocessing
-        _log.info('Preprocessing IBL destripe...')
-        preprocessed_recordings = []
-
-        # loop over the recordings contained in the dictionary
-        rec_filtered = spre.highpass_filter(recording)
-        rec_shifted = spre.phase_shift(rec_filtered)
-        bad_channel_ids, all_channels = spre.detect_bad_channels(rec_shifted)
-        rec_interpolated = spre.interpolate_bad_channels(rec_shifted, bad_channel_ids)
-
-        # 
-        rec_split = rec_interpolated.split_by(property='group')
-        n_shanks = len(rec_split)
-        _log.info(f'Found {n_shanks} channel groups')
-        for chan_group_rec in rec_split.values():
-            rec_destriped = spre.highpass_spatial_filter(chan_group_rec)    
-            preprocessed_recordings.append(rec_destriped)
-
-        combined_preprocessed_recording = si.aggregate_channels(preprocessed_recordings)
-        if MOTION_PATH.exists():
-            _log.info('Motion info loaded')
-            motion_info = si.load_motion_info(MOTION_PATH)
-            rec_mc = sim.interpolate_motion(recording = combined_preprocessed_recording,
-                                                        motion=motion_info['motion'],
-                                                        temporal_bins=motion_info['temporal_bins'],
-                                                        spatial_bins=motion_info['spatial_bins'],
-                                                        **motion_info['parameters']['interpolate_motion_kwargs'],
-                                                        )
-        else:
-            _log.info('Motion correction KS-like...')
-            rec_mc, motion_info = si.correct_motion(combined_preprocessed_recording, preset=MOTION_PRESET,
-                            folder=MOTION_PATH,
-                            output_motion_info=True, **job_kwargs)
-            print_elapsed_time(start_time)
-        
-        if SI_MC:
-            rec_mc.save(folder=PREPROC_PATH,**job_kwargs)     
-        else:
-            combined_preprocessed_recording.save(folder=PREPROC_PATH,**job_kwargs)
-       
-        print_elapsed_time(start_time) 
-    else:
-        _log.info('Preprocessed data exists. Loading')
-        pass
+    # POINT TO RECORDING and IBL Destripe 
+    _log.info('Running destriping.')
+    for ap_file in probe_dir.glob('*ap.bin'):
+        destriped_bin = PREPROC_PATH.joinpath(ap_file.name)
+        if destriped_bin.exists():
+            _log.info(f'Destriped file {destriped_bin} exists. Skipping')
+        shutil.copy(ap_file.with_suffix('.meta'),PREPROC_PATH)
+        decompress_destripe_cbin(ap_file,output_file=destriped_bin) 
+    stream = si.get_neo_streams('spikeglx',PREPROC_PATH)[0][0]
+    recording = se.read_spikeglx(destriped_bin.parent,stream_id=stream)
     
-    # Load preprocessed data on disk
-    recording = si.load_extractor(PREPROC_PATH)
+
+    rec_list =[]
+    for ii in range(recording.get_num_segments()):
+        seg = recording.select_segments(ii)
+        # THIS LINE CUTS THE SEGMENTS
+        if testing:
+            use_secs = 60
+            _log.warning(f"TESTING: ONLY RUNNING ON {use_secs}s per segment")
+            seg = seg.frame_slice(0,30000*use_secs)
+        rec_list.append(seg)
+    recording = si.concatenate_recordings(rec_list)
     recording.annotate(is_filtered=True)
-    sr = recording.sampling_frequency
-    _log.info(f"Loaded preprocessed recording from {PREPROC_PATH}")
     
-    # Plot motion data
-    try:
-        _log.info('Loading motion info')
-        motion_info = si.load_motion_info(MOTION_PATH)
-        if not MOTION_PATH.joinpath('driftmap.png').exists():
-            fig = plt.figure(figsize=(14, 8))
-            si.plot_motion(motion_info, figure=fig, 
-                        color_amplitude=True, amplitude_cmap='inferno', scatter_decimate=10)
-            plt.savefig(probe_local.joinpath('driftmap.png'),dpi=300)
-            for ax in fig.axes[:-1]:
-                ax.set_xlim(30,60)
-            plt.savefig(probe_local.joinpath('driftmap_zoom.png'),dpi=300)
-        print_elapsed_time(start_time) 
-    except:
-        pass
-
-
+    
     # RUN SORTER
     if SORT_PATH.exists():
         _log.info('='*100)
@@ -260,46 +204,59 @@ def run_probe(probe_src,stream,probe_local,testing=False):
 
 
 @click.command()
-@click.argument('session_path')
+@click.argument('session_path',type=click.Path())
 @click.option('--dest','-d',default=None)
 @click.option('--testing',is_flag=True)
 @click.option('--no_move_final',is_flag=True)
 @click.option('--no_clean',is_flag=True)
 def run_session(session_path,dest,testing,no_move_final,no_clean):
-    rm_intermediate = True
+    """Spike sort a session. A session is multiple simultanesouly recorded probes. Any instances of multiple 
+    recordings must occur in the same anatomical location
+
+    Args:
+        session_path (_type_): Path to the session that contains folders for each probe.
+        dest (_type_): Destination session path
+        testing (_type_): Boolean flag to only run a small snippet of the data
+        no_move_final (_type_): _description_
+        no_clean (_type_): _description_
+    """
     session_path = Path(session_path)
+    rm_intermediate = True
     cleanup_local = not no_clean
-    if dest is not None:
-        dest = Path(dest)
-    else:
-        dest = session_path
-    dest = dest.joinpath('alf')
+    
+    dest = dest or session_path
+    dest = Path(dest).joinpath('alf')
+
+    _log.debug(f'Destination set to {dest}')
     
     session_local = SCRATCH_DIR.joinpath(session_path.name)
-    ephys_files = spikeglx.glob_ephys_files(session_path)
+    ephys_dir = session_path.joinpath('raw_ephys_data')
+    _log.debug(f'{session_local=}')
+    probe_dirs = list(ephys_dir.glob('probe*')) + list(ephys_dir.glob('*imec[0-9]'))
     
-    for efi in ephys_files:
-        if efi['label'] =='':
-            continue
 
-        stream = si.get_neo_streams('spikeglx',efi['path'])[0][0]
-        probe_local = session_local.joinpath(efi['label'])
-        probe_dest = dest.joinpath(efi['label'])
+    # Loop over all the ephys files
+    for probe_dir in probe_dirs:
+
+        probe_local = session_local.joinpath(probe_dir.name)
+        probe_dest = dest.joinpath(probe_dir.name)
 
         _log.info(
             '\n'+
             '='*100 +
             f'\nRunning SpikeInterface {SORTER}:' +
             f"\n\tGate: {session_path}" +
-            f"\n\tStream: {stream}\n" +
+            f"\n\Probe: {probe_dir.name}\n" +
             '='*100
         )
 
-        run_probe(session_path,stream,probe_local,testing=testing)
-        time.sleep(1)
+        run_probe(probe_dir,probe_local,testing=testing)
+
+
+        # Cleanup # TODO: Move out
         if rm_intermediate:
             try:
-                shutil.rmtree(probe_local.joinpath('.si'))
+                shutil.rmtree(probe_local.joinpath('.si*'))
             except:
                 _log.error('Could not delete temp si folder')
 
