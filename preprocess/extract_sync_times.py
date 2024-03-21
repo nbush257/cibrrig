@@ -80,12 +80,14 @@ def main(session_path,debug,display):
         assert(len(ni_fn))==1,'Incorrect number of NI files found'
         ni_fn = ni_fn[0]
         label = Path(ni_fn.stem).stem
+        _log.info(f'Extracting sync from {ni_fn}')
         sync_nidq= _sync_to_alf(ni_fn,save=True,parts=label)[0]
         sync_map = spikeglx.get_sync_map(ni_fn.parent)
         sync_nidq = get_sync_fronts(sync_nidq, sync_map['imec_sync'])
 
         probe_fns = list(ephys_path.rglob(f'*{trig}.imec*.ap.bin'))
         for probe_fn in probe_fns:
+            _log.info(f'Extracting sync from {probe_fn}')
             md = spikeglx.read_meta_data(probe_fn.with_suffix('.meta'))
             sr =spikeglx._get_fs_from_meta(md)
             label = Path(probe_fn.stem).stem
