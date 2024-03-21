@@ -15,6 +15,11 @@ import click
 import logging
 from one.alf import spec
 import json
+import re
+from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_ibl_sync_map,_sync_to_alf
+import one.alf.exceptions
+from ibllib.ephys.sync_probes import sync_probe_front_times,_save_timestamps_npy,_check_diff_3b
+import matplotlib.pyplot as plt
 logging.basicConfig()
 _log = logging.getLogger('extract_sync_times')
 _log.setLevel(logging.INFO)
@@ -25,15 +30,37 @@ _log.setLevel(logging.INFO)
 # Code cannot handle the commercial NP2 probes (2013) at this time
 IMEC_CHAN = '#SY0'
 NI_CHAN = '#XD0'
-def _extract_sync(rec,stream,chan):
-    dig = rec.get_traces(channel_ids = [stream+chan])
+
+def _extract_sync(recording,segment_id):
+    """DEPRECATED (Works with spikeinterface)
+
+    Args:
+        recording (_type_): _description_
+        segment_id (_type_): _description_
+    """    
+    segment = recording.select_segments(segment_id)
+    stream = recording.stream_id
+    if stream == 'nidq':
+        chan=NI_CHAN
+    else:
+        chan=IMEC_CHAN
+    dig = segment.get_traces(channel_ids = [stream+chan])
     dig = spikeglx.split_sync(dig)
     ind, polarities = ibldsp.utils.fronts(dig,axis=0)
     samps,chans = ind
-    sync = {'times': samps/rec.sampling_frequency,
-            'channels': chans,
-            'polarities': polarities}
+
+    sync = alfio.Bunch()
+    sync['times'] = segment.sample_index_to_time(samps)
+    sync['chans'] = chans
+    sync['polarities'] = polarities
     return(sync)
+
+
+def _get_triggers(session_path):
+    # get the NI files:
+    ni_files = list(session_path.joinpath('raw_ephys_data').glob('*.nidq.bin'))
+    trig_strings = [re.search('t\d{1,3}',x.stem).group() for x in ni_files]
+    return(trig_strings)
 
 
 
@@ -42,28 +69,52 @@ def _extract_sync(rec,stream,chan):
 @click.option('--debug',is_flag=bool,help='Sets logging level to DEBUG')
 @click.option('--display',is_flag=bool,help='Toggles display')
 def main(session_path,debug,display):
-    if debug:
-        _log.setLevel(logging.DEBUG)
+    type = None
+    session_path = Path(session_path)
+    ephys_path = session_path.joinpath('raw_ephys_data')
 
-    ephys_files = spikeglx.glob_ephys_files(session_path)
-    for efi in ephys_files:
-        if 'nidq' in efi.keys():
-            stream = 'nidq'
-            chan=NI_CHAN
-        else:
-            stream = si.get_neo_streams('spikeglx',efi['path'])[0][0]
-            chan=IMEC_CHAN
-        _log.info(f'Working on {efi.label}. Stream:{stream} Chan:{chan}')
+    triggers = _get_triggers(session_path)
+    for trig in triggers:
 
-        rec = si.read_spikeglx(efi['path'], stream_name=stream, load_sync_channel=True)
-        sync = _extract_sync(rec,stream,chan)
-        out_files = alfio.save_object_npy(efi['path'], sync, 'sync',
-                                namespace='spikeglx', parts=efi['label'])
-        
-        for x in out_files:
-            _log.debug(f'Saved \t{str(x)}')
+        ni_fn = list(ephys_path.glob(f'*{trig}.nidq*.bin'))
+        assert(len(ni_fn))==1,'Incorrect number of NI files found'
+        ni_fn = ni_fn[0]
+        label = Path(ni_fn.stem).stem
+        _log.info(f'Extracting sync from {ni_fn}')
+        sync_nidq= _sync_to_alf(ni_fn,save=True,parts=label)[0]
+        sync_map = spikeglx.get_sync_map(ni_fn.parent)
+        sync_nidq = get_sync_fronts(sync_nidq, sync_map['imec_sync'])
 
-    sync_probes.sync(session_path,display=display)
+        probe_fns = list(ephys_path.rglob(f'*{trig}.imec*.ap.bin'))
+        for probe_fn in probe_fns:
+            _log.info(f'Extracting sync from {probe_fn}')
+            md = spikeglx.read_meta_data(probe_fn.with_suffix('.meta'))
+            sr =spikeglx._get_fs_from_meta(md)
+            label = Path(probe_fn.stem).stem
+
+            sync_probe,out_files = _sync_to_alf(probe_fn,save=True,parts=label)
+            sync_map = spikeglx.get_sync_map(probe_fn.parent)
+            sync_probe = get_sync_fronts(sync_probe, sync_map['imec_sync'])
+
+            assert np.isclose(sync_nidq.times.size, sync_probe.times.size, rtol=0.1),'Sync Fronts do not match'
+            sync_idx = np.min([sync_nidq.times.size, sync_probe.times.size])
+            
+            qcdiff = _check_diff_3b(sync_probe)
+            if not qcdiff:
+                qc_all = False
+                type_probe = type or 'exact'
+            else:
+                type_probe = type or 'smooth'
+            timestamps, qc = sync_probe_front_times(sync_probe.times[:sync_idx], sync_nidq.times[:sync_idx], sr,
+                                                    display=display, type=type_probe, tol=2.5)
+            if display:
+                plt.savefig(probe_fn.parent.joinpath(f'sync{label}.png'),dpi=300)
+                plt.close('all')
+            
+            # Hack 
+            ef = alfio.Bunch()
+            ef['ap'] = probe_fn
+            out_files.extend(_save_timestamps_npy(ef, timestamps, sr))
 
 
 if __name__ == '__main__':

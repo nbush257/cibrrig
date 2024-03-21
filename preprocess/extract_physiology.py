@@ -150,7 +150,9 @@ def run_one(SR, pdiff_chan, flowmeter_chan, dia_chan, ekg_chan, temp_chan, v_in,
     fn_heartbeat = spec.to_alf('heartbeat','times','npy','cibrrig',extra=trigger_label)
 
     physiol_df.to_parquet(save_path.joinpath(fn_physiol))
-    np.save(save_path.joinpath(fn_heartbeat),heartbeats)
+    
+    if has_ekg:
+        np.save(save_path.joinpath(fn_heartbeat),heartbeats)
 
     fn_breath_onsets = spec.to_alf('breaths','times','npy','cibrrig',extra=trigger_label)
     fn_breaths = spec.to_alf('breaths','features','tsv','cibrrig',extra=trigger_label)
@@ -214,7 +216,12 @@ def main(session_path, pdiff_chan, flowmeter_chan, dia_chan, ekg_chan, temp_chan
             _log.info('='*50)
             _log.info('Sending to Breathmetrics')
             command = ['matlab','-batch',f"breathmetrics_proc('{save_path}','{trigger_label}')"]
-            subprocess.run(command,check=True)
+            try:
+                subprocess.run(command,check=True)
+            except Exception as e:
+                _log.error(e)
+                _log.error('Continuing')
+                continue
             has_breathmetrics = True
 
         else:

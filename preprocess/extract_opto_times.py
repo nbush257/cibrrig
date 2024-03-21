@@ -26,7 +26,7 @@ _log.setLevel(logging.INFO)
 
 
 # TODO: add option to extract the binary 
-# TODO output in alf format (intervals, amplitudes)
+# TODO output in alf format (intervals, amplitudes)?
 
 
 def get_opto_df(raw_opto,v_thresh,ni_sr,min_dur=0.001,max_dur=20):
