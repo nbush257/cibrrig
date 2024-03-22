@@ -1,0 +1,12 @@
+{
+    "SYSTEM": "3B",
+    "SYNC_WIRING_DIGITAL": {
+        "P0.0": "record",
+        "P0.6": "right_camera",
+        "P0.7": "imec_sync"
+    },
+    "SYNC_WIRING_ANALOG": {
+        "AI4": "pdiff",
+        "AI5": "laser",
+    }
+}

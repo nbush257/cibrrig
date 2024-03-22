@@ -4,19 +4,22 @@ function breathmetrics_proc(p_load,trigger_label)
 % Aligns to diaphragm if it exists
 % events, and append the breathmetrics results
 verbose=1;
+addpath(genpath('/active/ramirez_j/ramirezlab/nbush/helpers/npy-matlab'))
+addpath(genpath('/active/ramirez_j/ramirezlab/nbush/helpers/breathmetrics'))
+
 %% Load in the data
-physiol_fn = [p_load '\' dir([p_load '\*physiology*' trigger_label '*pqt' ]).name];
-physiol_times_fn = [p_load '\' dir([p_load '\*physiology*times*' trigger_label '*npy' ]).name];
-breath_features_fn = [p_load '\' dir([p_load '\*breaths.table*' trigger_label '*pqt' ]).name];
-breath_times_fn = [p_load '\' dir([p_load '\*breaths.times*' trigger_label '*npy' ]).name];
+physiol_fn = [p_load '/' dir([p_load '/*physiology*' trigger_label '*pqt' ]).name];
+physiol_times_fn = [p_load '/' dir([p_load '/*physiology*times*' trigger_label '*npy' ]).name];
+breath_features_fn = [p_load '/' dir([p_load '/*breaths.table*' trigger_label '*pqt' ]).name];
+breath_times_fn = [p_load '/' dir([p_load '/*breaths.times*' trigger_label '*npy' ]).name];
 
 physiology = parquetread(physiol_fn);
 physiology.t =readNPY(physiol_times_fn);
 sr = 1/mean(diff(physiology.t));
 
-has_dia = ~all(isnan(physiology.dia));
-has_flow = ~all(isnan(physiology.flowmeter));
-has_pdiff = ~all(isnan(physiology.pdiff));
+has_dia = ismember('dia',physiology.Properties.VariableNames);
+has_flow = ismember('flowmeter',physiology.Properties.VariableNames);
+has_pdiff = ismember('pdiff',physiology.Properties.VariableNames);
 
 % Only load in previously extracted diaphragm if dia was recorded
 if has_dia

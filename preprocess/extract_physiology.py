@@ -62,7 +62,7 @@ def label_sighs(dia_df):
     return dia_df
 
 
-def run_one(SR, pdiff_chan, flowmeter_chan, dia_chan, ekg_chan, temp_chan, v_in, inhale_pos, save_path):
+def run_one(SR, wiring, v_in, inhale_pos, save_path):
     DS_FACTOR=10
     # INIT output variables
     pdiff = np.array([])
@@ -73,11 +73,23 @@ def run_one(SR, pdiff_chan, flowmeter_chan, dia_chan, ekg_chan, temp_chan, v_in,
     heartbeats = np.array([])
     hr_bpm = np.array([])
 
-    has_pdiff = pdiff_chan>=0
-    has_flow = flowmeter_chan>=0
-    has_dia = dia_chan>=0
-    has_ekg = ekg_chan>=0
-    has_temperature = temp_chan>=0
+    analog_offset = 16
+    dia_chan = wiring.get('diapragm',False)
+    ekg_chan = wiring.get('ekg',False)
+    pdiff_chan = wiring.get('pdiff',False)
+    flowmeter_chan = wiring.get('flowmeter',False)
+    temp_chan = wiring.get('temperature',False)
+
+    if dia_chan:
+        dia_chan -= analog_offset
+    if ekg_chan:
+        ekg_chan -= analog_offset
+    if pdiff_chan:
+        pdiff_chan -= analog_offset
+    if flowmeter_chan:
+        flowmeter_chan -= analog_offset
+    if temp_chan:
+        temp_chan -=  analog_offset 
 
     if inhale_pos:
         inhale_dir=1
@@ -101,33 +113,33 @@ def run_one(SR, pdiff_chan, flowmeter_chan, dia_chan, ekg_chan, temp_chan, v_in,
     # Must do before explicit ekg processing because it attempts
     # to find the heartbeats, but it is not as good as the
     # explicit EKG channel and so we want to overwrite heartbeats with those data if they exist
-    if has_dia:
+    if dia_chan:
         _log.info('Processing diaphragm')
         raw_dia,sr_dia = nidq_utils.load_dia_emg(SR,dia_chan)
         dia_df,dia_sub,sr_dia_sub,HR,dia_filt,heartbeats = nidq_utils.filt_int_ds_dia(raw_dia,sr_dia,ds_factor=DS_FACTOR)
         t,dia_sub = _crop_traces(t,dia_sub)
 
     # Process EKG
-    if has_ekg:
+    if ekg_chan:
         _log.info('Processing EKG')
         heartbeats = nidq_utils.extract_hr_channel(SR,ekg_chan)
         _,hr_bpm = physiology.compute_avg_hr(heartbeats,t_target=t)
 
 
     # Process PDIFF
-    if has_pdiff:
+    if pdiff_chan:
         _log.info('Processing pressure differential sensor')
         pdiff,sr_pdiff = nidq_utils.load_ds_pdiff(SR, pdiff_chan,ds_factor=DS_FACTOR,inhale_dir=inhale_dir)
         t,pdiff = _crop_traces(t,pdiff)
 
     # Process Flowmeter
-    if has_flow:
+    if flowmeter_chan:
         _log.info('Processing flowmeter')
         flow,sr_flow = nidq_utils.load_ds_process_flowmeter(SR,flowmeter_chan,v_in,ds_factor=DS_FACTOR,inhale_dir=inhale_dir)
         t,flow = _crop_traces(t,flow)
 
     # Process Temperature
-    if has_temperature:
+    if temp_chan:
         _log.info('Processing temperature')
         temperature = nidq_utils.extract_temp(SR,temp_chan,ds_factor=DS_FACTOR)
         t,temperature = _crop_traces(t,temperature)
@@ -139,11 +151,16 @@ def run_one(SR, pdiff_chan, flowmeter_chan, dia_chan, ekg_chan, temp_chan, v_in,
     _log.debug(f'{t.shape[0]=}\n{pdiff.shape[0]=}\n{dia_sub.shape[0]=}\n{hr_bpm.shape[0]=}\n{temperature.shape[0]=}\n{flow.shape[0]=}')
 
     physiol_df = pd.DataFrame()
-    physiol_df['pdiff'] = pdiff if has_pdiff else None
-    physiol_df['dia'] = dia_sub if has_dia else None
-    physiol_df['hr_bpm'] = hr_bpm if has_ekg else None
-    physiol_df['temperature'] = temperature if has_temperature else None
-    physiol_df['flowmeter'] = flow if has_flow else None
+    if pdiff_chan:
+        physiol_df['pdiff'] = pdiff
+    if dia_chan:
+        physiol_df['dia'] = dia_sub 
+    if ekg_chan:
+        physiol_df['hr_bpm'] = hr_bpm
+    if temp_chan:
+        physiol_df['temperature'] = temperature
+    if flowmeter_chan:
+        physiol_df['flowmeter'] = flow
 
     fn_physiol = spec.to_alf('physiology','table','pqt','cibrrig',extra=trigger_label)
     fn_physiol_timestamps =  spec.to_alf('physiology','times','npy','cibrrig',extra=trigger_label)
@@ -151,13 +168,13 @@ def run_one(SR, pdiff_chan, flowmeter_chan, dia_chan, ekg_chan, temp_chan, v_in,
     physiol_df.to_parquet(save_path.joinpath(fn_physiol))
     np.save(save_path.joinpath(fn_physiol_timestamps),t)
     
-    if has_ekg:
+    if ekg_chan:
         np.save(save_path.joinpath(fn_heartbeat),heartbeats)
 
     fn_breath_onsets = spec.to_alf('breaths','times','npy','cibrrig',extra=trigger_label)
     fn_breaths = spec.to_alf('breaths','table','pqt','cibrrig',extra=trigger_label)
 
-    if has_dia:
+    if dia_chan:
         # Save the extracted diaphragm to a csv
         # But strip the data referenced to the 10K sampling
         dia_df.drop(['on_samp','off_samp','duration_samp','pk_samp'],axis=1,inplace=True)
@@ -184,16 +201,11 @@ def run_one(SR, pdiff_chan, flowmeter_chan, dia_chan, ekg_chan, temp_chan, v_in,
 
 @click.command()
 @click.argument('session_path')
-@click.option('-p','--pdiff_chan','pdiff_chan',default=4,show_default=True)
-@click.option('-f','--flowmeter_chan','flowmeter_chan',default=-1,show_default=True)
-@click.option('-d','--dia_chan','dia_chan',default=0,show_default=True)
-@click.option('-e','--ekg_chan','ekg_chan',default=1,show_default=True)
-@click.option('-t','--temp_chan','temp_chan',default=7,show_default=True)
 @click.option('-v','--v_in','v_in',default=9,type=float,show_default=True)
 @click.option('-i','--inhale_pos',is_flag=True,default=False,show_default=True)
 @click.option('-s','--save_path','save_path',default=None,show_default=True)
 @click.option('--debug',is_flag=True)
-def main(session_path, pdiff_chan, flowmeter_chan, dia_chan, ekg_chan, temp_chan, v_in, inhale_pos, save_path,debug):
+def main(session_path, v_in, inhale_pos, save_path,debug):
     '''
     Set chan to -1 if no data is recorded.
     '''
@@ -205,15 +217,19 @@ def main(session_path, pdiff_chan, flowmeter_chan, dia_chan, ekg_chan, temp_chan
     ephys_path = session_path.joinpath('raw_ephys_data')
     _log.debug(f'Looking for ephys in : {ephys_path}')
     ni_fn_list = list(ephys_path.glob('*nidq.bin'))
+    ni_fn_list.sort()
     _log.debug(f'Found Nidaq data: {ni_fn_list}')
 
     for ni_fn in ni_fn_list:
-        has_breathmetrics=False
         _log.info(f'Processing {ni_fn}')
         SR = spikeglx.Reader(ni_fn)
-        run_one(SR,pdiff_chan,flowmeter_chan,dia_chan,ekg_chan,temp_chan,v_in,inhale_pos,save_path)
+        ni_wiring = spikeglx.get_sync_map(ni_fn.parent)
+        run_one(SR,ni_wiring,v_in,inhale_pos,save_path)
         trigger_label = _get_trigger_from_SR(SR)
-        if pdiff_chan>=0 or flowmeter_chan>=0:
+        has_pdiff = 'pdiff' in ni_wiring.keys()
+        has_flow = 'flowmeter' in ni_wiring.keys()
+
+        if has_pdiff or has_flow:
             _log.info('='*50)
             _log.info('Sending to Breathmetrics')
             command = ['matlab','-batch',f"breathmetrics_proc('{save_path}','{trigger_label}')"]
@@ -228,7 +244,6 @@ def main(session_path, pdiff_chan, flowmeter_chan, dia_chan, ekg_chan, temp_chan
                 _log.error(e)
                 _log.error('Continuing')
                 continue
-            has_breathmetrics = True
 
         else:
             _log.info('No airflow signal so not performing BM')

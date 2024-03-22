@@ -129,6 +129,7 @@ def run_session(session_path,v_thresh):
     dest_path = session_path.joinpath('alf')
     dest_path.mkdir(exist_ok=True)
     ni_list = list(session_path.rglob('*nidq.bin'))
+    ni_list.sort()
 
     # Extract calibration
     calib_fcn = load_opto_calibration(session_path)
