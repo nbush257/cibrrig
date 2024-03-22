@@ -10,6 +10,7 @@ import warnings
 import spikeglx
 import physiology
 import logging
+import matplotlib.pyplot as plt
 logging.basicConfig()
 _log = logging.getLogger(__name__)
 _log.setLevel(logging.INFO)
