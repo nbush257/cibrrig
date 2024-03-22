@@ -15,7 +15,7 @@ def run_ephys_qc_session(session_path):
         qc.probe_path = probe_path
         qc.run()
 
-@cli.command()
+@click.command()
 @click.argument('session_path', type=click.Path(exists=True))
 def main(session_path):
     _log.info('RUNNING PREPROCESSING')
