@@ -22,12 +22,10 @@ from nidq_utils import binary_onsets
 from one.alf import spec
 logging.basicConfig()
 _log = logging.getLogger('extract_opto')
-_log.setLevel(logging.INFO)
+_log.setLevel(logging.DEBUG)
 
 
-# TODO: add option to extract the binary 
-# TODO output in alf format (intervals, amplitudes)?
-
+# TODO: add option to extract from digital 
 
 def get_opto_df(raw_opto,v_thresh,ni_sr,min_dur=0.001,max_dur=20):
     '''
@@ -70,6 +68,8 @@ def process_rec(SR,opto_chan=5,v_thresh=0.5,**kwargs):
     raw_opto = SR.read(nsel=slice(None,None,None),csel=opto_chan)[0]
     _log.info('done')
     df = get_opto_df(raw_opto,v_thresh,SR.fs,**kwargs)
+    df = df.drop(['on','off','durs'],axis=1)
+
     return(df)
 
 def load_opto_calibration(session_path):
@@ -121,8 +121,8 @@ def run_file(ni_fn,opto_chan,v_thresh,calib_fn,label='opto'):
     df = process_rec(SR_ni,opto_chan =opto_chan,v_thresh=v_thresh)
     if calib_fcn is not None:
         df['milliwattage'] = calib_fcn(df['amps'])
-    fn = spec.to_alf(label,'stims','tsv','cibrrig',extra=trig_string)
-    df.to_csv(ni_fn.parent.joinpath(fn),sep='\t')
+    fn = spec.to_alf(label,'table','pqt','cibrrig',extra=trig_string)
+    df.to_parquet(ni_fn.parent.joinpath(fn))
 
 
 def run_session(session_path,v_thresh):
@@ -134,22 +134,22 @@ def run_session(session_path,v_thresh):
     calib_fcn = load_opto_calibration(session_path)
     chans,labels = get_laser_chans(session_path)
 
-    _log.info(ni_list)
+    _log.debug('Extracting from\n\t'+'\n\t'.join([str(x) for x in ni_list]))
     for ni_fn in ni_list:
         ni_prefix = Path(ni_fn.stem).stem
         _log.info(f'Processing ni: {ni_prefix}')
         trig_string = re.search('t\d{1,3}',ni_fn.stem).group()
         SR_ni = spikeglx.Reader(ni_fn)
         for chan,label in zip(chans,labels):
-            _log.warning('Assumes the laser channel is on an analog channel')
-            opto_chan =chan-16
+            _log.debug('Assumes the laser channel is on an analog channel')
+            opto_chan =chan-16 #Magic number 16 because analog channel 0 maps to sync channel 16 
             df = process_rec(SR_ni,opto_chan=opto_chan,v_thresh=v_thresh)
 
             if calib_fcn is not None:
                 df['milliwattage'] = calib_fcn(df['amps'])
 
-            fn = spec.to_alf(label,'stims','tsv','cibrrig',extra=trig_string)
-            df.to_csv(dest_path.joinpath(fn),sep='\t')
+            fn = spec.to_alf(label,'table','pqt','cibrrig',extra=trig_string)
+            df.to_parquet(dest_path.joinpath(fn))
 
 
 @click.command()

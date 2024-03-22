@@ -92,8 +92,8 @@ def remove_opto_artifacts(recording, session_path, probe_path, object='laser',ms
                                     namespace='cibrrig',
                                     extra=f't{ii:.0f}',
                                     short_keys=True)
-        opto_on_times = opto_stims.stims.on_sec.values
-        opto_off_times = opto_stims.stims.off_sec.values
+        opto_on_times = opto_stims.on_sec
+        opto_off_times = opto_stims.off_sec
         opto_times = np.concatenate([opto_on_times,opto_off_times])
         opto_times.sort()
         if len(opto_times)>0:
