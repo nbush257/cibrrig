@@ -5,13 +5,8 @@ I/O functions with NIDAQ data specifically for some of our phsyiology needs
 import scipy.integrate
 import numpy as np
 import scipy.signal as sig
-import scipy.io.matlab as sio
-from pathlib import Path
-from sklearn.mixture import BayesianGaussianMixture
 from scipy.ndimage import median_filter
-import pandas as pd
 import warnings
-import os
 import spikeglx
 import physiology
 import logging

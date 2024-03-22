@@ -5,13 +5,10 @@ import numpy as np
 import re
 import one.alf.io as alfio
 import logging 
-import json
 from one.alf import spec
 logging.basicConfig()
 _log = logging.getLogger('extract_camera_frames')
 _log.setLevel(logging.INFO)
-
-#TODO: Read channel from wiring
 
 
 def _describe_framerate(frame_times):
@@ -80,6 +77,9 @@ def run_session(session_path):
 
     #  Allow user to run as a regular command line
     chans,cams = get_camera_chans(session_path)
+    if len(chans)==0:
+        _log.warning('No camera found in wiring. Skipping frame extraction')
+        return
 
     for ni_fn in ni_list:
         _log.info(f'Processing {ni_fn}')

@@ -6,53 +6,16 @@ Extract digital signals from the NI and IMEC Streams
 import spikeglx
 from pathlib import Path
 import numpy as np
-import spikeinterface.full as si
-from ibllib.ephys import sync_probes
-from ibllib.io.extractors import ephys_fpga
-import ibldsp.utils 
 import one.alf.io as alfio
 import click
 import logging
-from one.alf import spec
-import json
 import re
-from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_ibl_sync_map,_sync_to_alf
-import one.alf.exceptions
+from ibllib.io.extractors.ephys_fpga import get_sync_fronts,_sync_to_alf
 from ibllib.ephys.sync_probes import sync_probe_front_times,_save_timestamps_npy,_check_diff_3b
 import matplotlib.pyplot as plt
 logging.basicConfig()
 _log = logging.getLogger('extract_sync_times')
 _log.setLevel(logging.INFO)
-
-# Channels are hardcoded for the digital line using spike interface.
-# We are using spikeinterface to read the raw data files because the IBL 
-# Code cannot handle the commercial NP2 probes (2013) at this time
-IMEC_CHAN = '#SY0'
-NI_CHAN = '#XD0'
-
-def _extract_sync(recording,segment_id):
-    """DEPRECATED (Works with spikeinterface)
-
-    Args:
-        recording (_type_): _description_
-        segment_id (_type_): _description_
-    """    
-    segment = recording.select_segments(segment_id)
-    stream = recording.stream_id
-    if stream == 'nidq':
-        chan=NI_CHAN
-    else:
-        chan=IMEC_CHAN
-    dig = segment.get_traces(channel_ids = [stream+chan])
-    dig = spikeglx.split_sync(dig)
-    ind, polarities = ibldsp.utils.fronts(dig,axis=0)
-    samps,chans = ind
-
-    sync = alfio.Bunch()
-    sync['times'] = segment.sample_index_to_time(samps)
-    sync['chans'] = chans
-    sync['polarities'] = polarities
-    return(sync)
 
 
 def _get_triggers(session_path):
@@ -61,7 +24,6 @@ def _get_triggers(session_path):
     trig_strings = [re.search('t\d{1,3}',x.stem).group() for x in ni_files]
     trig_strings.sort()
     return(trig_strings)
-
 
 
 @click.command()

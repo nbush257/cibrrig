@@ -7,15 +7,12 @@ returns a csv dataframe
 '''
 
 import click
-import sys
 import spikeglx
 from pathlib import Path
 import numpy as np
 import re
 import pandas as pd  
-import ibldsp.utils 
 import logging
-import one.alf.io as alfio
 import json
 from scipy.interpolate import interp1d
 from nidq_utils import binary_onsets
