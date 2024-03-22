@@ -197,7 +197,7 @@ def split_shanks_and_spatial_filter(rec):
     return(combined_preprocessed_recording)
 
 
-def apply_preprocessing(recording,session_path,probe_dir,testing):
+def apply_preprocessing(recording,session_path,probe_dir,testing,skip_remove_opto = False):
     """
     Apply the IBL preprocessing
     Destripe, remove opto artifacts, concatenate
@@ -219,14 +219,15 @@ def apply_preprocessing(recording,session_path,probe_dir,testing):
         rec_processed = rec_destriped
         _log.info("Testing, not removing opto artifacts")
     else:
-        rec_processed = remove_opto_artifacts(rec_destriped,session_path,probe_dir,ms_before=0.5,ms_after=2)
+        if not skip_remove_opto:
+            rec_processed = remove_opto_artifacts(rec_destriped,session_path,probe_dir,ms_before=0.5,ms_after=2)
     
     tf = 60 if testing else None
     rec_out = concatenate_recording(rec_processed,tf=tf)
     return(rec_out)
 
 
-def run_probe(probe_dir,probe_local,label='kilosort4',testing=False):
+def run_probe(probe_dir,probe_local,label='kilosort4',testing=False,skip_remove_opto=False):
     """Run spikesorting on a given probe
 
     Args:
@@ -258,12 +259,12 @@ def run_probe(probe_dir,probe_local,label='kilosort4',testing=False):
         session_path = probe_dir.parent.parent
 
         # =========== Preprocessing =================== #
-        rec_destriped = apply_preprocessing(recording,session_path,probe_dir,testing)
+        rec_destriped = apply_preprocessing(recording,session_path,probe_dir,testing,skip_remove_opto=skip_remove_opto)
 
         # =============== Compute motion if requested.  ============ #
         if COMPUTE_MOTION_SI:
             rec_mc,motion = si_motion(rec_destriped,MOTION_PATH)
-            plot_motion(MOTION_PATH,probe_local)
+            plot_motion(MOTION_PATH,PHY_DEST)
 
         # ============== Save motion if requested ============== #
         if COMPUTE_MOTION_SI and USE_MOTION_SI:
@@ -372,7 +373,8 @@ def run_probe(probe_dir,probe_local,label='kilosort4',testing=False):
 @click.option('--dest','-d',default=None)
 @click.option('--testing',is_flag=True)
 @click.option('--no_move_final',is_flag=True)
-def run_session(session_path,dest,testing,no_move_final):
+@click.option('--skip_remove_opto',is_flag=True,help='Flag to skip removal of the light artifacts. Probably advisable if light is presented far from the probe.')
+def run_session(session_path,dest,testing,no_move_final,skip_remove_opto):
     """Spike sort a session. A session is multiple simultanesouly recorded probes. Any instances of multiple 
     recordings must occur in the same anatomical location
 
@@ -425,7 +427,7 @@ def run_session(session_path,dest,testing,no_move_final):
             '='*100
         )
 
-        run_probe(probe_dir,probe_local,testing=testing,label=label)
+        run_probe(probe_dir,probe_local,testing=testing,label=label,skip_remove_opto=skip_remove_opto)
 
         # ======= Remove temporary SI folder ========= #
         if rm_intermediate:
