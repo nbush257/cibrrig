@@ -92,10 +92,7 @@ def remove_opto_artifacts(recording, session_path, probe_path, object='laser',ms
                                     namespace='cibrrig',
                                     extra=f't{ii:.0f}',
                                     short_keys=True)
-        opto_on_times = opto_stims.on_sec
-        opto_off_times = opto_stims.off_sec
-        opto_times = np.concatenate([opto_on_times,opto_off_times])
-        opto_times.sort()
+        opto_times = opto_stims.intervals.ravel()
         if len(opto_times)>0:
             opto_times_adj = apply_sync(probe_path.joinpath(sync_fn),opto_times,forward=False)
             opto_samps = np.array([recording.time_to_sample_index(x,segment_index=ii) for x in opto_times_adj])

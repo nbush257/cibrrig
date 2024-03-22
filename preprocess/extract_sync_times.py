@@ -24,7 +24,6 @@ logging.basicConfig()
 _log = logging.getLogger('extract_sync_times')
 _log.setLevel(logging.INFO)
 
-
 # Channels are hardcoded for the digital line using spike interface.
 # We are using spikeinterface to read the raw data files because the IBL 
 # Code cannot handle the commercial NP2 probes (2013) at this time
@@ -60,6 +59,7 @@ def _get_triggers(session_path):
     # get the NI files:
     ni_files = list(session_path.joinpath('raw_ephys_data').glob('*.nidq.bin'))
     trig_strings = [re.search('t\d{1,3}',x.stem).group() for x in ni_files]
+    trig_strings.sort()
     return(trig_strings)
 
 
@@ -81,7 +81,8 @@ def main(session_path,debug,display):
         ni_fn = ni_fn[0]
         label = Path(ni_fn.stem).stem
         _log.info(f'Extracting sync from {ni_fn}')
-        sync_nidq= _sync_to_alf(ni_fn,save=True,parts=label)[0]
+        sync_nidq= _sync_to_alf(ni_fn,parts=label)
+        alfio.save_object_npy(ni_fn.parent,sync_nidq,'sync',parts=trig,namespace='spikeglx')
         sync_map = spikeglx.get_sync_map(ni_fn.parent)
         sync_nidq = get_sync_fronts(sync_nidq, sync_map['imec_sync'])
 
@@ -92,7 +93,9 @@ def main(session_path,debug,display):
             sr =spikeglx._get_fs_from_meta(md)
             label = Path(probe_fn.stem).stem
 
-            sync_probe,out_files = _sync_to_alf(probe_fn,save=True,parts=label)
+            sync_probe = _sync_to_alf(probe_fn,parts=label)
+            out_files = alfio.save_object_npy(probe_fn.parent,sync_nidq,'sync',parts=trig,namespace='spikeglx')
+
             sync_map = spikeglx.get_sync_map(probe_fn.parent)
             sync_probe = get_sync_fronts(sync_probe, sync_map['imec_sync'])
 

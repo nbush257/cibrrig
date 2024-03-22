@@ -22,7 +22,7 @@ from nidq_utils import binary_onsets
 from one.alf import spec
 logging.basicConfig()
 _log = logging.getLogger('extract_opto')
-_log.setLevel(logging.DEBUG)
+_log.setLevel(logging.INFO)
 
 
 # TODO: add option to extract from digital 
@@ -147,9 +147,21 @@ def run_session(session_path,v_thresh):
 
             if calib_fcn is not None:
                 df['milliwattage'] = calib_fcn(df['amps'])
+                fn_amps = spec.to_alf(label,'amplitudesMilliwatts','npy','cibrrig',extra=trig_string)
+                amps = df['milliwattage'].values
+                np.save(dest_path.joinpath(fn_amps),amps)
 
-            fn = spec.to_alf(label,'table','pqt','cibrrig',extra=trig_string)
-            df.to_parquet(dest_path.joinpath(fn))
+            fn_intervals = spec.to_alf(label,'intervals','npy','cibrrig',extra=trig_string)
+            intervals = df[['on_sec','off_sec']].values
+            np.save(dest_path.joinpath(fn_intervals),intervals)
+
+            fn_amps = spec.to_alf(label,'amplitudesVolts','npy','cibrrig',extra=trig_string)
+            amps = df['amps'].values
+            np.save(dest_path.joinpath(fn_amps),amps)
+            
+
+            # fn = spec.to_alf(label,'table','pqt','cibrrig',extra=trig_string)
+            # df.to_parquet(dest_path.joinpath(fn))
 
 
 @click.command()

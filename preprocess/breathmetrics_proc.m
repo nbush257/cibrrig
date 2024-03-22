@@ -6,9 +6,12 @@ function breathmetrics_proc(p_load,trigger_label)
 verbose=1;
 %% Load in the data
 physiol_fn = [p_load '\' dir([p_load '\*physiology*' trigger_label '*pqt' ]).name];
-breath_features_fn = [p_load '\' dir([p_load '\*breaths.features*' trigger_label '*tsv' ]).name];
+physiol_times_fn = [p_load '\' dir([p_load '\*physiology*times*' trigger_label '*npy' ]).name];
+breath_features_fn = [p_load '\' dir([p_load '\*breaths.table*' trigger_label '*pqt' ]).name];
+breath_times_fn = [p_load '\' dir([p_load '\*breaths.times*' trigger_label '*npy' ]).name];
 
 physiology = parquetread(physiol_fn);
+physiology.t =readNPY(physiol_times_fn);
 sr = 1/mean(diff(physiology.t));
 
 has_dia = ~all(isnan(physiology.dia));
@@ -106,5 +109,6 @@ else
 
 end
 %% write modified stats table
-writetable(breaths,breath_features_fn,'FileType','text','Delimiter','\t');
+parquetwrite(breath_features_fn,breaths);
+writeNPY(breaths.inhale_onsets,breath_times_fn)
 exit;

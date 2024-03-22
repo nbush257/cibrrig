@@ -24,7 +24,7 @@ from one.alf import spec
 import physiology
 import logging
 logging.basicConfig()
-_log = logging.getLogger('downsample_and_process')
+_log = logging.getLogger('extract_physiology')
 _log.setLevel(logging.INFO)
 
 
@@ -60,6 +60,7 @@ def label_sighs(dia_df):
     dia_df['is_sigh'] = is_sigh
     dia_df['is_eupnea'] = dia_df.eval('~is_sigh')
     return dia_df
+
 
 def run_one(SR, pdiff_chan, flowmeter_chan, dia_chan, ekg_chan, temp_chan, v_in, inhale_pos, save_path):
     DS_FACTOR=10
@@ -115,7 +116,7 @@ def run_one(SR, pdiff_chan, flowmeter_chan, dia_chan, ekg_chan, temp_chan, v_in,
 
     # Process PDIFF
     if has_pdiff:
-        _log.info('Processing pressure diffrential sensor')
+        _log.info('Processing pressure differential sensor')
         pdiff,sr_pdiff = nidq_utils.load_ds_pdiff(SR, pdiff_chan,ds_factor=DS_FACTOR,inhale_dir=inhale_dir)
         t,pdiff = _crop_traces(t,pdiff)
 
@@ -138,24 +139,23 @@ def run_one(SR, pdiff_chan, flowmeter_chan, dia_chan, ekg_chan, temp_chan, v_in,
     _log.debug(f'{t.shape[0]=}\n{pdiff.shape[0]=}\n{dia_sub.shape[0]=}\n{hr_bpm.shape[0]=}\n{temperature.shape[0]=}\n{flow.shape[0]=}')
 
     physiol_df = pd.DataFrame()
-    physiol_df['t'] = t
     physiol_df['pdiff'] = pdiff if has_pdiff else None
     physiol_df['dia'] = dia_sub if has_dia else None
     physiol_df['hr_bpm'] = hr_bpm if has_ekg else None
     physiol_df['temperature'] = temperature if has_temperature else None
     physiol_df['flowmeter'] = flow if has_flow else None
-    physiol_df.set_index('t',inplace=True)
 
-    fn_physiol = spec.to_alf('physiology','traces','pqt','cibrrig',extra=trigger_label)
+    fn_physiol = spec.to_alf('physiology','table','pqt','cibrrig',extra=trigger_label)
+    fn_physiol_timestamps =  spec.to_alf('physiology','times','npy','cibrrig',extra=trigger_label)
     fn_heartbeat = spec.to_alf('heartbeat','times','npy','cibrrig',extra=trigger_label)
-
     physiol_df.to_parquet(save_path.joinpath(fn_physiol))
+    np.save(save_path.joinpath(fn_physiol_timestamps),t)
     
     if has_ekg:
         np.save(save_path.joinpath(fn_heartbeat),heartbeats)
 
     fn_breath_onsets = spec.to_alf('breaths','times','npy','cibrrig',extra=trigger_label)
-    fn_breaths = spec.to_alf('breaths','features','tsv','cibrrig',extra=trigger_label)
+    fn_breaths = spec.to_alf('breaths','table','pqt','cibrrig',extra=trigger_label)
 
     if has_dia:
         # Save the extracted diaphragm to a csv
@@ -166,7 +166,7 @@ def run_one(SR, pdiff_chan, flowmeter_chan, dia_chan, ekg_chan, temp_chan, v_in,
         dia_df = label_sighs(dia_df)
 
         # Save breaths features 
-        dia_df.to_csv(save_path.joinpath(fn_breaths),sep='\t')
+        dia_df.to_parquet(save_path.joinpath(fn_breaths))
 
         breath_onsets = dia_df['on_sec'].values
         np.save(save_path.joinpath(fn_breath_onsets),breath_onsets)
@@ -175,7 +175,8 @@ def run_one(SR, pdiff_chan, flowmeter_chan, dia_chan, ekg_chan, temp_chan, v_in,
         np.save(save_path.joinpath(fn_dia_filt),dia_filt)
     else:
         dia_df = pd.DataFrame() # Write an empty table so breathmetrics has a filename
-        dia_df.to_csv(save_path.joinpath(fn_breaths),sep='\t')
+        dia_df.to_parquet(save_path.joinpath(fn_breaths))
+        np.save(save_path.joinpath(fn_breath_onsets),np.array([]))
 
         
 
@@ -218,6 +219,11 @@ def main(session_path, pdiff_chan, flowmeter_chan, dia_chan, ekg_chan, temp_chan
             command = ['matlab','-batch',f"breathmetrics_proc('{save_path}','{trigger_label}')"]
             try:
                 subprocess.run(command,check=True)
+                # Rewrite using pandas for a strange compatability issue
+                fn = list(save_path.glob(f'*breaths*table*{trigger_label}*.pqt'))[0]
+                aa = pd.read_parquet(fn)
+                aa.to_parquet(fn)
+                
             except Exception as e:
                 _log.error(e)
                 _log.error('Continuing')
@@ -227,15 +233,6 @@ def main(session_path, pdiff_chan, flowmeter_chan, dia_chan, ekg_chan, temp_chan
         else:
             _log.info('No airflow signal so not performing BM')
         
-        # Append breathmetrics
-        fn_breath_onsets = save_path.joinpath(spec.to_alf('breaths','times','npy','cibrrig',extra=trigger_label))
-
-        if not fn_breath_onsets.exists(): # If no diaphragm (i.e. awake)
-            fn_features = list(save_path.glob(f'*features.{trigger_label}*.tsv'))[0]
-            df = pd.read_csv(fn_features,sep='\t')
-            on_secs = df['inhale_onsets'].values
-            np.save(fn_breath_onsets,on_secs)
-
 
 
 
