@@ -10,11 +10,32 @@ import warnings
 import spikeglx
 import physiology
 import logging
+import re
 import matplotlib.pyplot as plt
 logging.basicConfig()
 _log = logging.getLogger(__name__)
 _log.setLevel(logging.INFO)
 
+
+def get_triggers(session_path):
+    """Looks through all the NIDQ files to extract the trigger
+
+    Args:
+        session_path (_type_): _description_
+    """    
+    ni_files = list(session_path.joinpath('raw_ephys_data').glob('*.nidq.bin'))
+    trig_strings = [re.search('t\d{1,3}',x.stem).group() for x in ni_files]
+    trig_strings.sort()
+    return(trig_strings)
+
+def get_trig_string(in_str):
+    """Extract the trigger from a string (e.g., t0,t12) using re
+
+    Args:
+        in_str (_type_): _description_
+    """    
+    trig_string = re.search('t\d{1,3}',in_str).group()
+    return(trig_string)
 
 def _extract_ds_chan(SR,chan_id,ds_factor=10):
     assert(type(ds_factor) is int)

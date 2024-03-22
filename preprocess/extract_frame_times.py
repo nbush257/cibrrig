@@ -6,6 +6,7 @@ import re
 import one.alf.io as alfio
 import logging 
 from one.alf import spec
+from nidq_utils import get_trig_string
 logging.basicConfig()
 _log = logging.getLogger('extract_camera_frames')
 _log.setLevel(logging.INFO)
@@ -18,6 +19,9 @@ def _describe_framerate(frame_times):
     Args:
         frame_times (_type_): times of each frame in seconds
     """    
+    if len(frame_times)==0:
+        _log.warning('No Frames found')
+        return
     n_frames = frame_times.shape[0]
     framerate = np.mean(1/np.diff(frame_times))
     framerate_std = np.std(1/np.diff(frame_times))
@@ -26,6 +30,7 @@ def _describe_framerate(frame_times):
     _log.info(f'Mean frame rate of {framerate:0.2f} fps')
     _log.info(f'S.D. frame rate of {framerate_std:0.2f} fps')
     _log.info(f'Framerate min:{framerate_range[0]:0.2f}fps\tmax:{framerate_range[1]:0.2f}fps')
+
 
 def process_rec_ni(ni_fn,trig_chan=6,verbose=True):
     """Extract frame times from the NI data
@@ -42,13 +47,20 @@ def process_rec_ni(ni_fn,trig_chan=6,verbose=True):
     _describe_framerate(frame_times)
     return(frame_samps,frame_times)
 
+
 def process_rec_extracted(ni_fn,trig_chan=6):
-    alfname = dict(object='sync', namespace='spikeglx')
+    trig_string = get_trig_string(ni_fn.stem)
+    alfname = dict(object='sync', namespace='spikeglx',extra=trig_string,short_keys=True)
     sync = alfio.load_object(ni_fn.parent,**alfname)
     idx = np.logical_and(sync.polarities==1,sync.channels==trig_chan)
     frame_times = sync.times[idx]
     _describe_framerate(frame_times)
+    
+    if len(frame_times)==0:
+        return None
+    
     return(frame_times)
+
 
 def get_camera_chans(session_path):
     sync_map = spikeglx.get_sync_map(session_path.joinpath('raw_ephys_data'))
@@ -83,12 +95,13 @@ def run_session(session_path):
 
     for ni_fn in ni_list:
         _log.info(f'Processing {ni_fn}')
-        trig_string = re.search('t\d{1,3}',ni_fn.stem).group()
+        trig_string = get_trig_string(ni_fn.stem)
         
         for chan,cam in zip(chans,cams):
             frame_times = process_rec_extracted(ni_fn,trig_chan=chan)
-            fn = spec.to_alf(cam,'times','npy','cibrrig',extra=trig_string)
-            np.save(dest_path.joinpath(fn),frame_times)
+            if frame_times is not None:
+                fn = spec.to_alf(cam,'times','npy','cibrrig',extra=trig_string)
+                np.save(dest_path.joinpath(fn),frame_times)
 
 
         _log.info('done.')

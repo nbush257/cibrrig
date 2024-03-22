@@ -15,7 +15,7 @@ import pandas as pd
 import logging
 import json
 from scipy.interpolate import interp1d
-from nidq_utils import binary_onsets
+from nidq_utils import binary_onsets,get_trig_string
 from one.alf import spec
 logging.basicConfig()
 _log = logging.getLogger('extract_opto')
@@ -112,7 +112,7 @@ def run_file(ni_fn,opto_chan,v_thresh,calib_fn,label='opto'):
         ni_fn (_type_): nidaq bin file
         chan (_type_): channel to extract
     """    
-    trig_string = re.search('t\d{1,3}',ni_fn.stem).group()
+    trig_string = get_trig_string(ni_fn.stem)
     calib_fcn = _load_opto_calibration_fn(calib_fn)
     SR_ni = spikeglx.Reader(ni_fn)
     df = process_rec(SR_ni,opto_chan =opto_chan,v_thresh=v_thresh)
@@ -136,7 +136,7 @@ def run_session(session_path,v_thresh):
     for ni_fn in ni_list:
         ni_prefix = Path(ni_fn.stem).stem
         _log.info(f'Processing ni: {ni_prefix}')
-        trig_string = re.search('t\d{1,3}',ni_fn.stem).group()
+        trig_string = get_trig_string(ni_fn.stem)
         SR_ni = spikeglx.Reader(ni_fn)
         for chan,label in zip(chans,labels):
             _log.debug('Assumes the laser channel is on an analog channel')

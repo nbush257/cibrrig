@@ -13,17 +13,13 @@ import re
 from ibllib.io.extractors.ephys_fpga import get_sync_fronts,_sync_to_alf
 from ibllib.ephys.sync_probes import sync_probe_front_times,_save_timestamps_npy,_check_diff_3b
 import matplotlib.pyplot as plt
+from nidq_utils import get_triggers
 logging.basicConfig()
 _log = logging.getLogger('extract_sync_times')
 _log.setLevel(logging.INFO)
 
 
-def _get_triggers(session_path):
-    # get the NI files:
-    ni_files = list(session_path.joinpath('raw_ephys_data').glob('*.nidq.bin'))
-    trig_strings = [re.search('t\d{1,3}',x.stem).group() for x in ni_files]
-    trig_strings.sort()
-    return(trig_strings)
+
 
 
 @click.command()
@@ -35,7 +31,7 @@ def main(session_path,debug,display):
     session_path = Path(session_path)
     ephys_path = session_path.joinpath('raw_ephys_data')
 
-    triggers = _get_triggers(session_path)
+    triggers = get_triggers(session_path)
     for trig in triggers:
 
         ni_fn = list(ephys_path.glob(f'*{trig}.nidq*.bin'))
