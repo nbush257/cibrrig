@@ -25,8 +25,9 @@ _log.setLevel(logging.INFO)
 @click.command()
 @click.argument('session_path')
 @click.option('--debug',is_flag=bool,help='Sets logging level to DEBUG')
-@click.option('--display',is_flag=bool,help='Toggles display')
-def main(session_path,debug,display):
+@click.option('--no_display',is_flag=bool,help='Toggles display')
+def main(session_path,debug,no_display):
+    display = not no_display
     type = None
     session_path = Path(session_path)
     ephys_path = session_path.joinpath('raw_ephys_data')

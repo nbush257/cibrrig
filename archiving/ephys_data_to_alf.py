@@ -158,6 +158,7 @@ class Run:
     def move_gates(self):
         sessions = []
         for gate in self.gates:
+            _log.info(f'Working on {gate}')
             rec_date = get_record_date(gate)
             if rec_date is None:
                 continue
