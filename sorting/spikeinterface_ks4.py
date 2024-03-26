@@ -62,10 +62,14 @@ def move_motion_info(motion_path,destination):
         drift_depths = motion_path.joinpath('spatial_bins.npy')
         drift = motion_path.joinpath('motion.npy')
         drift_times = motion_path.joinpath('temporal_bins.npy')
+        drift_fig = motion_path.joinpath('driftmap.png')
+        drift_fig_zoom = motion_path.joinpath('driftmap_zoom.png')
         
         drift_depths.rename(destination.joinpath('drift_depths.um.npy'))
         drift.rename(destination.joinpath('drift.um.npy'))
         drift_times.rename(destination.joinpath('drift.times.npy'))
+        drift_fig.rename(destination.joinpath('driftmap.png'))
+        drift_fig_zoom.rename(destination.joinpath('driftmap_zoom.png'))
     except:
         _log.warning('SI computed motion not found')
 
@@ -153,7 +157,7 @@ def si_motion(recording,MOTION_PATH):
     return(rec_mc,motion_info)
 
 
-def plot_motion(MOTION_PATH,probe_local):
+def plot_motion(motion_path):
     """
     Plot the motion and safe the figure
 
@@ -163,15 +167,15 @@ def plot_motion(MOTION_PATH,probe_local):
     """    
     _log.info('Plotting motion info')
     try:
-        motion_info = si.load_motion_info(MOTION_PATH)
-        if not MOTION_PATH.joinpath('driftmap.png').exists():
+        motion_info = si.load_motion_info(motion_path)
+        if not motion_path.joinpath('driftmap.png').exists():
             fig = plt.figure(figsize=(14, 8))
             si.plot_motion(motion_info, figure=fig, 
                         color_amplitude=True, amplitude_cmap='inferno', scatter_decimate=10)
-            plt.savefig(probe_local.joinpath('driftmap.png'),dpi=300)
+            plt.savefig(motion_path.joinpath('driftmap.png'),dpi=300)
             for ax in fig.axes[:-1]:
                 ax.set_xlim(30,60)
-            plt.savefig(probe_local.joinpath('driftmap_zoom.png'),dpi=300)
+            plt.savefig(motion_path.joinpath('driftmap_zoom.png'),dpi=300)
     except:
         _log.error('Plotting motion failed')
 
@@ -218,6 +222,8 @@ def apply_preprocessing(recording,session_path,probe_dir,testing,skip_remove_opt
     else:
         if not skip_remove_opto:
             rec_processed = remove_opto_artifacts(rec_destriped,session_path,probe_dir,ms_before=0.5,ms_after=2)
+        else:
+            rec_processed = rec_destriped
     
     tf = 60 if testing else None
     rec_out = concatenate_recording(rec_processed,tf=tf)
@@ -261,7 +267,6 @@ def run_probe(probe_dir,probe_local,label='kilosort4',testing=False,skip_remove_
         # =============== Compute motion if requested.  ============ #
         if COMPUTE_MOTION_SI:
             rec_mc,motion = si_motion(rec_destriped,MOTION_PATH)
-            plot_motion(MOTION_PATH,PHY_DEST)
 
         # ============== Save motion if requested ============== #
         if COMPUTE_MOTION_SI and USE_MOTION_SI:
@@ -292,6 +297,7 @@ def run_probe(probe_dir,probe_local,label='kilosort4',testing=False,skip_remove_
                                             remove_existing_folder=False,
                                             **sorter_params)
         sort_rez.save(folder=SORT_PATH)
+
     print_elapsed_time(start_time) 
 
     # ========= WAVEFORMS ============= #
@@ -360,6 +366,7 @@ def run_probe(probe_dir,probe_local,label='kilosort4',testing=False,skip_remove_
 
     _log.info('Done sorting!')
     
+    plot_motion(MOTION_PATH)
     move_motion_info(MOTION_PATH,PHY_DEST)
     return(PHY_DEST)
 

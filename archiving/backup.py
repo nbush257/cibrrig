@@ -153,6 +153,9 @@ class Archiver:
     def compress_video_in_place(self):
         self.get_videos_in_sessions()
         print(f'{self.video_files=}')
+        if len(self.video_files)==0:
+            print('No video files found. Continuing')
+            return
         for fn in self.video_files:
             fn_comp = fn.with_suffix('.mp4')
             subprocess.run(['ffmpeg','-i',str(fn),'-y','-c:v','hevc_nvenc','-preset','slow','-cq','22',str(fn_comp)])
@@ -293,6 +296,21 @@ def archive(keep_raw):
     archiver.compress_video_in_place()
     archiver.mark_backup()
 
+@cli.command()
+@click.argument('local_run_path')
+@click.argument('remote_subjects_path')
+def no_gui(local_run_path,remote_subjects_path):
+    archiver=Archiver(keep_raw=False)
+    archiver.run_path = Path(local_run_path)
+    archiver.subjects_path = Path(remote_subjects_path)
+    archiver.guess_subject_ID()
+
+    archiver.get_sessions_local()
+    archiver.make_rec_date_target()
+    archiver.copy_sessions()
+    archiver.compress_ephys_files_remote()
+    archiver.compress_video_in_place()
+    archiver.mark_backup()
 
 @cli.command()
 def working():
