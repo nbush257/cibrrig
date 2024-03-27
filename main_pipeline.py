@@ -151,7 +151,7 @@ def main():
         subprocess.run(sort_cmd,check=True,cwd='./sorting')
 
     # Move all data:
-    # shutil.move(local_run_path,remote_working_path)
+    shutil.move(local_run_path,remote_working_path)
 
 if __name__ == "__main__":
     main()
