@@ -356,7 +356,7 @@ def run_probe(probe_dir,probe_local,label='kilosort4',testing=False,skip_remove_
     spike_locations = np.vstack([locations['x'],locations['y']]).T
     np.save(PHY_DEST.joinpath('spike_locations.npy'),spike_locations)
     np.save(PHY_DEST.joinpath('cluster_locations.npy'),unit_locations)
-    shutil.copy(PHY_DEST.joinpath('channel_groups.npy'),PHY_DEST.joinpath('cluster_shanks.npy'))
+    shutil.copy(PHY_DEST.joinpath('channel_groups.npy'),PHY_DEST.joinpath('channel_shanks.npy'))
 
     for col in template_metrics:
         this_col = pd.DataFrame(template_metrics[col])

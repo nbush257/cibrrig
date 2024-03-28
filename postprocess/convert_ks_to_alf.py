@@ -1,5 +1,5 @@
 '''
-Should apply sync and export to alf for all probes given a session path
+Apply sync and export to alf for all probes given a session path
 '''
 
 from ibllib.ephys.spikes import ks2_to_alf,apply_sync
@@ -22,15 +22,14 @@ def get_metrics_from_si(ks4_dir):
         ks4_dir (Pathlib Path): Kilosort directory
     """    
     metrics_files = ks4_dir.glob('*.tsv')
-    metrics = pd.DataFrame()
+    metrics = pd.read_csv(ks4_dir.joinpath('cluster_group.tsv'),sep='\t')
     for fn in metrics_files:
+        if fn.name=='cluster_group.tsv':
+            continue # Don't reread group
         df = pd.read_csv(fn,sep='\t')
         if 'cluster_id' not in df.columns:
             continue
-        if 'cluster_id' in metrics.columns:
-            metrics = metrics.merge(df,on='cluster_id',how='outer')
-        else:
-            metrics = df
+        metrics = metrics.merge(df,on='cluster_id',how='left')
     return(metrics)
 
 
@@ -59,7 +58,6 @@ def get_ap_breaks_samps(ap_files):
         breaks.append(breaks[-1]+SR.ns)
     breaks = np.array(breaks)
     return(breaks)
-
 
 
 def sync_spikes(ap_files,spikes):
@@ -102,6 +100,10 @@ def main(session_path):
         ks4_dir = probe_alf.joinpath('kilosort4')
         bin_path = ks4_dir.joinpath('recording.dat')
         out_path = probe_alf
+        
+        # Extract cluster shanks
+        cluster_shanks_df = pd.read_csv(ks4_dir.joinpath('cluster_channel_group.tsv'),sep='\t')
+        np.save(ks4_dir.joinpath('cluster_shanks.npy'),cluster_shanks_df['channel_group'].values)
 
         # Convert to ALF
         ks2_to_alf(ks4_dir,bin_path,out_path)
