@@ -60,11 +60,9 @@ class Archiver:
 
 
     def get_sessions_local(self):
-        self.session_list_local = list(self.run_path.glob('*'))
-        
-    def get_num_sessions(self):
-        self.num_sessions = len(list(self.run_path.glob('*_g[0-9]*')))
-        print(f'Found {self.num_sessions} gates (sessions)')
+        contents = self.run_path.glob('*_g[0-9]*')
+        self.session_list_local = [x for x in contents if x.is_dir()]
+        self.num_sessions = len(self.session_list_local)
 
 
     def guess_subject_ID(self):
