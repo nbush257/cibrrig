@@ -7,32 +7,21 @@ import scipy.io.matlab as sio
 from pathlib import Path
 import pandas as pd
 from brainbox import singlecell
-import phylib.io.model
 import subprocess
 import click
-import neurodsp.utils
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+import one.alf.io as alfio
 from tqdm import tqdm
+import sys
+if sys.platform=='linux':
+    import matplotlib
+    matplotlib.use('TkAgg')
 
 WAVELENGTH_COLOR = {635:'#ff3900',473:'#00b7ff'}
 SALT_P_CUTOFF = 0.001
 MIN_PCT_TAGS_WITH_SPIKES = 33
-
-def extract_sr_from_params(params_fn):
-    """Get the sampling rate from the params.py file
-
-    Args:
-        params_fn (str or Path): Path to the params.py file
-    """    
-    params_fn = Path(params_fn)
-    with open(params_fn,'r') as fid:
-        for line in fid:
-            line_parts = line.split(' ')
-            if line_parts[0] =='sample_rate':
-                sample_rate = float(line_parts[-1])
-    return(sample_rate)
+RATIO = 2
 
 def compute_pre_post_raster(spike_times,spike_clusters,cluster_ids,stim_times,stim_duration = None, window_time = 0.5,bin_size=0.001,mask_dur = 0.002): 
     """Creates the rasters pre and post stimulation time. 
@@ -168,7 +157,7 @@ def compute_tagging_summary(spike_times,spike_clusters,cluster_ids,stim_times,wi
     return(n_responsive_stims,pre_spikerate,post_spikerate)
     
 
-def extract_tagging_from_logs(log_df,opto_df,verbose=True):
+def extract_tagging_from_logs(log_df,laser,verbose=True):
     """Finds the opto stims that are associated with a logged tagging episode.
 
     Args:
@@ -183,9 +172,6 @@ def extract_tagging_from_logs(log_df,opto_df,verbose=True):
     Returns (pandas dataframe): Subdataframe from opto_df that only has the tagging data.
     """    
 
-    # Check if synchronized
-    if 'on_sec_corrected' not in opto_df.columns:
-        print('Warning: optogenetic stimulations do not appear to be synched to the neural data. "on_sec_corrected" was not found')
 
     # Extract the tagging start and end
     tag_epoch = log_df.query('label == "opto_tagging"')
@@ -203,14 +189,20 @@ def extract_tagging_from_logs(log_df,opto_df,verbose=True):
     # Subset (add a little buffer time so as not to miss first or last stim)
     tag_start = tag_starts[0]-0.5
     tag_end = tag_ends[0]+0.5
-    tags = opto_df.query('on_sec>@tag_start & on_sec<@tag_end')
+
+    #slice
+    idx = np.logical_and(laser.intervals[:,0]>tag_start,laser.intervals[:,1]<tag_end)
+    tags = alfio.AlfBunch()
+    for k in laser.keys():
+        tags[k] = laser[k][idx]
+    dur_mean = np.diff(tags.intervals,1).mean()
 
     #Verbose and return
-    print(f'Found {tags.shape[0]} tag stimulations with average duration {tags["dur_sec"].mean():0.02}s') if verbose else None
+    print(f'Found {tags.intervals.shape[0]} tag stimulations with average duration {dur_mean:0.02}s') if verbose else None
     return(tags)
     
 
-def make_plots(spike_times,spike_clusters,cluster_ids,tags,save_folder,salt_rez=None,pre_time=0.05,post_time=0.05,wavelength = 473,cmap=None):
+def make_plots(spike_times,spike_clusters,cluster_ids,tags,save_folder,salt_rez=None,pre_time=None,post_time=None,wavelength = 473,consideration_window=0.01,cmap=None):
     """ Plots rasters and PETHs for each cell aligned to 
 
     Args:
@@ -225,6 +217,8 @@ def make_plots(spike_times,spike_clusters,cluster_ids,tags,save_folder,salt_rez=
         wavelength (int, optional): _description_. Defaults to 473.
         cmap (_type_, optional): _description_. Defaults to None.
     """    
+    pre_time = pre_time or consideration_window*2
+    post_time = post_time or consideration_window *2
     cmap = cmap or 'magma'
     if not save_folder.exists():
         save_folder.mkdir()
@@ -232,30 +226,41 @@ def make_plots(spike_times,spike_clusters,cluster_ids,tags,save_folder,salt_rez=
         print('Removing old figures.')
         for fn in save_folder.glob('*.png'):
             fn.unlink()
-    stim_duration = tags['dur_sec'].mean()
-    stim_times = tags['on_sec_corrected'].values
+    stim_duration = np.diff(tags.intervals,1).mean()
+    stim_times = tags.intervals[:,0]
     n_stims = stim_times.shape[0]
-    peths,raster = singlecell.calculate_peths(spike_times,spike_clusters,cluster_ids,
+    if wavelength==635:
+        bin_size = 0.005
+    else:
+        bin_size=0.0025
+    peths_fine,raster_fine = singlecell.calculate_peths(spike_times,spike_clusters,cluster_ids,
                                         stim_times,
                                         pre_time=pre_time,
                                         post_time=stim_duration+post_time,
-                                        bin_size=0.0025,
+                                        bin_size=0.001,
+                                        smoothing=0)
+
+    peths,_ = singlecell.calculate_peths(spike_times,spike_clusters,cluster_ids,
+                                        stim_times,
+                                        pre_time=pre_time,
+                                        post_time=stim_duration+post_time,
+                                        bin_size=bin_size,
                                         smoothing=0)
     
-    stim_no,clu_id,sps = np.where(raster)
-    spt = peths['tscale'][sps]
+    stim_no,clu_id,sps = np.where(raster_fine)
+    spt = peths_fine['tscale'][sps]
 
-    for clu in tqdm(cluster_ids,desc='Making plots'):
+    for ii,clu in enumerate(tqdm(cluster_ids,desc='Making plots')):
         plt.close('all')
 
         # Set up plot
         f,ax = plt.subplots(nrows=2,figsize=(4,4),sharex=True)
 
         # Plot data
-        ax[0].vlines(spt[clu_id==clu],stim_no[clu_id==clu]-0.25,stim_no[clu_id==clu]+0.25,color='k',lw=1)
-        ax[1].plot(peths['tscale'],peths['means'][clu],color='k')
-        lb = peths['means'][clu]-peths['stds'][clu]/np.sqrt(n_stims)
-        ub = peths['means'][clu]+peths['stds'][clu]/np.sqrt(n_stims)
+        ax[0].vlines(spt[clu_id==ii],stim_no[clu_id==ii]-0.25,stim_no[clu_id==ii]+0.25,color='k',lw=1)
+        ax[1].plot(peths['tscale'],peths['means'][ii],color='k')
+        lb = peths['means'][ii]-peths['stds'][ii]/np.sqrt(n_stims)
+        ub = peths['means'][ii]+peths['stds'][ii]/np.sqrt(n_stims)
         ax[1].fill_between(peths['tscale'],lb,ub,alpha=0.3,color='k')
 
         # Plot stim limits
@@ -263,7 +268,7 @@ def make_plots(spike_times,spike_clusters,cluster_ids,tags,save_folder,salt_rez=
             aa.axvspan(0,stim_duration,color=WAVELENGTH_COLOR[wavelength],alpha=0.25)
             aa.axvline(0,color='c',ls=':',lw=1)
             aa.axvline(stim_duration,color='c',ls=':',lw=1)
-            aa.axvline(0.01,color='k',ls=':',lw=1)
+            aa.axvline(consideration_window,color='k',ls=':',lw=1)
 
         # Formatting
         ax[0].set_ylim([0,n_stims])
@@ -298,15 +303,15 @@ def make_plots(spike_times,spike_clusters,cluster_ids,tags,save_folder,salt_rez=
 
     # Population plots - seperate by salt_p_stat <0.001
     f,ax = plt.subplots(figsize=(8,8),ncols=2,sharex=True)
-    tagged_clus = salt_rez.query('is_tagged')['cluster_id'].values
-    untagged_clus =salt_rez.query('~is_tagged')['cluster_id'].values
+    tagged_clus = np.where(np.isin(cluster_ids,salt_rez.query('is_tagged')['cluster_id'].values))[0]
+    untagged_clus = np.where(np.isin(cluster_ids,salt_rez.query('~is_tagged')['cluster_id'].values))[0]
     max_spikes = 250
     cc1 = ax[0].pcolormesh(peths.tscale,np.arange(untagged_clus.shape[0]),peths.means[untagged_clus],vmin=0,vmax=max_spikes,cmap=cmap)
     cc2 = ax[1].pcolormesh(peths.tscale,np.arange(tagged_clus.shape[0]),peths.means[tagged_clus],vmin=0,vmax=max_spikes,cmap=cmap)
 
     for aa in ax:
         aa.axvline(0,color='w',ls=':')
-        aa.axvline(0.01,color='silver',ls=':')
+        aa.axvline(consideration_window,color='silver',ls=':')
         aa.set_ylabel('Units (unordered)')
         aa.set_xlabel('Time (s)')
         if stim_duration is not None:
@@ -324,69 +329,92 @@ def make_plots(spike_times,spike_clusters,cluster_ids,tags,save_folder,salt_rez=
     plt.tight_layout()
     plt.savefig(save_folder.joinpath('population_tags.png'),dpi=300,transparent=True)
 
-# TODO: Implement functionality on data from multiple recordings
-# TODO: Implement plotting
-# TODO: Implement Chrmine option (slower optotagging responses)
-@click.command()
-@click.argument('ks_dir') # Will not work on concatnated data yet.
-@click.argument('opto_fn')
-@click.argument('log_fn') # Pass the files explicitly. Folder structure may evolve to be more crystalized
-@click.option('-w','--consideration_window',default=0.01,help ='Option to change how much of the stimulus time to consider as important. Longer times may be needed for ChRmine')
-@click.option('-l','--wavelength',default=473,help ='set wavelength of light (changes color of plots.)')
-@click.option('-p','--plot',is_flag=True,help='Flag to make plots for each cell')
-def main(ks_dir,opto_fn,log_fn,consideration_window,plot,wavelength):
-    ks_dir = Path(ks_dir)
-    print(ks_dir)
 
-    # Load spikes 
-    spike_samps = np.load(ks_dir.joinpath('spike_times.npy')).ravel()
-    spike_clusters = np.load(ks_dir.joinpath('spike_clusters.npy')).ravel()
-    params_fn = ks_dir.joinpath('params.py')
-    sample_rate = extract_sr_from_params(params_fn)
-    
-    spike_times = spike_samps/sample_rate
-    cluster_ids = np.unique(spike_clusters)
-    cluster_ids.sort()
+def run_probe(probe_path,tags,consideration_window,wavelength,plot=False):
+    spikes = alfio.load_object(probe_path,'spikes')
+    clusters = alfio.load_object(probe_path,'clusters')
+    cluster_ids = clusters.metrics['cluster_id'][clusters.metrics.group=='good'].values
+    idx = np.isin(spikes.clusters,cluster_ids)
+    spike_times = spikes.times[idx]
+    spike_clusters = spikes.clusters[idx]
 
-    # Load opto times and logs
-    opto_df = pd.read_csv(opto_fn,sep='\t',index_col=0)
-    log_df = pd.read_csv(log_fn,index_col=0,sep='\t')
 
-    # Extract only tag times
-    tags = extract_tagging_from_logs(log_df,opto_df)
-    tag_times = tags['on_sec_corrected'].values
-    tag_duration = tags['dur_sec'].mean()
-    n_tags = tags.shape[0]
- 
 
+    tag_duration = np.mean(np.diff(tags.intervals,1))
+    n_tags = tags.intervals.shape[0]
+    tag_onsets = tags.intervals[:,0]
     # Compute SALT data
-    p_stat,I_stat = run_salt(spike_times,spike_clusters,cluster_ids,tag_times,
+    p_stat,I_stat = run_salt(spike_times,spike_clusters,cluster_ids,tags.intervals[:,0],
                              stim_duration=tag_duration,
                              consideration_window=consideration_window)
     
     # Compute heuristic data
-    n_stims_with_spikes,base_rate,stim_rate = compute_tagging_summary(spike_times,spike_clusters,cluster_ids,tag_times,window_time=consideration_window)
+    n_stims_with_spikes,base_rate,stim_rate = compute_tagging_summary(spike_times,spike_clusters,cluster_ids,tag_onsets,window_time=consideration_window)
 
-    # Export to a tsv
+    # Export to a pqt
     salt_rez = pd.DataFrame()
-    salt_rez['cluster_id']=cluster_ids
-    salt_rez['salt_p_stat'] = p_stat
-    salt_rez['salt_I_stat'] = I_stat
-    salt_rez['n_stims_with_spikes'] = n_stims_with_spikes
-    salt_rez['pct_stims_with_spikes'] = n_stims_with_spikes/n_tags * 100
-    salt_rez['base_rate'] = base_rate
-    salt_rez['stim_rate'] = stim_rate
-    salt_rez['is_tagged'] = salt_rez.eval('salt_p_stat<@SALT_P_CUTOFF & pct_stims_with_spikes>@MIN_PCT_TAGS_WITH_SPIKES')
+    salt_rez['cluster_id']=clusters.metrics.cluster_id
+    salt_rez.loc[cluster_ids,'salt_p_stat'] = p_stat
+    salt_rez.loc[cluster_ids,'salt_I_stat'] = I_stat
+    salt_rez.loc[cluster_ids,'n_stims_with_spikes'] = n_stims_with_spikes
+    salt_rez.loc[cluster_ids,'pct_stims_with_spikes'] = n_stims_with_spikes/n_tags * 100
+    salt_rez.loc[cluster_ids,'base_rate'] = base_rate
+    salt_rez.loc[cluster_ids,'stim_rate'] = stim_rate
+    salt_rez['is_tagged'] = False
+    if wavelength == 473:
+        salt_rez.loc[cluster_ids,'is_tagged'] = salt_rez.eval('salt_p_stat<@SALT_P_CUTOFF & pct_stims_with_spikes>@MIN_PCT_TAGS_WITH_SPIKES')
+    elif wavelength == 635:
+        salt_rez.loc[cluster_ids,'is_tagged'] = salt_rez.eval('salt_p_stat<@SALT_P_CUTOFF & pct_stims_with_spikes>@MIN_PCT_TAGS_WITH_SPIKES & stim_rate/base_rate>@RATIO')
 
-    save_fn = ks_dir.joinpath('clusters.optotagging.tsv')
-    salt_rez.to_csv(save_fn,sep='\t',index=False)
+    save_fn = probe_path.joinpath(alfio.spec.to_alf('clusters','optotag',namespace='salt',extension='pqt'))
+    salt_rez.to_parquet(save_fn)
+    is_tagged = {'isTagged':salt_rez['is_tagged'].values}
+    alfio.save_object_npy(probe_path,is_tagged,'clusters',namespace='salt')
     print(f'optotagging info saved to {save_fn}.')
 
     if plot:
         make_plots(spike_times,spike_clusters,cluster_ids,tags,
-                   save_folder=ks_dir.joinpath('tag_plots'),
+                   save_folder=probe_path.joinpath('tag_plots'),
                    salt_rez=salt_rez,
-                   wavelength=wavelength)
+                   wavelength=wavelength,
+                   consideration_window=consideration_window)
+    
+    import json
+    fn_parameters = probe_path.joinpath(alfio.spec.to_alf('optotag','parameters','json','salt'))
+    params = dict(SALT_P_CUTOFF=SALT_P_CUTOFF,MIN_PCT_TAGS_WITH_SPIKES=MIN_PCT_TAGS_WITH_SPIKES,consideration_window=consideration_window,wavelength=wavelength)
+    if wavelength==635:
+        params['RATIO'] = RATIO
+    with open(probe_path.joinpath(fn_parameters),'w') as fid:
+        json.dump(params,fid)
+
+
+# TODO: Implement functionality on data from multiple recordings
+# TODO: Implement plotting
+# TODO: Implement Chrmine option (slower optotagging responses)
+@click.command()
+@click.argument('session_path') # Will not work on concatnated data yet.
+@click.option('-w','--consideration_window',default=0.01,help ='Option to change how much of the stimulus time to consider as important. Longer times may be needed for ChRmine')
+@click.option('-l','--wavelength',default=473,help ='set wavelength of light (changes color of plots.)')
+@click.option('-p','--plot',is_flag=True,help='Flag to make plots for each cell')
+def main(session_path,consideration_window,plot,wavelength):
+    session_path = Path(session_path)
+
+    # Load opto times and logs
+    log_fn = list(session_path.glob('*log*.tsv'))
+    assert(len(log_fn)==1),f'Number of log files found was {len(log_fn)}. Should be one'
+    log_fn = log_fn[0]
+    #TODO: deal with multiple triggers (by concatenating previously)
+    laser = alfio.load_object(session_path.joinpath('alf'),'laser',short_keys=True)
+    log_df = pd.read_csv(log_fn,index_col=0,sep='\t')
+
+    # Extract only tag times
+    tags = extract_tagging_from_logs(log_df,laser)
+
+    probe_paths = list(session_path.joinpath('alf').glob('probe[0-9][0-9]'))
+    for probe in probe_paths:
+        run_probe(probe,tags,consideration_window=consideration_window,wavelength=wavelength,plot=plot)
+ 
+
 
 if __name__ == '__main__':
     main()
