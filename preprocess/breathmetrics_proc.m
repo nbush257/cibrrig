@@ -24,7 +24,7 @@ has_pdiff = ismember('pdiff',physiology.Properties.VariableNames);
 % Only load in previously extracted diaphragm if dia was recorded
 if has_dia
     disp('Has diaphragm')
-    breaths = readtable(breath_features_fn,'FileType','text','Delimiter','\t');
+    breaths = parquetread(breath_features_fn);
 end
 
 % Overload to work on PDIFF or flowmeter signal
@@ -109,9 +109,9 @@ else
     breaths.exhale_pause_onsets = bmObj.exhalePauseOnsets(:)/sr;
     breaths.inhale_pause_durations = bmObj.exhalePauseDurations(:)/sr;
     breaths = standardizeMissing(breaths,0);
+    writeNPY(breaths.inhale_onsets,breath_times_fn)
 
 end
 %% write modified stats table
 parquetwrite(breath_features_fn,breaths);
-writeNPY(breaths.inhale_onsets,breath_times_fn)
 exit;
