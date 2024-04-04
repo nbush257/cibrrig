@@ -86,9 +86,7 @@ def sync_spikes(ap_files,spikes):
     return(all_times_adj)
 
     
-@click.command()
-@click.argument('session_path')
-def main(session_path):
+def run_session(session_path):
     session_path = Path(session_path)
     ephys_path = session_path.joinpath('raw_ephys_data')
     probes_alfs = list(session_path.joinpath('alf').glob('probe[0-9][0-9]'))
@@ -132,6 +130,11 @@ def main(session_path):
         np.save(out_path.joinpath(times_old_fn),spikes.times)
         np.save(out_path.joinpath(times_adj_fn),times_adj)
         
+
+@click.command()
+@click.argument('session_path')
+def main(session_path):
+    run_session(session_path)
 
 if __name__ == '__main__':
     main()
