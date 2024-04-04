@@ -14,13 +14,14 @@ import subprocess
 import pandas as pd
 import logging
 from one.alf import spec
+import one.alf.io as alfio
 logging.basicConfig()
-_log = logging.getLogger('_extract_coherence_')
+_log = logging.getLogger('extract_coherence')
 _log.setLevel(logging.INFO)
 sys.path.append('../..') # There are some funky, circular dependencies that will need to be cleaned up
-import iso_npx.utils
 
 
+#Chronux parameters 
 ERR = [[2.0,0.001]]
 TAPERS = [[3.0,5.0]]
 WIN=25.0
@@ -36,20 +37,20 @@ def adjust_chronux_phi(phi):
     return(phi_adj)
 
 
-def run_chronux(spike_times,spike_clusters,cluster_ids,x,xt,t0,tf):
+def run_chronux(spike_times,spike_clusters,cluster_ids,x,xt,t0,tf,verbose=True):
     """Run chronux on a subset of data. 
     Runs agnostic of underlying file structure.
     Submits a subprocess command to matlab, so matlab must be installed and chronux must be
     in the matlab path.
 
     Args:
-        spike_times (_type_): times in seconds of spikes
-        spike_clusters (_type_): clusters each spike is associated with
-        cluster_ids (_type_): list of unique clusters to analyse
-        x (_type_): continuous valued variable to compute coherence against
-        xt (_type_): time of each sample in x
-        t0 (_type_): first time of window to analyse (seconds)
-        tf (_type_): last time of window to analyse (seconds)
+        spike_times (1D numpy array): times in seconds of spikes
+        spike_clusters (1D numpy array): clusters each spike is associated with
+        cluster_ids (1D numpy array): list of unique clusters to analyse
+        x (1D numpy array): continuous valued variable to compute coherence against
+        xt (1D numpy array): time of each sample in x
+        t0 (float): first time of window to analyse (seconds)
+        tf (float): last time of window to analyse (seconds)
     """    
 
     # Logic of time is important here becasue chronux assumes that x starts at t = 0
@@ -65,6 +66,7 @@ def run_chronux(spike_times,spike_clusters,cluster_ids,x,xt,t0,tf):
     params['err'] = ERR
     params['tapers'] = TAPERS
     params['win'] = WIN
+    params['verbose'] = verbose
 
     data_out = {}
     data_out['x'] = x
@@ -84,111 +86,129 @@ def run_chronux(spike_times,spike_clusters,cluster_ids,x,xt,t0,tf):
     return(chronux_rez)
 
 
-def reshape_chronux_output(chronux_rez,cluster_ids,mode = 'mat'):
+def reshape_chronux_output(chronux_rez,cluster_ids,n_total_clusters,mode = 'unit_level',min_rr=0.2):
     """Given the chronux result loaded from the mat file, reshape either into a 
     more user friendly mat file or a unit level data frame
 
+    Mode: unit_level returns a dataframe of the coherence, bounds, and phase lags for each cluster.
+
     Args:
-        chronux_rez (_type_): _description_
-        cluster_ids (_type_): _description_
-        mode (str, optional): _description_. Defaults to 'mat'. ('mat' or 'unit_level')
+        chronux_rez (dict): result from the chronux output
+        cluster_ids (1D numpy array): cluster IDS
+        n_total_clusters (int): number of total clusters in the recording. Required if you did  not compute coherence on the non-QC units
+        mode (str, optional): what format to output to. Defaults to 'unit level'. ('mat' or 'unit_level')
     """    
-    freqs = chronux_rez['all_f'].ravel()
+    freqs = chronux_rez['freqs'].ravel()
+    # Chop the frequencies to less than 20Hz
     chop_freqs_idx = np.where(freqs<20)[0][-1]
 
+    # Get the peak in the breathing rate. Assumes breathing rate is greater than "min_rr"
+    breathing_spectrum = chronux_rez['breathing_spectrum'].ravel()
+    breathing_spectrum[freqs<min_rr] = 0
+    rr_sample = np.argmax(breathing_spectrum)
+    rr = freqs[rr_sample]
+    _log.info(f'Computed breathing rate was {rr:0.1f}Hz')
+
+    # 
     if mode=='mat':
         save_data = {}
         save_data['full_coherence'] = chronux_rez['full_coherence'][:,:chop_freqs_idx]
         save_data['full_coherence_lb'] = chronux_rez['full_coherence_lb'][:,:chop_freqs_idx]
         save_data['full_coherence_ub'] = chronux_rez['full_coherence_ub'][:,:chop_freqs_idx]
         save_data['full_phi'] = chronux_rez['full_phi'][:,:chop_freqs_idx]
+        save_data['phi_std'] = chronux_rez['full_phistd'][:,:chop_freqs_idx]
         save_data['freqs'] = freqs[:chop_freqs_idx]
         save_data['params'] = chronux_rez['params']
+        save_data['cluster_id'] = cluster_ids
         return(save_data)
     elif mode=='unit_level':
-        coh = chronux_rez['full_coherence']
-        max_coh_idx = np.argmax(coh,axis=1)
-        xx = np.arange(len(cluster_ids))
-        unit_level_coh = {}
-        unit_level_coh['coherence'] = chronux_rez['full_coherence'][xx,max_coh_idx]
-        unit_level_coh['coherence_lb'] = chronux_rez['full_coherence_lb'][xx,max_coh_idx]
-        unit_level_coh['coherence_ub'] = chronux_rez['full_coherence_ub'][xx,max_coh_idx]
-        unit_level_coh['phi'] = chronux_rez['full_phi'][xx,max_coh_idx]
-        unit_level_coh['cluster_id'] = cluster_ids
-        unit_level_coh['phi_adj'] = adjust_chronux_phi(unit_level_coh['phi'])
-        df = pd.DataFrame(unit_level_coh)
-        return(df)
+        unit_level_coh = pd.DataFrame(index=np.arange(n_total_clusters))
+        unit_level_coh.loc[cluster_ids,'coherence'] = chronux_rez['full_coherence'][:,rr_sample]
+        unit_level_coh.loc[cluster_ids,'coherence_lb'] = chronux_rez['full_coherence_lb'][:,rr_sample]
+        unit_level_coh.loc[cluster_ids,'coherence_ub'] = chronux_rez['full_coherence_ub'][:,rr_sample]
+        unit_level_coh.loc[cluster_ids,'phi_std'] = chronux_rez['full_phistd'][:,rr_sample]
+        unit_level_coh.loc[cluster_ids,'phi'] = chronux_rez['full_phi'][:,rr_sample]
+        unit_level_coh.loc[cluster_ids,'cluster_id'] = cluster_ids
+        unit_level_coh.loc[cluster_ids,'phi_adj'] = adjust_chronux_phi(unit_level_coh['phi'])
+        return(unit_level_coh)
     else:
         raise ValueError(f'Mode {mode} not supported. Must be "mat" or "unit_level"')
 
 
-def run_on_phy(gate_path,phy_path,t0,tf,var='dia',use_good=True):
-    """Runs chronux given a gate path (which contains auxiliary data) and a phy path.
+def run_probe(probe_path,t0,tf,x,xt,use_good=True,verbose=True):
+    """
+    Compute coherence using chronux ALF organized spike data in a probe path
 
     Args:
-        gate_path (_type_): _description_
-        phy_path (_type_): _description_
-        t0 (_type_): _description_
-        tf (_type_): _description_
-        var(str): Variable to compute coherence against. Defaults to "dia" 
-        use_good (bool, optional): _description_. Defaults to True. - Whether to only compute for units catagorized as "good" in sorting
-    """    
+        probe_path (Pathlib path): path to the ALF spiking data
+        t0 (float): start of the epoch to comute on
+        tf (float): end of the epoch to compute on
+        x (1D numpy array): continuous variable to compute coherence against
+        xt (1D numpy array): timestamps of the x variable
+        use_good (bool, optional): Flag to only compute on neurons that have been designated good. Defaults to True.
+    """
+    _log.info(f'Running {probe_path.name}')
+    spikes = alfio.load_object(probe_path,'spikes')
+    clusters = alfio.load_object(probe_path,'clusters')
+    if 'coherence' in clusters.keys():
+        _log.warning('Coherence already computed. Skipping')
+        return
+    n_total_clusters = clusters.uuids.shape[0]
+    spike_times = spikes.times
+    spike_clusters = spikes.clusters
 
-    save_fn_mat = phy_path.joinpath(spec.to_alf('clusters','coherence','mat','_chronux_'))
-    save_fn_unitlevel = phy_path.joinpath(spec.to_alf('clusters','coherence','tsv','_chronux_'))
-    # Load diaphragm
-    _log.info('Loading aux')
-    epochs,breaths,aux = iso_npx.utils.load_aux(gate_path) # This needs to get moved to a more reasonable location.
-    x = aux[var].ravel()
-    aux_t = aux['t'].ravel()
-
-
-    _log.info('Loading spiking')
-    phy_model = si.PhySortingExtractor(phy_path)
-    sv = phy_model.to_spike_vector()
-    spike_times = sv['sample_index']/phy_model.sampling_frequency
-    spike_clusters = sv['unit_index']
-
-
-    group =  phy_model.get_property('quality')
-
-    # THere may become a bug here with there being no spikes associated with a cluster ID 
-    # That may arise from the subsetting
     if use_good:
-        _log.debug('Only using good units')
-        cluster_ids = np.where(group=="good")[0]
+        cluster_ids = clusters.metrics['cluster_id'][clusters.metrics.group=='good'].values
+        idx = np.isin(spikes.clusters,cluster_ids)
+        spike_times = spike_times[idx]
+        spike_clusters = spike_clusters[idx]
     else:
-        cluster_ids = np.unique(spike_clusters)
+        cluster_ids = np.unique(spikes.clusters)
 
-    # RUN CHRONUX
-    _log.info('Sending to chronux')
-    chronux_rez = run_chronux(spike_times,spike_clusters,cluster_ids,x,aux_t,t0,tf)
+    # Run Chronux
+    chronux_rez = run_chronux(spike_times,spike_clusters,cluster_ids,x,xt,t0,tf,verbose=verbose)
 
     # Shape results 
-    save_mat = reshape_chronux_output(chronux_rez,cluster_ids,mode='mat')
-    unit_coh = reshape_chronux_output(chronux_rez,cluster_ids,mode='unit_level')
-
+    unit_coh = reshape_chronux_output(chronux_rez,cluster_ids,n_total_clusters,mode='unit_level')
+    
     # Save results
-    sio.savemat(save_fn_mat,save_mat)
-    unit_coh.to_csv(save_fn_unitlevel,sep='\t',index=False)
+    fn_chronux = alfio.files.spec.to_alf('clusters','coherence','pqt')
+    unit_coh.to_parquet(probe_path.joinpath(fn_chronux))
+
+
+def run_session(session_path,t0,tf,var='dia',use_good=True,verbose=True):
+    """
+    Run chronux coherence extraction on all probes in a session
+    Should have the "physiology" object extracted, and all probes should be in ALF format.
+
+    Args:
+        session_path (Pathlib Path): Path to the session.
+        t0 (float): start of the epoch to comute on
+        tf (float): end of the epoch to compute on
+        x (1D numpy array): continuous variable to compute coherence against
+        xt (1D numpy array): timestamps of the x variable
+        use_good (bool, optional): Flag to only compute on neurons that have been designated good. Defaults to True.
+    """    
+    _log.info(f'\nComputing coherence for {session_path}.\n\t{t0=}\n\t{tf=}\n\t{var=}\n\t{use_good=}')
+    physiology_data = alfio.load_object(session_path.joinpath('alf'),'physiology',short_keys=True)
+    x = physiology_data[var]
+    xt = physiology_data['times']
+    probe_paths = list(session_path.joinpath('alf').glob('probe[0-9][0-9]'))
+    for probe in probe_paths:
+        run_probe(probe,t0,tf,x,xt,use_good=use_good,verbose=verbose)
+
 
 @click.command()
-@click.argument('gate_path')
+@click.argument('session_path')
 @click.option('--t0',default=0,show_default=True,help = 'Time in seconds of the beginning of the window to consider in the coherence computation.')
 @click.option('--tf',default=300,show_default=True,help = 'Time in seconds of the end of the window to consider in the coherence computation.')
 @click.option('--var',default='dia',show_default=True,help ='Which variable to compute coherence against')
 @click.option('--include_all','-i',is_flag=True,help='If set, runs on all units. Default behavior is to run only on the units identified as "good"')
-def main(gate_path,t0,tf,var,include_all):
-    gate_path = Path(gate_path)
-    # Get all phy folders: only coded now for spikeinterface structure with KS3
-    phy_list_spikeinterface = list(gate_path.glob('si-sort/*/phy_output')) 
-    if len(phy_list_spikeinterface) ==0:
-        _log.warning('No sorted data found. Exiting')
-    #TODO: add potentially other folder structures
+@click.option('--verbose','-v',is_flag=True,help='Updates user of computation for each unit')
+def main(session_path,t0,tf,var,include_all,verbose):
+    session_path = Path(session_path)
     use_good = not include_all
-    for phy_path in phy_list_spikeinterface:
-        _log.info(f'Running on\n\t{phy_path=}\n\t{gate_path=}')
-        run_on_phy(gate_path,phy_path,t0,tf,var,use_good = use_good)
+    run_session(session_path,t0,tf,var,use_good,verbose)
 
 if __name__=='__main__':
     main()
