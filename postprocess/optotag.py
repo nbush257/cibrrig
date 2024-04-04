@@ -14,6 +14,7 @@ import seaborn as sns
 import one.alf.io as alfio
 from tqdm import tqdm
 import sys
+import scipy.stats
 if sys.platform=='linux':
     import matplotlib
     matplotlib.use('TkAgg')
@@ -21,7 +22,7 @@ if sys.platform=='linux':
 WAVELENGTH_COLOR = {635:'#ff3900',473:'#00b7ff'}
 SALT_P_CUTOFF = 0.001
 MIN_PCT_TAGS_WITH_SPIKES = 33
-RATIO = 2
+RATIO = 3
 
 def compute_pre_post_raster(spike_times,spike_clusters,cluster_ids,stim_times,stim_duration = None, window_time = 0.5,bin_size=0.001,mask_dur = 0.002): 
     """Creates the rasters pre and post stimulation time. 
@@ -226,6 +227,8 @@ def make_plots(spike_times,spike_clusters,cluster_ids,tags,save_folder,salt_rez=
         print('Removing old figures.')
         for fn in save_folder.glob('*.png'):
             fn.unlink()
+        for fn in save_folder.glob('*.svg'):
+            fn.unlink()
     stim_duration = np.diff(tags.intervals,1).mean()
     stim_times = tags.intervals[:,0]
     n_stims = stim_times.shape[0]
@@ -281,10 +284,11 @@ def make_plots(spike_times,spike_clusters,cluster_ids,tags,save_folder,salt_rez=
         # Additional info if available
         if salt_rez is not None:
             this_cell = salt_rez.query('cluster_id==@clu')
-            p_tagged = this_cell["salt_p_stat"].values[0]
+            p_salt = this_cell["salt_p_stat"].values[0]
+            p_ks = this_cell["p_ks"].values[0]
             base_rate = this_cell["base_rate"].values[0]
             stim_rate = this_cell["stim_rate"].values[0]
-            ax[0].text(0.8,0.8,f'{p_tagged=:0.03f}\n{base_rate=:0.01f} sps\n{stim_rate=:0.01f} sps',ha='left',va='center',transform=ax[0].transAxes)
+            # ax[0].text(0.8,0.8,f'{p_ks=:0.03f}\n{p_salt=:0.03f}\n{base_rate=:0.01f} sps\n{stim_rate=:0.01f} sps',ha='left',va='center',transform=ax[0].transAxes)
         
         # Tidy axes
         sns.despine()
@@ -296,9 +300,12 @@ def make_plots(spike_times,spike_clusters,cluster_ids,tags,save_folder,salt_rez=
                 is_tagged = this_cell['is_tagged'].values[0]
         if is_tagged:
             save_fn = save_folder.joinpath(f'tagged_clu_{clu:04.0f}.png')
+            save_fn2 = save_folder.joinpath(f'tagged_clu_{clu:04.0f}.svg')
         else:
             save_fn = save_folder.joinpath(f'untagged_clu_{clu:04.0f}.png')
+            save_fn2 = save_folder.joinpath(f'untagged_clu_{clu:04.0f}.svg')
         plt.savefig(save_fn,dpi=300,transparent=True)
+        plt.savefig(save_fn2,transparent=True)
         plt.close('all')
 
     # Population plots - seperate by salt_p_stat <0.001
@@ -330,6 +337,25 @@ def make_plots(spike_times,spike_clusters,cluster_ids,tags,save_folder,salt_rez=
     plt.savefig(save_folder.joinpath('population_tags.png'),dpi=300,transparent=True)
 
 
+def kstest_optotag(spike_times,spike_clusters,cluster_ids,tags,window_time,stim_duration):
+    stim_times = tags.intervals[:,0]
+    pre_raster,post_raster = compute_pre_post_raster(spike_times,
+                                                    spike_clusters,
+                                                    cluster_ids,
+                                                    stim_times,
+                                                    window_time = window_time,
+                                                    stim_duration = stim_duration,
+                                                    bin_size = 0.001,
+                                                    mask_dur=0.002)  
+
+    p = []
+    for ii,clu in enumerate(cluster_ids):
+        pre = np.sum(pre_raster[:,ii,:],1)/window_time
+        post = np.sum(post_raster[:,ii,:],1)/window_time
+        p.append(scipy.stats.ks_2samp(pre,post,alternative='greater').pvalue)
+    return(p)
+    
+
 def run_probe(probe_path,tags,consideration_window,wavelength,plot=False):
     spikes = alfio.load_object(probe_path,'spikes')
     clusters = alfio.load_object(probe_path,'clusters')
@@ -344,12 +370,16 @@ def run_probe(probe_path,tags,consideration_window,wavelength,plot=False):
     n_tags = tags.intervals.shape[0]
     tag_onsets = tags.intervals[:,0]
     # Compute SALT data
-    p_stat,I_stat = run_salt(spike_times,spike_clusters,cluster_ids,tags.intervals[:,0],
+    p_stat,I_stat = run_salt(spike_times,spike_clusters,cluster_ids,tag_onsets,
+                             window_time=consideration_window*50,
                              stim_duration=tag_duration,
                              consideration_window=consideration_window)
     
     # Compute heuristic data
     n_stims_with_spikes,base_rate,stim_rate = compute_tagging_summary(spike_times,spike_clusters,cluster_ids,tag_onsets,window_time=consideration_window)
+    
+    # Compute KStest statistic
+    p_ks = kstest_optotag(spike_times,spike_clusters,cluster_ids,tags,window_time=consideration_window,stim_duration=tag_duration)
 
     # Export to a pqt
     salt_rez = pd.DataFrame()
@@ -360,11 +390,14 @@ def run_probe(probe_path,tags,consideration_window,wavelength,plot=False):
     salt_rez.loc[cluster_ids,'pct_stims_with_spikes'] = n_stims_with_spikes/n_tags * 100
     salt_rez.loc[cluster_ids,'base_rate'] = base_rate
     salt_rez.loc[cluster_ids,'stim_rate'] = stim_rate
+    salt_rez.loc[cluster_ids,'p_ks'] = p_ks
     salt_rez['is_tagged'] = False
     if wavelength == 473:
         salt_rez.loc[cluster_ids,'is_tagged'] = salt_rez.eval('salt_p_stat<@SALT_P_CUTOFF & pct_stims_with_spikes>@MIN_PCT_TAGS_WITH_SPIKES')
     elif wavelength == 635:
-        salt_rez.loc[cluster_ids,'is_tagged'] = salt_rez.eval('salt_p_stat<@SALT_P_CUTOFF & pct_stims_with_spikes>@MIN_PCT_TAGS_WITH_SPIKES & stim_rate/base_rate>@RATIO')
+        # salt_rez.loc[cluster_ids,'is_tagged'] = salt_rez.eval('salt_p_stat<@SALT_P_CUTOFF & pct_stims_with_spikes>@MIN_PCT_TAGS_WITH_SPIKES & stim_rate/base_rate>@RATIO')
+        salt_rez.loc[cluster_ids,'is_tagged'] = salt_rez.eval('p_ks<@SALT_P_CUTOFF & pct_stims_with_spikes>@MIN_PCT_TAGS_WITH_SPIKES & stim_rate/base_rate>@RATIO')
+
 
     save_fn = probe_path.joinpath(alfio.spec.to_alf('clusters','optotag',namespace='salt',extension='pqt'))
     salt_rez.to_parquet(save_fn)
@@ -388,22 +421,12 @@ def run_probe(probe_path,tags,consideration_window,wavelength,plot=False):
         json.dump(params,fid)
 
 
-# TODO: Implement functionality on data from multiple recordings
-# TODO: Implement plotting
-# TODO: Implement Chrmine option (slower optotagging responses)
-@click.command()
-@click.argument('session_path') # Will not work on concatnated data yet.
-@click.option('-w','--consideration_window',default=0.01,help ='Option to change how much of the stimulus time to consider as important. Longer times may be needed for ChRmine')
-@click.option('-l','--wavelength',default=473,help ='set wavelength of light (changes color of plots.)')
-@click.option('-p','--plot',is_flag=True,help='Flag to make plots for each cell')
-def main(session_path,consideration_window,plot,wavelength):
-    session_path = Path(session_path)
+def run_session(session_path,consideration_window,plot,wavelength):
 
     # Load opto times and logs
     log_fn = list(session_path.glob('*log*.tsv'))
     assert(len(log_fn)==1),f'Number of log files found was {len(log_fn)}. Should be one'
     log_fn = log_fn[0]
-    #TODO: deal with multiple triggers (by concatenating previously)
     laser = alfio.load_object(session_path.joinpath('alf'),'laser',short_keys=True)
     log_df = pd.read_csv(log_fn,index_col=0,sep='\t')
 
@@ -414,6 +437,15 @@ def main(session_path,consideration_window,plot,wavelength):
     for probe in probe_paths:
         run_probe(probe,tags,consideration_window=consideration_window,wavelength=wavelength,plot=plot)
  
+
+@click.command()
+@click.argument('session_path') 
+@click.option('-w','--consideration_window',default=0.01,help ='Option to change how much of the stimulus time to consider as important. Longer times may be needed for ChRmine')
+@click.option('-l','--wavelength',default=473,help ='set wavelength of light (changes color of plots.)')
+@click.option('-p','--plot',is_flag=True,help='Flag to make plots for each cell')
+def main(session_path,consideration_window,plot,wavelength):
+    session_path = Path(session_path)
+    run_session(session_path,consideration_window,plot,wavelength)
 
 
 if __name__ == '__main__':
