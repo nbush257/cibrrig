@@ -35,10 +35,10 @@ def get_metrics_from_si(ks4_dir):
 
 def save_metrics(metrics,out_path):
     """
-    Convinience function to save the metrics
+    Convinience function to save the cluster-level QC metrics
     Args:
-        metrics (_type_): _description_
-        out_path (_type_): _description_
+        metrics (pandas dataframe): cluster level QC metrics
+        out_path (Pathlib Path): where to save the metrics file
     """    
     metrics_fn = alfio.spec.to_alf('clusters','metrics','pqt')
     metrics.to_parquet(out_path.joinpath(metrics_fn))
@@ -50,7 +50,7 @@ def get_ap_breaks_samps(ap_files):
     Example: recording 1 has 110 samples and recording 2 has 24 samples. Returns: [0,110,134]
 
     Args:
-        ap_files (_type_): _description_
+        ap_files (list): list of Paths to  ap.bin files
     """    
     breaks = [0]
     for fn in ap_files:
@@ -66,8 +66,8 @@ def sync_spikes(ap_files,spikes):
     NIDAQ clock. Spikes that occur at negative timea re set to zero
 
     Args:
-        ap_files (_type_): list of all the ap binary files
-        spikes (_type_): spikes alf object
+        ap_files (list): list of Paths to  ap.bin files
+        spikes (AlfBunch): spikes alf object
     """    
     breaks_samps = get_ap_breaks_samps(ap_files)
     rec_idx = np.searchsorted(breaks_samps,spikes.samples)-1
@@ -86,9 +86,18 @@ def sync_spikes(ap_files,spikes):
     return(all_times_adj)
 
     
-@click.command()
-@click.argument('session_path')
-def main(session_path):
+def run_session(session_path,sorting_name = 'kilosort4'):
+    """Convert all sorting in the session to alf standard.
+    Assumes spikesorting data lives in this structure: <session>/alf/probeXX/<sorting_name>
+    Assumes the processed ephys data live in <session>/alf/probeXX/<sorting_name>/recording.dat
+    Assumes raw ephys data lives in <session>/raw_ephys_data/probeXX
+
+    Applies synchronization to the spike times. Original spike times are kept with the timescale "ephysClock"
+
+    Args:
+        session_path (pathlib Path): Path to the session
+        sorting_name (str, optional): name of the sorting folder. Defaults to 'kilosort4'.
+    """    
     session_path = Path(session_path)
     ephys_path = session_path.joinpath('raw_ephys_data')
     probes_alfs = list(session_path.joinpath('alf').glob('probe[0-9][0-9]'))
@@ -97,7 +106,7 @@ def main(session_path):
         _log.info(f'Converting {probe_alf.name}')
 
         # Get paths
-        ks4_dir = probe_alf.joinpath('kilosort4')
+        ks4_dir = probe_alf.joinpath(sorting_name)
         bin_path = ks4_dir.joinpath('recording.dat')
         out_path = probe_alf
         
@@ -132,6 +141,11 @@ def main(session_path):
         np.save(out_path.joinpath(times_old_fn),spikes.times)
         np.save(out_path.joinpath(times_adj_fn),times_adj)
         
+
+@click.command()
+@click.argument('session_path')
+def main(session_path):
+    run_session(session_path)
 
 if __name__ == '__main__':
     main()

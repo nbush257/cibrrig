@@ -1,6 +1,6 @@
 '''
 Functions to work with optogenetic stimulations, and in particular, tags. 
-When run from command line will perform salt tag statistics
+When run from command line will perform tag statistics
 '''
 import numpy as np
 import scipy.io.matlab as sio
@@ -14,28 +14,38 @@ import seaborn as sns
 import one.alf.io as alfio
 from tqdm import tqdm
 import sys
+import scipy.stats
 if sys.platform=='linux':
     import matplotlib
     matplotlib.use('TkAgg')
 
-WAVELENGTH_COLOR = {635:'#ff3900',473:'#00b7ff'}
-SALT_P_CUTOFF = 0.001
-MIN_PCT_TAGS_WITH_SPIKES = 33
-RATIO = 2
+WAVELENGTH_COLOR = {635:'#ff3900',473:'#00b7ff'} # Dictionary that maps a wavelength to a hex
 
-def compute_pre_post_raster(spike_times,spike_clusters,cluster_ids,stim_times,stim_duration = None, window_time = 0.5,bin_size=0.001,mask_dur = 0.002): 
-    """Creates the rasters pre and post stimulation time. 
+# Requirements for is_tagged=True. All criteria must be met
+SALT_P_CUTOFF = 0.001 # Consider units p<SALT_P_CUTOFF as tagged
+MIN_PCT_TAGS_WITH_SPIKES = 33 # Consider units with spikes on at least this percentage of stims as tagged
+RATIO = 3 # Spike rates must increase by this factor to be considered tagged. (e.g. RATIO=3, pre_FR=2. then post_FR>= 6 to be considered tagged)
+
+
+def compute_pre_post_raster(spike_times,spike_clusters,cluster_ids,stim_times,stim_duration, window_time = 0.5,bin_size=0.001,mask_dur = 0.002): 
+    """
+    Creates the rasters pre and post stimulation time. 
     Optionally blanks periods around onset and offset of light to zero (default behavior)
+    Wraps to the IBL bin_spikes2D
 
     Args:
-        spike_times (_type_): _description_
-        spike_clusters (_type_): _description_
-        cluster_ids (_type_): _description_
-        stim_times (_type_): _description_
-        stim_duration (_type_, optional): _description_. Defaults to None.
-        window_time (float, optional): _description_. Defaults to 0.5.
-        bin_size (float, optional): _description_. Defaults to 0.001.
-        mask_dur (float, optional): _description_. Defaults to 0.002.
+        spike_times (1D numpy array): array of times in seconds for each spikes
+        spike_clusters (1D numpy array): array of clusters for each spike
+        cluster_ids (1D numpy array): list of clusters to include 
+        stim_times (1D numpy array): onset times of each opto stim to align to 
+        stim_duration (float): Duration of stimulus in seconds. 
+        window_time (float, optional): Size of the PETH to compute in seconds. Defaults to 0.5.
+        bin_size (float, optional): Size of the bins of the PETH in seconds. Defaults to 0.001.
+        mask_dur (float, optional): Duration to mask to zero near onset and offset in seconds. Defaults to 0.002.
+
+    Returns:
+        pre_raster (3D numpy array): Raster of spike counts before simulus onset. Size: [n_stims,n_units,n_timebins]
+        post_raster (3D numpy array): Raster of spike counts after simulus onset. Size: [n_stims,n_units,n_timebins]
     """       
     pre_raster,pre_tscale = singlecell.bin_spikes2D(spike_times,
                                             spike_clusters,
@@ -56,9 +66,8 @@ def compute_pre_post_raster(spike_times,spike_clusters,cluster_ids,stim_times,st
                                         )
     
     # if stim_duration exists, remove any spikes within - 1 ms and + mask_duration of offset time
-    if stim_duration is not None:
-        stim_offsets_samp = np.searchsorted(post_tscale,stim_duration)
-        post_raster[:,:,stim_offsets_samp-1:stim_offsets_samp+int(mask_dur/bin_size)] = 0
+    stim_offsets_samp = np.searchsorted(post_tscale,stim_duration)
+    post_raster[:,:,stim_offsets_samp-1:stim_offsets_samp+int(mask_dur/bin_size)] = 0
 
     return(pre_raster,post_raster)
 
@@ -72,10 +81,10 @@ def run_salt(spike_times,spike_clusters,cluster_ids,stim_times,window_time = 0.5
     Automatically deletes the temporary mat file.
 
     Args:
-        spike_times (np.array): times in  seconds of every spike 
-        spike_clusters (np.array): cluster assignments of every spike
-        cluster_ids (np.array): cluster ids to use.
-        stim_times (np.array): onset times of the optogenetic stimulus
+        spike_times (1D numpy array): times in  seconds of every spike 
+        spike_clusters (1D numpy array): cluster assignments of every spike
+        cluster_ids (1D numpy array): cluster ids to use.
+        stim_times (1D numpy array): onset times of the optogenetic stimulus
         window_time (float): duration in seconds pre and post to make the rasters. [Default = 0.5]
         stim_duration (float): duration of stimulus, used to mask the offset artifact
         consideration_window (float): Post-stimulus window to consider in the SALT tagging.  10ms is good for ChR2, longer is porbably needed for the slower ChRmine [Default = 0.01]
@@ -124,22 +133,22 @@ def run_salt(spike_times,spike_clusters,cluster_ids,stim_times,window_time = 0.5
     return p_stat,I_stat
 
 
-def compute_tagging_summary(spike_times,spike_clusters,cluster_ids,stim_times,window_time = 0.01,bin_size=0.001):
-    """Computes the number of stims that a spike was observed and the pre and post stim spike rate
+def compute_tagging_summary(spike_times,spike_clusters,cluster_ids,stim_times,window_time = 0.01):
+    """
+    Computes the number of stims that a spike was observed and the pre and post stim spike rate
 
     Args:
-        spike_times (1D numpy array): _description_
-        spike_clusters (1D numpy array): _description_
-        cluster_ids (1D numpy array): _description_
-        stim_times (1D numpy array): _description_
-        window_time (float, optional): _description_. Defaults to 0.01.
-        bin_size (float, optional): _description_. Defaults to 0.001.
-    
+        spike_times (1D numpy array): times in  seconds of every spike 
+        spike_clusters (1D numpy array): cluster assignments of every spike
+        cluster_ids (1D numpy array): cluster ids to use.
+        stim_times (1D numpy array): onset times of the optogenetic stimulus
+        window_time (float, optional): window to compute spike rate in seconds. Defaults to 0.01.
     Returns:
         n_responsive_stims (1D numpy array): Number of stimulations that evoked at least one spike
         pre_spikerate (1D numpy array): Spike rate in the window before stimulus onset
         post_spikerate (1D numpy array): Spike rate in the windw after stimulus onset
     """    
+    bin_size=0.001
     n_stims = stim_times.shape[0]
     pre_spikecounts,post_spikecounts = compute_pre_post_raster(spike_times,
                                                      spike_clusters,
@@ -202,29 +211,36 @@ def extract_tagging_from_logs(log_df,laser,verbose=True):
     return(tags)
     
 
-def make_plots(spike_times,spike_clusters,cluster_ids,tags,save_folder,salt_rez=None,pre_time=None,post_time=None,wavelength = 473,consideration_window=0.01,cmap=None):
-    """ Plots rasters and PETHs for each cell aligned to 
+def make_plots(spike_times,spike_clusters,cluster_ids,tags,save_folder,salt_rez=None,pre_time=None,post_time=None,wavelength = 473,consideration_window=0.01,cmap='magma',plot_desc=False):
+    """ 
+    Plots rasters and PETHs for each cell aligned to stimulus. 
+    Optionally marks each plot with some statistics.
+    Saves to both png and svg
 
     Args:
-        spike_times (_type_): _description_
-        spike_clusters (_type_): _description_
-        cluster_ids (_type_): _description_
-        tags (_type_): _description_
-        save_folder (_type_): _description_
-        salt_rez (_type_, optional): _description_. Defaults to None.
-        pre_time (float, optional): _description_. Defaults to 0.05.
-        post_time (float, optional): _description_. Defaults to 0.05.
-        wavelength (int, optional): _description_. Defaults to 473.
-        cmap (_type_, optional): _description_. Defaults to None.
+        spike_times (1D numpy array): times in  seconds of every spike 
+        spike_clusters (1D numpy array): cluster assignments of every spike
+        cluster_ids (1D numpy array): cluster ids to use.
+        stim_times (1D numpy array): onset times of the optogenetic stimulus
+        window_time (float, optional): window to compute spike rate in seconds. Defaults to 0.01.
+        tags (AlfBunch): Opto stimulus data for the tags. Should have the attribute "intervals"
+        save_folder (pathlib Path): Where to save the plots to
+        salt_rez (DataFrame, optional): _description_. Defaults to None.
+        pre_time (float, optional): time_to plot before stim onset. Defaults to 0.05.
+        post_time (float, optional): time to plot after stim onset. Defaults to 0.05.
+        wavelength (int, optional): Wavelength of light. Determines color in plot. Defaults to 473.
+        cmap (_type_, optional): Colormap for the population plots. Defaults to magma.
+        plot_desc (Bool, optional): If true, includes some statistics as text on the plots. Defaults to False.
     """    
     pre_time = pre_time or consideration_window*2
     post_time = post_time or consideration_window *2
-    cmap = cmap or 'magma'
     if not save_folder.exists():
         save_folder.mkdir()
     else:
         print('Removing old figures.')
         for fn in save_folder.glob('*.png'):
+            fn.unlink()
+        for fn in save_folder.glob('*.svg'):
             fn.unlink()
     stim_duration = np.diff(tags.intervals,1).mean()
     stim_times = tags.intervals[:,0]
@@ -279,12 +295,13 @@ def make_plots(spike_times,spike_clusters,cluster_ids,tags,save_folder,salt_rez=
         ax[0].set_title(f'Cluster {clu}')
         
         # Additional info if available
-        if salt_rez is not None:
+        if salt_rez is not None and plot_desc:
             this_cell = salt_rez.query('cluster_id==@clu')
-            p_tagged = this_cell["salt_p_stat"].values[0]
+            p_salt = this_cell["salt_p_stat"].values[0]
+            p_ks = this_cell["p_ks"].values[0]
             base_rate = this_cell["base_rate"].values[0]
             stim_rate = this_cell["stim_rate"].values[0]
-            ax[0].text(0.8,0.8,f'{p_tagged=:0.03f}\n{base_rate=:0.01f} sps\n{stim_rate=:0.01f} sps',ha='left',va='center',transform=ax[0].transAxes)
+            ax[0].text(0.8,0.8,f'{p_ks=:0.03f}\n{p_salt=:0.03f}\n{base_rate=:0.01f} sps\n{stim_rate=:0.01f} sps',ha='left',va='center',transform=ax[0].transAxes)
         
         # Tidy axes
         sns.despine()
@@ -296,9 +313,12 @@ def make_plots(spike_times,spike_clusters,cluster_ids,tags,save_folder,salt_rez=
                 is_tagged = this_cell['is_tagged'].values[0]
         if is_tagged:
             save_fn = save_folder.joinpath(f'tagged_clu_{clu:04.0f}.png')
+            save_fn2 = save_folder.joinpath(f'tagged_clu_{clu:04.0f}.svg')
         else:
             save_fn = save_folder.joinpath(f'untagged_clu_{clu:04.0f}.png')
+            save_fn2 = save_folder.joinpath(f'untagged_clu_{clu:04.0f}.svg')
         plt.savefig(save_fn,dpi=300,transparent=True)
+        plt.savefig(save_fn2,transparent=True)
         plt.close('all')
 
     # Population plots - seperate by salt_p_stat <0.001
@@ -330,7 +350,63 @@ def make_plots(spike_times,spike_clusters,cluster_ids,tags,save_folder,salt_rez=
     plt.savefig(save_folder.joinpath('population_tags.png'),dpi=300,transparent=True)
 
 
+def kstest_optotag(spike_times,spike_clusters,cluster_ids,tags,window_time,stim_duration):
+    """
+    Computes a one-sided Kolmogorov-Smirnov test to determine if the number of spikes after the stim is 
+    more than before the stim. 
+    Useful in the case that we do not expect latencies to be tightly aligned, which is the case for the ChRmine optotag
+
+    Args:
+        spike_times (1D numpy array): times in  seconds of every spike 
+        spike_clusters (1D numpy array): cluster assignments of every spike
+        cluster_ids (1D numpy array): cluster ids to use.
+        stim_times (1D numpy array): onset times of the optogenetic stimulus
+        window_time (float, optional): window to compute spike rate in seconds. Defaults to 0.01.
+        tags (AlfBunch): Opto stimulus data for the tags. Should have the attribute "intervals"
+        stim_duration (float): Duration of stimulus in seconds. 
+    
+    Returns:
+        p (list): p-value of the null hypothesis that FR_pre = FR_post. Each entry corresponds to an entry in "cluster_id"
+    """    
+    stim_times = tags.intervals[:,0]
+    pre_raster,post_raster = compute_pre_post_raster(spike_times,
+                                                    spike_clusters,
+                                                    cluster_ids,
+                                                    stim_times,
+                                                    window_time = window_time,
+                                                    stim_duration = stim_duration,
+                                                    bin_size = 0.001,
+                                                    mask_dur=0.002)  
+
+    p = []
+    for ii,clu in enumerate(cluster_ids):
+        pre = np.sum(pre_raster[:,ii,:],1)/window_time
+        post = np.sum(post_raster[:,ii,:],1)/window_time
+        p.append(scipy.stats.ks_2samp(pre,post,alternative='greater').pvalue)
+    return(p)
+    
+
 def run_probe(probe_path,tags,consideration_window,wavelength,plot=False):
+    """
+    Computes the optotag statistics on data from one probe.
+    Loads in from the ALF format.
+    Only computes on the clusters defined as "good" from clusters.metrics.group
+    Computes:
+        1) SALT statistics
+        2) Heuristics for number of stims with spikes, spike rates
+        3) Kolmogorov-Smirnov test of significance
+
+    Saves data to the probe path with the namespace "salt"
+    Saves the parameters associated with the computations (e.g., SALT-p cutoff) as a JSON in the probe path
+    Optionally saves figures for each unit
+
+    Args:
+        probe_path (pathlib Path): Path to the spike ALF data (e.g., <session>/alf/probeXX)
+        tags (AlfBunch): Object of opto stimulations for just the tagging stimulations
+        consideration_window (float): Time in seconds to consider for statistical comparisons
+        wavelength (float): Wavelength  of light used
+        plot (bool, optional): If true, plots figures for each unit. Defaults to False.
+    """    
     spikes = alfio.load_object(probe_path,'spikes')
     clusters = alfio.load_object(probe_path,'clusters')
     cluster_ids = clusters.metrics['cluster_id'][clusters.metrics.group=='good'].values
@@ -344,12 +420,16 @@ def run_probe(probe_path,tags,consideration_window,wavelength,plot=False):
     n_tags = tags.intervals.shape[0]
     tag_onsets = tags.intervals[:,0]
     # Compute SALT data
-    p_stat,I_stat = run_salt(spike_times,spike_clusters,cluster_ids,tags.intervals[:,0],
+    p_stat,I_stat = run_salt(spike_times,spike_clusters,cluster_ids,tag_onsets,
+                             window_time=consideration_window*50,
                              stim_duration=tag_duration,
                              consideration_window=consideration_window)
     
     # Compute heuristic data
     n_stims_with_spikes,base_rate,stim_rate = compute_tagging_summary(spike_times,spike_clusters,cluster_ids,tag_onsets,window_time=consideration_window)
+    
+    # Compute KStest statistic
+    p_ks = kstest_optotag(spike_times,spike_clusters,cluster_ids,tags,window_time=consideration_window,stim_duration=tag_duration)
 
     # Export to a pqt
     salt_rez = pd.DataFrame()
@@ -360,11 +440,14 @@ def run_probe(probe_path,tags,consideration_window,wavelength,plot=False):
     salt_rez.loc[cluster_ids,'pct_stims_with_spikes'] = n_stims_with_spikes/n_tags * 100
     salt_rez.loc[cluster_ids,'base_rate'] = base_rate
     salt_rez.loc[cluster_ids,'stim_rate'] = stim_rate
+    salt_rez.loc[cluster_ids,'p_ks'] = p_ks
     salt_rez['is_tagged'] = False
     if wavelength == 473:
         salt_rez.loc[cluster_ids,'is_tagged'] = salt_rez.eval('salt_p_stat<@SALT_P_CUTOFF & pct_stims_with_spikes>@MIN_PCT_TAGS_WITH_SPIKES')
     elif wavelength == 635:
-        salt_rez.loc[cluster_ids,'is_tagged'] = salt_rez.eval('salt_p_stat<@SALT_P_CUTOFF & pct_stims_with_spikes>@MIN_PCT_TAGS_WITH_SPIKES & stim_rate/base_rate>@RATIO')
+        # salt_rez.loc[cluster_ids,'is_tagged'] = salt_rez.eval('salt_p_stat<@SALT_P_CUTOFF & pct_stims_with_spikes>@MIN_PCT_TAGS_WITH_SPIKES & stim_rate/base_rate>@RATIO')
+        salt_rez.loc[cluster_ids,'is_tagged'] = salt_rez.eval('p_ks<@SALT_P_CUTOFF & pct_stims_with_spikes>@MIN_PCT_TAGS_WITH_SPIKES & stim_rate/base_rate>@RATIO')
+
 
     save_fn = probe_path.joinpath(alfio.spec.to_alf('clusters','optotag',namespace='salt',extension='pqt'))
     salt_rez.to_parquet(save_fn)
@@ -388,22 +471,23 @@ def run_probe(probe_path,tags,consideration_window,wavelength,plot=False):
         json.dump(params,fid)
 
 
-# TODO: Implement functionality on data from multiple recordings
-# TODO: Implement plotting
-# TODO: Implement Chrmine option (slower optotagging responses)
-@click.command()
-@click.argument('session_path') # Will not work on concatnated data yet.
-@click.option('-w','--consideration_window',default=0.01,help ='Option to change how much of the stimulus time to consider as important. Longer times may be needed for ChRmine')
-@click.option('-l','--wavelength',default=473,help ='set wavelength of light (changes color of plots.)')
-@click.option('-p','--plot',is_flag=True,help='Flag to make plots for each cell')
-def main(session_path,consideration_window,plot,wavelength):
-    session_path = Path(session_path)
+def run_session(session_path,consideration_window,plot,wavelength):
+    """
+    Run optotagging statistics on each probe in a session.
+    Reads in the laser object to get the opto stimulation parameters.
+    Reads in the log file to identify which stims are tags
+
+    Args:
+        session_path (pathlib Path): Alf session path (parents should be Subjects/<mouseID>)
+        consideration_window (float): Time in seconds to consider for statistical comparisons
+        plot (bool, optional): If true, plots figures for each unit. Defaults to False.
+        wavelength (float): Wavelength  of light used for plotting purposes
+    """    
 
     # Load opto times and logs
     log_fn = list(session_path.glob('*log*.tsv'))
     assert(len(log_fn)==1),f'Number of log files found was {len(log_fn)}. Should be one'
     log_fn = log_fn[0]
-    #TODO: deal with multiple triggers (by concatenating previously)
     laser = alfio.load_object(session_path.joinpath('alf'),'laser',short_keys=True)
     log_df = pd.read_csv(log_fn,index_col=0,sep='\t')
 
@@ -414,6 +498,24 @@ def main(session_path,consideration_window,plot,wavelength):
     for probe in probe_paths:
         run_probe(probe,tags,consideration_window=consideration_window,wavelength=wavelength,plot=plot)
  
+
+@click.command()
+@click.argument('session_path') 
+@click.option('-w','--consideration_window',default=0.01,help ='Option to change how much of the stimulus time to consider as important. Longer times may be needed for ChRmine')
+@click.option('-l','--wavelength',default=473,help ='set wavelength of light (changes color of plots.)')
+@click.option('-p','--plot',is_flag=True,help='Flag to make plots for each cell')
+def main(session_path,consideration_window,plot,wavelength):
+    """
+    CLI entry to run session
+
+    Args:
+        session_path (pathlib Path): Alf session path (parents should be Subjects/<mouseID>)
+        consideration_window (float): Time in seconds to consider for statistical comparisons
+        plot (bool, optional): If true, plots figures for each unit. Defaults to False.
+        wavelength (float): Wavelength  of light used for plotting purposes
+    """    
+    session_path = Path(session_path)
+    run_session(session_path,consideration_window,plot,wavelength)
 
 
 if __name__ == '__main__':
