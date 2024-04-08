@@ -16,6 +16,7 @@ from pathlib import Path
 import one.alf.io as alfio
 import shutil
 import os
+from utils.alf_utils import Recording
 
 class DirectorySelector(QWidget):
     def __init__(self):
@@ -148,6 +149,8 @@ def main():
             sort_cmd = ['python','-W','ignore' ,'spikeinterface_ks4.py',str(session)]
 
         subprocess.run(preproc_cmd,check=True,cwd='./preprocess')
+        rec = Recording(session)
+        rec.concatenate_alf_objects()
         subprocess.run(sort_cmd,check=True,cwd='./sorting')
 
     # Move all data:

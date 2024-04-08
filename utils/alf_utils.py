@@ -58,7 +58,7 @@ class Recording:
         self.alf_objects = object_names
 
 
-    def concatenate_all_objects(self,save = True,overwrite=True):
+    def concatenate_alf_objects(self,save = True,overwrite=True):
 
         for object_name in self.alf_objects:
             _log.info(f'Concatenating {object_name}')
