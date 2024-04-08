@@ -7,15 +7,13 @@ Takes a spikeglx run and performs:
 
 # Gui created by chatgpt
 '''
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QPushButton, QFileDialog, QLineEdit, QCheckBox, QGridLayout, QDialog
+from PyQt5.QtCore import Qt, pyqtSignal
 from pathlib import Path
-import subprocess
-import sys
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QPushButton, QLineEdit, QFileDialog, QCheckBox, QGridLayout
-from PyQt5.QtCore import Qt
-from pathlib import Path
-import one.alf.io as alfio
 import shutil
-import os
+import sys
+import subprocess
+import one.alf.io as alfio
 
 class DirectorySelector(QWidget):
     def __init__(self):
@@ -112,6 +110,47 @@ class DirectorySelector(QWidget):
     def get_paths(self):
         return self.local_run_path, self.remote_archive_path, self.remote_working_path, self.remove_opto_artifact, self.run_ephys_qc
 
+
+class OptoFileFinder(QDialog):
+    opto_file_selected = pyqtSignal(Path)
+
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("File Selection")
+        self.setGeometry(100, 100, 300, 100)
+
+        layout = QVBoxLayout()
+
+        label = QLabel("opto_calibration.json not found. Please select a file or skip.")
+        layout.addWidget(label)
+
+        self.select_button = QPushButton("Select File")
+        self.select_button.clicked.connect(self.select_file)
+        layout.addWidget(self.select_button)
+
+        skip_button = QPushButton("Skip")
+        skip_button.clicked.connect(self.skip_file)
+        layout.addWidget(skip_button)
+
+        self.setLayout(layout)
+
+        self.opto_file = None  # Initialize opto_file attribute
+
+    def select_file(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select File", "", "JSON Files (*.json)")
+        if file_path:
+            self.opto_file = Path(file_path)
+            self.opto_file_selected.emit(self.opto_file)  # Emit signal with opto file path
+            self.close()
+
+    def skip_file(self):
+        self.opto_file_selected.emit(None)  # Emit signal with None (skipped)
+        self.close()
+
+    def get_opto_file(self):  # Method to get opto file after dialog is closed
+        return self.opto_file
+
+
 def main():
     app = QApplication(sys.argv)
     window = DirectorySelector()
@@ -119,17 +158,31 @@ def main():
     app.exec_()
 
     # After the GUI is closed, retrieve the selected paths
-    local_run_path, remote_archive_path, remote_working_path, remove_opto_artifact,run_ephysQC = window.get_paths()
+    local_run_path, remote_archive_path, remote_working_path, remove_opto_artifact, run_ephysQC = window.get_paths()
 
-    cmd_archive = ['python','./archiving/backup.py','no-gui',str(local_run_path),str(remote_archive_path)]
-    cmd_rename = ['python','./archiving/ephys_data_to_alf.py',str(local_run_path)]
+    cmd_archive = ['python', './archiving/backup.py', 'no-gui', str(local_run_path), str(remote_archive_path)]
+    cmd_rename = ['python', './archiving/ephys_data_to_alf.py', str(local_run_path)]
 
     gate_paths = list(local_run_path.glob('*_g[0-9]*'))
+
+    for gate in gate_paths:
+        opto_fn = list(gate.glob('opto_calibration.json'))
+        if not opto_fn:
+            opto_finder = OptoFileFinder()
+            opto_finder.exec_()
+            opto_fn = opto_finder.get_opto_file()
+            print(opto_fn)
+            if opto_fn:
+                print(f"Copying {opto_fn}")
+                shutil.copy(opto_fn, gate)
+            else:
+                print('g')
+
     for gate in gate_paths:
         wiring_fn = list(gate.glob('nidq.wiring.json'))
-        assert wiring_fn,f'No wiring file found for {gate}. Create one before continuing'
+        assert wiring_fn, f'No wiring file found for {gate}. Create one before continuing'
 
-    
+
     subprocess.run(cmd_archive,check=True)
     subprocess.run(cmd_rename,check=True)
 
