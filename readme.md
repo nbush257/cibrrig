@@ -1,13 +1,48 @@
-# CIBR RIG
+# CIBRRIG
 ---
 ## Usage
-Code to integrate the hardware and software on the Neuropixle rig in JMB 971 at Seattle Childrens Research Institute, Center for Integrative Brain Research (SCRI-CIBR)
+Code to integrate the hardware and software on the Neuropixel rig in JMB 971 at Seattle Childrens Research Institute, Center for Integrative Brain Research (SCRI-CIBR)
 This code is maintained by Nick Bush in the Ramirez Lab and is subject to change.
 
-The rig is designed to monitor breathing and behavior in a head-fixed mouse while recording from neuropixels throughout the brain. Rig is capable of hot-swapp
+The rig is designed to monitor breathing and behavior in a head-fixed mouse while recording from neuropixels throughout the brain. Rig is capable of hot-swap
+
+Code *should* be executable both locally or on the HPC (cybertron, sasquatch coming soon)
+
+--- 
+## Data structure and quickstart
+
+We will save data in a way consistent with the **O**pen **N**europhysiology **E**nvironment ([**ONE**](https://github.com/int-brain-lab/ONE))
+For a detailed description of filenames and structure see:[ONE Naming](https://github.com/int-brain-lab/ONE/blob/main/docs/Open_Neurophysiology_Environment_Filename_Convention.pdf) 
 
 
-**Updated 2024-02-23**
+Data should be organized with the following structure:
+`./<project>/<lab>/Subjects/<subject-id>/<yyyy-mm-dd>/<session_number>`
+e.g.:
+```
+project/
+├─ data/
+│  ├─ mouse001/
+│  │  ├─ 2024-02-01/
+│  │  │  ├─ 000/
+│  │  │  ├─ 001/
+│  │  ├─ 2024-04-01/
+│  │  │  ├─ 000/
+│  ├─ mouse002/
+│  │  ├─ 2024-03-12/
+│  │  │  ├─ 000/
+```
+
+Data should have filenames like: `spikes.times.npy` of the form `<object>.<attribute>.<ext>`
+
+To work with data, you should set up a `one` instance:
+
+```
+from one.api import One
+one = One.setup(cache_dir=/path/to/<project>)
+```
+ Now you can structure analysis scripts around the **ONE** structure. Scripts for analysis of data specific to projects should be maintained seperately from this repo. The user is encouraged to use [brainbox](https://github.com/int-brain-lab/ibllib) to manipulate data. 
+
+**Updated 2024-04-08**
 
 ---
 ## Installation
@@ -52,39 +87,52 @@ Helper packages (Packages from other groups (e.g., kilosort)) should live in `C:
     -  e.g. optotagging, coherence calculations,axon/soma categorization
 
 ---
-## Primary pipeline
+## Primary preprocessing and sorting pipeline
+This code provides a simple way to process most of the preprocessing steps necesarry to perform after 
+a neuropixel expriment.
 
- - Backup 
-    ```
-    cd archiving
-    python backup.py archive <run_path>
-    ```
-    - Follow GUI steps
-- Rename
-    `python ephys_data_to_alf.py <run_path>`
- - Preprocess:
-    ```
-    cd preprocess
-    python pipeline <awake/anesthetized> <session_path>
-    ```
-- Sort
-    ```
-    cd sort
-    python -W ignore spikeinterface_ks4.py <session_path>
-    ```
-- Move to remote
-    ```
-    cd archiving
-    python backup.py working 
-    ```
-    - Follow GUI steps
+Run the pipeline from the cibrrig root with: `python main_pipeline.py`. This will take several hours.
+
+This pipeline runs:
+- Backup and compression of raw data
+- Conversion of data structure to **ONE** 
+- Extraction of auxiliary data
+    - Synch data
+    - Physiology (e.g. breathing)
+    - Camera frames times
+    - Laser data
+- Spike sorting with Kilosort 4 *via* spikeinterface
+    - IBL destriping
+    - Motion estimation (for plotting, in Spikeinterface)
+    - Motion correction (in KS4)
+    - (Optional) Optogenetic artifact removal
+    - QC metrics of the spikesorted data
+- Concatenation of multiple triggers of auxiliary data
+
+Many of the above pipeline elements can be run independently by the code in `./preprocess/`
+
+---
+
+##### At this point, any manual curation of the spike sorting can be done in phy. Steps after this will "freeze" the spike sorting, so any changes to cluster assignment will require a recomputation
+
+---
+## Secondary postprocessing
+These steps involve operations on spiking data. They should without exception run on a "session_path" which is always of the form:
+project/
+├─ data/
+│  ├─ mouse001/
+│  │  ├─ 2024-02-01/
+│  │  │  ├─ 000/ **<- SESSION_PATH**
+
+- Concatenate auxiliary data over multiple triggers (Optional - usually done in the preprocessing pipeline)
+    - `python concatenate_triggers.py <session_path>`
+- Compute respiratory coherence (Defaults to computing on the first 5 minutes of data and using the diaphragm data, but user can define other parameters)
+    - `python extract_coherence.py <session_path>`
+- Compute optotagging (defaults to 473 nm wavelength and 10ms tagging window, but user can define other parameters). Uses SALT to or KS tests
+    - `python optotag.py <session_path>`
 
 
-- Extract coherence and optotagging (TODO: Now that data structure is clean - optotagging may be better implemetned)
-    ```
-    cd postprocess
-    python extract_coherence.py <session_path> <kwargs>
-    python opto.py <phy_path> <opto_fn> <log_fn> <kwargs>
-    ```
-- Process video data (TODO)
+
+--- 
+## Process video data (TODO)
 
