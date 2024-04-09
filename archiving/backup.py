@@ -1,31 +1,17 @@
 '''
-Code to backup the raw data to the RSS
+Code to backup the raw data to a given folder
 This is a "Frozen copy" - should be identical to what is acquired day of.
+Much of the functionality of "Archiver" is deprecated, but retained in case it is wanted
 '''
-# Compress 
-#TODO: inputs: session path
-#TODO: outputs: archival destination
-
-#TODO: Get local ephys data from User - DONE
-#TODO: Get local video data from user
-#TODO: Verify log file exists
-#TODO: Determine which data exists: (ephys, video, audio, log, wiring, insertions,notes)
-#TODO: Confirm wiring diagram from user
-#TODO: Get insertion information from user
-#TODO: Get/load subject metadata from user
-#TODO: Compress
-#TODO: Make files read only - Not doable it seems
 
 from pathlib import Path
 from PyQt5.QtWidgets import QCheckBox,QApplication, QWidget, QLabel, QLineEdit, QPushButton, QVBoxLayout, QFileDialog, QGridLayout
 from PyQt5.QtCore import Qt
 import spikeglx
 import sys
-import numpy as np
 from datetime import datetime
 import shutil
 import click
-from one.alf import spec
 import subprocess
 import datetime
 DEFAULT_SUBJECTS_PATH =  Path(r'D:\remote_test\Subjects')
@@ -178,7 +164,6 @@ class Archiver:
         
 
 
-
 class RecordingInfoUI(QWidget):
     """Ask user for the destination (Subjects path), source .run_path), and subject_ID (spikeglx run name) 
 
@@ -271,14 +256,23 @@ class RecordingInfoUI(QWidget):
         self.archiver.has_video = (state == Qt.Checked)
 
 
-
-@click.group()
-def cli():
-    pass
-
-@cli.command()
+@click.command()
+@click.argument('local_run_path',required=False)
+@click.argument('remote_subjects_path',required=False)
 @click.option('--keep_raw',is_flag=True,help='If passed does not remove the raw bin file after compression.')
+def main(local_run_path,remote_subjects_path,keep_raw):
+    if local_run_path is None and remote_subjects_path is None:
+        archive(keep_raw)
+    elif local_run_path is not None and remote_subjects_path is not None:
+        no_gui(local_run_path,remote_subjects_path)
+    else:
+        click.echo('Invalid number of arguments')
+    
+
 def archive(keep_raw):
+    '''
+    Run with GUI
+    '''
     app = QApplication(sys.argv)
     
     archiver = Archiver(keep_raw)
@@ -294,10 +288,11 @@ def archive(keep_raw):
     archiver.compress_video_in_place()
     archiver.mark_backup()
 
-@cli.command()
-@click.argument('local_run_path')
-@click.argument('remote_subjects_path')
+
 def no_gui(local_run_path,remote_subjects_path):
+    '''
+    Run without gui
+    '''
     archiver=Archiver(keep_raw=False)
     archiver.run_path = Path(local_run_path)
     archiver.subjects_path = Path(remote_subjects_path)
@@ -310,19 +305,5 @@ def no_gui(local_run_path,remote_subjects_path):
     archiver.compress_video_in_place()
     archiver.mark_backup()
 
-@cli.command()
-def working():
-    app = QApplication(sys.argv)
-    archiver = Archiver(keep_raw=False)
-    archiver.subjects_path = Path(r'U:/Subjects')
-    set_path_dialog = RecordingInfoUI(archiver,'Select working storage location for regular access (on Active)')
-    
-    set_path_dialog.show()
-    app.exec()
-    archiver.get_record_date()
-    archiver.get_sessions_local()
-    archiver.make_rec_date_target()
-    archiver.copy_sessions_alf()
-
 if __name__ == '__main__':
-    cli()
+    main()

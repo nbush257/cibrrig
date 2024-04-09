@@ -14,6 +14,9 @@ import shutil
 import sys
 import subprocess
 import one.alf.io as alfio
+import shutil
+import os
+from utils.alf_utils import Recording
 
 class DirectorySelector(QWidget):
     def __init__(self):
@@ -160,8 +163,8 @@ def main():
     # After the GUI is closed, retrieve the selected paths
     local_run_path, remote_archive_path, remote_working_path, remove_opto_artifact, run_ephysQC = window.get_paths()
 
-    cmd_archive = ['python', './archiving/backup.py', 'no-gui', str(local_run_path), str(remote_archive_path)]
-    cmd_rename = ['python', './archiving/ephys_data_to_alf.py', str(local_run_path)]
+    cmd_archive = ['python','./archiving/backup.py',str(local_run_path),str(remote_archive_path)]
+    cmd_rename = ['python','./archiving/ephys_data_to_alf.py',str(local_run_path)]
 
     gate_paths = list(local_run_path.glob('*_g[0-9]*'))
 
@@ -201,6 +204,8 @@ def main():
             sort_cmd = ['python','-W','ignore' ,'spikeinterface_ks4.py',str(session)]
 
         subprocess.run(preproc_cmd,check=True,cwd='./preprocess')
+        rec = Recording(session)
+        rec.concatenate_alf_objects()
         subprocess.run(sort_cmd,check=True,cwd='./sorting')
 
     # Move all data:
