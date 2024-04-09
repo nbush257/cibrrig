@@ -5,9 +5,7 @@ and lossy hevc encoding.
 '''
 import subprocess
 from pathlib import Path
-import shutil
 import click 
-
 
 @click.command()
 @click.argument('fn')

@@ -10,12 +10,11 @@ import click
 import spikeglx
 from pathlib import Path
 import numpy as np
-import re
 import pandas as pd  
 import logging
 import json
 from scipy.interpolate import interp1d
-from nidq_utils import binary_onsets,get_trig_string
+from .nidq_utils import binary_onsets,get_trig_string
 from one.alf import spec
 logging.basicConfig()
 _log = logging.getLogger('extract_opto')

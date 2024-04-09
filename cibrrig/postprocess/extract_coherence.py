@@ -3,7 +3,6 @@ Wrapper to Chronux coherency computations in Matlab
 '''
 #TODO: Confirm the mapping of Chronux PHI to inspiration/expiration (Inspiration [0,pi), expiration [-pi,0))
 import click
-import spikeglx
 from pathlib import Path
 import numpy as np
 import re
@@ -13,7 +12,6 @@ import spikeinterface.full as si
 import subprocess
 import pandas as pd
 import logging
-from one.alf import spec
 import one.alf.io as alfio
 logging.basicConfig()
 _log = logging.getLogger('extract_coherence')
