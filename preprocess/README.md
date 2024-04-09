@@ -17,8 +17,8 @@ At this point the scripts are designed to run as CLIs. They should operate on a 
     - [x] Downsample auxiliary NIDQ data
     - [x] Wrap to breathmetrics
 
-- [ ] **Combine sync extractors?**
-- [ ] **Make pipeline?**
+- [x] **Combine sync extractors?**
+- [x] **Make pipeline?**
 ### Usage:
 Sync extractors work on a "session", which is equivalent to a "gate". All recordings in one session should be sorted to gether.
 

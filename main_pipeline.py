@@ -122,7 +122,7 @@ def main():
     # After the GUI is closed, retrieve the selected paths
     local_run_path, remote_archive_path, remote_working_path, remove_opto_artifact,run_ephysQC = window.get_paths()
 
-    cmd_archive = ['python','./archiving/backup.py','no-gui',str(local_run_path),str(remote_archive_path)]
+    cmd_archive = ['python','./archiving/backup.py',str(local_run_path),str(remote_archive_path)]
     cmd_rename = ['python','./archiving/ephys_data_to_alf.py',str(local_run_path)]
 
     gate_paths = list(local_run_path.glob('*_g[0-9]*'))
