@@ -17,4 +17,11 @@ setuptools.setup(
     packages=setuptools.find_packages(exclude=['_wirings','.vscode']),
     include_package_data=True,
     python_requires=">=3.8",
+    entry_points={
+        "console_scripts":[
+            "backup = cibrrig.archiving.backup:main",
+            "npx_preproc = cibrrig.preprocess.preproc_pipeline:main",
+            "npx_run_all = cibrrig.main_pipeline:main",
+        ]
+    },
 )

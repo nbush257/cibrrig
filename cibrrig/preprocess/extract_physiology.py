@@ -18,10 +18,10 @@ import numpy as np
 from pathlib import Path
 import click
 import pandas as pd
-import nidq_utils
+from . import nidq_utils
 import spikeglx
 from one.alf import spec
-import physiology
+from . import physiology
 import logging
 logging.basicConfig()
 _log = logging.getLogger('extract_physiology')

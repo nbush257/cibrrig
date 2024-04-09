@@ -6,7 +6,7 @@ import re
 import one.alf.io as alfio
 import logging 
 from one.alf import spec
-from nidq_utils import get_trig_string
+from .nidq_utils import get_trig_string
 logging.basicConfig()
 _log = logging.getLogger('extract_camera_frames')
 _log.setLevel(logging.INFO)

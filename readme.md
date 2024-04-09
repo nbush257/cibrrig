@@ -1,15 +1,35 @@
 # CIBRRIG
 ---
-## Usage
+**Updated 2024-04-08**
+## Description
 Code to integrate the hardware and software on the Neuropixel rig in JMB 971 at Seattle Childrens Research Institute, Center for Integrative Brain Research (SCRI-CIBR)
 This code is maintained by Nick Bush in the Ramirez Lab and is subject to change.
 
-The rig is designed to monitor breathing and behavior in a head-fixed mouse while recording from neuropixels throughout the brain. Rig is capable of hot-swap
+The rig is designed to monitor breathing and behavior in a head-fixed mouse while recording from neuropixels throughout the brain. Rig is capable of hot-swap between awake and anesthetized preps.
 
 Code *should* be executable both locally or on the HPC (cybertron, sasquatch coming soon)
 
+---
+## Installation
+(Recommended): Use a virtual environment like conda
+Change directory to the path with the `setup.py` file
+`cd /path/to/cibrrig`
+Install using pip
+`pip install .`
+
+This should install the `iblenv` dependencies as well. 
+
+Helper packages (Packages from other groups (e.g., kilosort)) should live in `C:/helpers` on the NPX computer so they are available to all users
+
+
 --- 
 ## Data structure and quickstart
+
+Main entry points can be run from anywhere as long as the package has been pip installed
+`npx_run_all` -  Performs backup, preprocess, and spikesorting
+`backup` - Just performs backup
+`npx_preproc <session_path>` - Just performs preprocessing and extraction.
+
 
 We will save data in a way consistent with the **O**pen **N**europhysiology **E**nvironment ([**ONE**](https://github.com/int-brain-lab/ONE))
 For a detailed description of filenames and structure see:[ONE Naming](https://github.com/int-brain-lab/ONE/blob/main/docs/Open_Neurophysiology_Environment_Filename_Convention.pdf) 
@@ -42,13 +62,6 @@ one = One.setup(cache_dir=/path/to/<project>)
 ```
  Now you can structure analysis scripts around the **ONE** structure. Scripts for analysis of data specific to projects should be maintained seperately from this repo. The user is encouraged to use [brainbox](https://github.com/int-brain-lab/ibllib) to manipulate data. 
 
-**Updated 2024-04-08**
-
----
-## Installation
-TODO
-
-Helper packages (Packages from other groups (e.g., kilosort)) should live in `C:/helpers` on the NPX computer so they are available to all users
 
 ---
 ## Hardware
@@ -88,8 +101,8 @@ Helper packages (Packages from other groups (e.g., kilosort)) should live in `C:
 
 ---
 ## Primary preprocessing and sorting pipeline
-This code provides a simple way to process most of the preprocessing steps necesarry to perform after 
-a neuropixel expriment.
+This code provides a simple way to process most of the preprocessing steps necesarry to perform after a neuropixel expriment.
+
 
 Run the pipeline from the cibrrig root with: `python main_pipeline.py`. This will take several hours.
 

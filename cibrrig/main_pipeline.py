@@ -15,8 +15,7 @@ import sys
 import subprocess
 import one.alf.io as alfio
 import shutil
-import os
-from utils.alf_utils import Recording
+from .utils.alf_utils import Recording
 
 class DirectorySelector(QWidget):
     def __init__(self):

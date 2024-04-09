@@ -8,7 +8,7 @@ import scipy.signal as sig
 from scipy.ndimage import median_filter
 import warnings
 import spikeglx
-import physiology
+from . import physiology
 import logging
 import re
 import matplotlib.pyplot as plt

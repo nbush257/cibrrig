@@ -1,6 +1,4 @@
-import sys
-sys.path.append('../')
-from utils.alf_utils import Recording
+from ..utils.alf_utils import Recording
 from pathlib import Path
 import click
 
