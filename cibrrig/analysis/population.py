@@ -4,6 +4,7 @@ from iblutil.numerical import bincount2D
 from scipy.ndimage import gaussian_filter1d
 import logging
 from ..plot import plot_projection
+from ..utils.utils import validate_intervals,remap_time_basis
 logging.basicConfig()
 _log = logging.getLogger('population')
 _log.setLevel(logging.INFO)
@@ -119,7 +120,7 @@ def _subset_raster(raster,tbins,t0,tf):
     tbins_out = []
 
     if len(t0)>1:
-        _validate_intervals(t0,tf)
+        validate_intervals(t0,tf)
 
     for start,stop in zip(t0,tf):
         s0,sf = np.searchsorted(tbins, [start,stop])
@@ -129,35 +130,6 @@ def _subset_raster(raster,tbins,t0,tf):
     tbins_out = np.concatenate(tbins_out)
 
     return(raster_out,tbins_out)
-
-
-# May be better in a utils file
-def _validate_intervals(starts,stops):
-    '''
-    Validates that two vectors are indeed intervals (monotonic, causal, and non-overlapping)
-    '''
-    assert np.all(np.diff(starts)>0),'Starts is not monotonic'
-    assert len(starts)==len(stops),f'Number of starts {len(starts)} does not match number of stops {len(stops)}'
-    assert np.all(stops>=starts), 'Stops are not all after starts'
-    assert np.all(starts[1:]>=stops[:-1]), 'Intervals are overlapping'
-
-
-# May be better in a utils file
-def remap_time_basis(x,x_t,y_t):
-    '''
-    Convinience function to map an analog signal x into the time
-    basis for another signal y.
-    ex: x is phase, y is the PCA decomposition. This allows you to get the phase value for
-    each sample in the PCA time
-    :param x: Analog signal to change time basis (1D numpy array)
-    :param x_t: Time basis of original analog signal (1D numpy array)
-    :param y_t: Time basis of target signal (1D numpy array)
-    :return: x_mapped - x in the time basis of y (1D numpy array)
-    '''
-    assert(len(x)==len(x_t))
-    idx = np.searchsorted(x_t,y_t)-1
-    assert(len(idx)==len(y_t))
-    return(x[idx])
 
 
 class Population:
