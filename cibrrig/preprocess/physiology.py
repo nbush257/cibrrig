@@ -293,7 +293,7 @@ def compute_sighs(breath_times ,auc, thresh=7,win='20s'):
     return(is_sigh)
 
 
-def compute_onstructive_apneas(breath_times, inhale_onsets):
+def compute_obstructive_apneas(breath_times, inhale_onsets):
     """
     Convinience function that says anywhere we don't have a detected ihale onset 
     but we do have a detected breath, that is an obstructive apnea
@@ -307,3 +307,66 @@ def compute_onstructive_apneas(breath_times, inhale_onsets):
     """    
     is_obstructive_apnea = np.isnan(inhale_onsets)
     return is_obstructive_apnea
+
+
+def compute_dia_phase(ons,offs=None,t_start=0,t_stop=None,dt=1/1000,transform=True):
+    '''
+    Computes breathing phase based on the diaphragm
+    Phase is [0,1] where 0 is diaphragm onset, 0.5 is diaphragm offset, and 1 is diaphragm onset again,
+     - NB: Technically can generalize to any on/off signal, but standard usage should be diaphragm
+    :param ons: timestamps of diaphragm onsets (sec)
+    :param offs: timestamps of diaphragm offsets (sec). If no offs is given, linearly spaces onsets
+    :param t_start: start time of the phase trace (default=0)
+    :param t_stop: stop time of the phase trace (default is last stop value)
+    :param dt: time between timesteps(set to 1kHz)
+    :return:
+            phi - phase over time
+            t_phi - timestamps of the phase vector
+    '''
+    if t_stop is None:
+        t_stop = offs[-1]
+    if t_stop<t_start:
+        raise ValueError(f'Stop time: {t_stop}s cannot be less than start time: {t_start}s')
+
+    offs = offs[offs>t_start]
+    offs = offs[offs<=t_stop]
+
+    ons = ons[ons>=t_start]
+    ons = ons[:len(offs)]
+
+
+    assert(len(ons)==len(offs))
+    assert(np.all(np.greater(offs,ons)))
+
+    t_phi =np.arange(t_start,t_stop,dt)
+    phi = np.zeros_like(t_phi)
+
+    n_breaths = len(ons)
+
+    if offs is not None:
+        for ii in range(n_breaths-1):
+            on = ons[ii]
+            off = offs[ii]
+            next_on = ons[ii+1]
+            idx = np.searchsorted(t_phi,[on,off,next_on])
+            phi[idx[0]:idx[1]] = np.linspace(0,0.5,idx[1]-idx[0])
+            try:
+                phi[idx[1]:idx[2]] = np.linspace(0.5,1,idx[2]-idx[1])
+            except:
+                pass
+
+    else:
+        for ii in range(n_breaths-1):
+            on = ons[ii]
+            next_on = ons[ii+1]
+            idx = np.searchsorted(t_phi,[on,next_on])
+            phi[idx[0]:idx[1]] = np.linspace(0,1,idx[1]-idx[0])
+
+    if transform:
+        phi = phi + 0.5
+        phi[phi > 1] = phi[phi > 1] - 1
+        phi -= .5
+        phi *= np.pi * 2
+
+    return(t_phi,phi)
+
