@@ -97,6 +97,7 @@ def burst_stats_dia(integrated,sr,dia_thresh=1,rel_height=0.9,min_distance=0.1,m
     dia_df = dia_df.eval('IBI=duration_sec+postBI')
 
     dia_df = dia_df.query('inst_freq>0')
+    dia_df = dia_df.sort_values('on_samp')
 
     return(dia_df)
 
