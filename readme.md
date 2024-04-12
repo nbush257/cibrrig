@@ -138,11 +138,11 @@ project/
 │  │  │  ├─ 000/ **<- SESSION_PATH**
 
 - Concatenate auxiliary data over multiple triggers (Optional - usually done in the preprocessing pipeline)
-    - `python concatenate_triggers.py <session_path>`
+    - `python -m cibrrig.postprocess.concatenate_triggers <session_path>`
 - Compute respiratory coherence (Defaults to computing on the first 5 minutes of data and using the diaphragm data, but user can define other parameters)
-    - `python extract_coherence.py <session_path>`
+    - `python cibrrig.postprocess.extract_coherence <session_path>`
 - Compute optotagging (defaults to 473 nm wavelength and 10ms tagging window, but user can define other parameters). Uses SALT to or KS tests
-    - `python optotag.py <session_path>`
+    - `python cibrrig.postprocess.optotag <session_path>`
 
 
 
