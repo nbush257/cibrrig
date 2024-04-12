@@ -3,6 +3,7 @@ import numpy as np
 from iblutil.numerical import bincount2D
 from scipy.ndimage import gaussian_filter1d
 import logging
+from ..plot import plot_projection
 logging.basicConfig()
 _log = logging.getLogger('population')
 _log.setLevel(logging.INFO)
@@ -140,6 +141,25 @@ def _validate_intervals(starts,stops):
     assert np.all(stops>=starts), 'Stops are not all after starts'
     assert np.all(starts[1:]>=stops[:-1]), 'Intervals are overlapping'
 
+
+# May be better in a utils file
+def remap_time_basis(x,x_t,y_t):
+    '''
+    Convinience function to map an analog signal x into the time
+    basis for another signal y.
+    ex: x is phase, y is the PCA decomposition. This allows you to get the phase value for
+    each sample in the PCA time
+    :param x: Analog signal to change time basis (1D numpy array)
+    :param x_t: Time basis of original analog signal (1D numpy array)
+    :param y_t: Time basis of target signal (1D numpy array)
+    :return: x_mapped - x in the time basis of y (1D numpy array)
+    '''
+    assert(len(x)==len(x_t))
+    idx = np.searchsorted(x_t,y_t)-1
+    assert(len(idx)==len(y_t))
+    return(x[idx])
+
+
 class Population:
     def __init__(self,spike_times,spike_clusters,
                  ndims=None,binsize=0.005,sigma=0.01,t0=None,tf=None):
@@ -176,8 +196,27 @@ class Population:
         self.projection_speed = compute_projection_speed(self.projection,ndims=ndims)
 
 
-
+    def plot_by_speed(self,dims=[0,1,2],t0=None,tf=None,**kwargs):
+        t0 = t0 or self.tbins[0]
+        tf = tf or self.tbins[-1]
+        if tf>self.spike_times.max():
+            _log.warning(f'Requested max time {tf=} is greater than the last spike {self.spike_times.max():0.02f}s')
+        s0,sf = np.searchsorted(self.tbins,[t0,tf])
+        X_slice = self.projection[s0:sf,:]
+        speed_slice = self.projection_speed[s0:sf]
+        return(plot_projection(X_slice,dims,cvar=speed_slice,**kwargs))
     
 
+    def plot_projection(self,dims=[0,1,2],t0=None,tf=None,cvar=None,**kwargs):
+        t0 = t0 or self.tbins[0]
+        tf = tf or self.tbins[-1]
+        if tf>self.spike_times.max():
+            _log.warning(f'Requested max time {tf=} is greater than the last spike {self.spike_times.max():0.02f}s')
+        s0,sf = np.searchsorted(self.tbins,[t0,tf])
+        X_slice = self.projection[s0:sf,:]
+        if cvar is not None:
+            cvar = cvar[s0:sf]
+        return(plot_projection(X_slice,dims,cvar=cvar,**kwargs))
     
-
+    def sync_var(self,x,x_t):
+        return(remap_time_basis(x,x_t,self.tbins))
