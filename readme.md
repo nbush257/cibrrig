@@ -131,12 +131,13 @@ Many of the above pipeline elements can be run independently by the code in `./p
 ---
 ## Secondary postprocessing
 These steps involve operations on spiking data. They should without exception run on a "session_path" which is always of the form:
+```
 project/
 ├─ data/
 │  ├─ mouse001/
 │  │  ├─ 2024-02-01/
 │  │  │  ├─ 000/ **<- SESSION_PATH**
-
+```
 - Concatenate auxiliary data over multiple triggers (Optional - usually done in the preprocessing pipeline)
     - `python -m cibrrig.postprocess.concatenate_triggers <session_path>`
 - Compute respiratory coherence (Defaults to computing on the first 5 minutes of data and using the diaphragm data, but user can define other parameters)
