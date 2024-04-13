@@ -92,6 +92,28 @@ def compute_projection_speed(X,ndims = 3):
     return(X_speed)
 
 
+def compute_path_lengths(X,time_bins,t0,tf,ndims=3):
+    """Compute the euclidean distance traveled between time t0 and tf
+    in the projection space. Computes the distance along ndims
+
+    Args:
+        t0 (list or array): start time of the path
+        tf (list or array): end time of the path
+        ndims (int, optional): _description_. Defaults to 3.
+    """        
+    try:
+        num_paths = len(t0)
+    except:
+        raise(ValueError('t0 and tf need to be list or array, even if there is only one path to compute'))
+
+    path_lengths = np.zeros(len(t0))*np.nan
+    for ii,(start,stop) in enumerate(zip(t0,tf)):
+        s0,sf = np.searchsorted(time_bins,[start,stop])
+        diff = np.diff(X[s0:sf,:ndims], axis=0)
+        squared_distances = np.sum(diff ** 2, axis=1)
+        path_lengths[ii] = np.sum(np.sqrt(squared_distances))
+    return(path_lengths)
+
 def project_pca(raster,tbins,ndims=20,t0=None,tf=None):
     '''
     Project the spiking data into the PCA space. Will fit on the interval between 
@@ -192,3 +214,6 @@ class Population:
     
     def sync_var(self,x,x_t):
         return(remap_time_basis(x,x_t,self.tbins))
+
+    def compute_path_lengths(self,t0,tf,ndims=3):
+        return(compute_path_lengths(self.projection,self.tbins,t0,tf,ndims))

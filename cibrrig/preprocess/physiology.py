@@ -328,15 +328,14 @@ def compute_dia_phase(ons,offs=None,t_start=0,t_stop=None,dt=1/1000,transform=Tr
     if t_stop<t_start:
         raise ValueError(f'Stop time: {t_stop}s cannot be less than start time: {t_start}s')
 
-    offs = offs[offs>t_start]
-    offs = offs[offs<=t_stop]
-
-    ons = ons[ons>=t_start]
-    ons = ons[:len(offs)]
-
-
     assert(len(ons)==len(offs))
     assert(np.all(np.greater(offs,ons)))
+
+    idx = np.logical_and(ons>t_start,offs<t_stop)
+    ons = ons[idx]
+    offs = offs[idx]
+
+
 
     t_phi =np.arange(t_start,t_stop,dt)
     phi = np.zeros_like(t_phi)

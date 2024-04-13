@@ -95,11 +95,11 @@ def plot_2D_projection(X,dims=[0,1],cvar=None,ax=None,title='',
 
 
     if cvar is None:
-        p = ax.scatter(X[:,dims[0]],X[:,dims[1]],c=c,s=s,alpha=alpha)
+        p = ax.scatter(X[:,dims[0]],X[:,dims[1]],color=c,s=s,alpha=alpha)
     else:
         vmin = vmin or np.min(cvar)
         vmax = vmax or np.max(cvar)
-        p = ax.scatter(X[:,dims[0]],X[:,dims[1]],c=cvar,s=s,cmap=cmap,alpha=alpha,
+        p = ax.scatter(X[:,dims[0]],X[:,dims[1]],color=cvar,s=s,cmap=cmap,alpha=alpha,
                        vmin=vmin,vmax=vmax)
         if plot_colorbar:
             cax = f.add_axes([0.25, 0.85, 0.5, 0.02])
@@ -120,3 +120,9 @@ def plot_2D_projection(X,dims=[0,1],cvar=None,ax=None,title='',
 
     return(f,ax)
     
+
+def clean_polar_axis(ax):
+    ax.set_yticks([ax.get_yticks()[-1]])
+    ax.set_xticks([0,np.pi/2,np.pi,np.pi*3/2])
+    ax.set_xticklabels(['0','$\\frac{\pi}{2}$','$\pi$','$\\frac{-\pi}{2}$'])
+
