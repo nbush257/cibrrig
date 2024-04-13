@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.colors as mcolors
+
 
 def plot_laser(intervals,amplitudes,ax=None):
     if ax is None:
@@ -12,15 +14,26 @@ def plot_laser(intervals,amplitudes,ax=None):
     
 
 
-# TODO: Make line plots
+# TODO: This works, but needs to be expanded to work for 3D and to be more complete.
+def plot_projection_line(X,cvar,dims=[0,1],cmap='viridis'):
+    # Lines are way slower than scatters
+    samps = np.arange(X.shape[0])
+    cmap = plt.get_cmap(cmap)  # You can use any other colormap as well
+
+    norm = mcolors.Normalize(vmin=np.min(cvar), vmax=np.max(cvar))
+
+    for s0 in samps:
+        plt.plot(X[s0:s0+2,dims[0]],X[s0:s0+2,dims[1]],color=cmap(norm(cvar[s0])))
+
 
 def plot_projection(X,dims,**kwargs):
     if len(dims)==2:
-        plot_2D_projection(X,dims,**kwargs)
+        return(plot_2D_projection(X,dims,**kwargs))
     elif len(dims)==3:
-        plot_3D_projection(X,dims,**kwargs)
+        return(plot_3D_projection(X,dims,**kwargs))
     else:
         raise(ValueError(f'Number of plotted dimensions must be 2 or 3. {dims=}'))
+    
 
 def plot_3D_projection(X,dims=[0,1,2],cvar=None,ax=None,title='',
                        s = 1,
