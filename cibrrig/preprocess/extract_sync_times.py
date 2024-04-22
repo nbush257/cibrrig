@@ -11,7 +11,12 @@ import logging
 from ibllib.io.extractors.ephys_fpga import get_sync_fronts,_sync_to_alf
 from ibllib.ephys.sync_probes import sync_probe_front_times,_save_timestamps_npy,_check_diff_3b
 import matplotlib.pyplot as plt
-from .nidq_utils import get_triggers
+try:
+    from .nidq_utils import get_triggers
+except:
+    import sys
+    sys.path.append('../')
+    from nidq_utils import get_triggers
 logging.basicConfig()
 _log = logging.getLogger('extract_sync_times')
 _log.setLevel(logging.INFO)

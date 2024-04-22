@@ -22,6 +22,8 @@ setuptools.setup(
             "backup = cibrrig.archiving.backup:main",
             "npx_preproc = cibrrig.preprocess.preproc_pipeline:main",
             "npx_run_all = cibrrig.main_pipeline:main",
+            "ephys_to_alf = cibrrig.archiving.ephys_data_to_alf:main",
+            "spikesort = cibrrig.sorting.spikeinterface_ks4:main",
         ]
     },
 )

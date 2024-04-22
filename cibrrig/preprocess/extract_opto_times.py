@@ -14,7 +14,12 @@ import pandas as pd
 import logging
 import json
 from scipy.interpolate import interp1d
-from .nidq_utils import binary_onsets,get_trig_string
+try:
+    from .nidq_utils import binary_onsets,get_trig_string
+except:
+    import sys
+    sys.path.append('../')
+    from nidq_utils import get_trig_string,binary_onsets
 from one.alf import spec
 logging.basicConfig()
 _log = logging.getLogger('extract_opto')

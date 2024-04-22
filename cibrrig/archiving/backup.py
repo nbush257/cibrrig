@@ -68,15 +68,15 @@ class Archiver:
         def _run_compress(bin_file):
             if bin_file is None:
                 return(None)
+            SR = spikeglx.Reader(bin_file)
+
+            if SR.is_mtscomp:
+                print(f"{bin_file.name} is already compressed")
+                return(None)
+
+            SR.compress_file(keep_original=self.keep_raw)
             print(f'Compressing {bin_file.name}')
-            md = spikeglx.read_meta_data(bin_file.with_suffix('.meta'))
-            sample_rate = md.get('imSampRate',md.get('niSampRate'))
-            n_channels = int(md.get('nSavedChans'))
-            compression_ratio = spikeglx.mtscomp.compress(bin_file,sample_rate=sample_rate,n_channels=n_channels,dtype='int16')
-            print(f'{compression_ratio=:0.02f}')
-            if not self.keep_raw:
-                bin_file.unlink()
-                print('removed.')
+
 
         for efi in self.ephys_files_remote:
             ap_file = efi.get('ap')

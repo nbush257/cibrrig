@@ -7,7 +7,7 @@ Takes a spikeglx run and performs:
 
 # Gui created by chatgpt
 '''
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QPushButton, QFileDialog, QLineEdit, QCheckBox, QGridLayout, QDialog
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QPushButton, QFileDialog, QLineEdit, QCheckBox, QGridLayout, QDialog,QGroupBox,QComboBox,QHBoxLayout,QInputDialog
 from PyQt5.QtCore import Qt, pyqtSignal
 from pathlib import Path
 import shutil
@@ -16,6 +16,29 @@ import subprocess
 import one.alf.io as alfio
 import shutil
 from .utils.alf_utils import Recording
+import json
+
+DEFAULT_WIRING = {
+    "SYSTEM": "3B",
+    "SYNC_WIRING_DIGITAL": {
+        "P0.0": "record",
+        "P0.7": "imec_sync"
+    },
+    "SYNC_WIRING_ANALOG": {
+        "AI0": "diaphragm",
+        "AI1": "ekg",
+        "AI4": "pdiff",
+        "AI5": "laser",
+        "AI6": "diaphragm_integrated",
+        "AI7": "temperature"
+    }
+}
+
+# List of Sync inputs that are expected
+POSSIBLE_WIRINGS = {
+    "Digital": ["None", "record", "imec_sync","right_camera", "Custom"], 
+    "Analog": ["None", "diaphragm", "ekg", "pdiff", "laser", "diaphragm_integrated", "temperature", "Custom"]  
+}
 
 class DirectorySelector(QWidget):
     def __init__(self):
@@ -153,6 +176,97 @@ class OptoFileFinder(QDialog):
         return self.opto_file
 
 
+class WiringEditor(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.initUI()
+
+    def initUI(self):
+        self.setWindowTitle('Dictionary Editor')
+        self.setGeometry(100, 100, 600, 200)
+
+        main_layout = QVBoxLayout()
+        self.setLayout(main_layout)
+
+        # Digital and Analog Groups
+        groups_layout = QHBoxLayout()
+        main_layout.addLayout(groups_layout)
+
+        # Digital Group
+        digital_group = QGroupBox('Digital')
+        digital_layout = QVBoxLayout()
+
+        self.digital_entries = {}
+        digital_keys = [f'P0.{i}' for i in range(8)]
+        for key in digital_keys:
+            label = QLabel(key)
+            combo_box = QComboBox()
+            combo_box.addItems(POSSIBLE_WIRINGS.get("Digital", []))
+            combo_box.setCurrentText(DEFAULT_WIRING.get("SYNC_WIRING_DIGITAL", {}).get(key, "None"))
+            combo_box.currentIndexChanged.connect(lambda _, cb=combo_box, k=key: self.on_digital_value_changed(cb, k))
+            digital_layout.addWidget(label)
+            digital_layout.addWidget(combo_box)
+            self.digital_entries[key] = combo_box
+
+        digital_group.setLayout(digital_layout)
+        groups_layout.addWidget(digital_group)
+
+        # Analog Group
+        analog_group = QGroupBox('Analog')
+        analog_layout = QVBoxLayout()
+
+        self.analog_entries = {}
+        analog_keys = [f'AI{i}' for i in range(8)]
+        for key in analog_keys:
+            label = QLabel(key)
+            combo_box = QComboBox()
+            combo_box.addItems(POSSIBLE_WIRINGS.get("Analog", []))
+            combo_box.setCurrentText(DEFAULT_WIRING.get("SYNC_WIRING_ANALOG", {}).get(key, "None"))
+            combo_box.currentIndexChanged.connect(lambda _, cb=combo_box, k=key: self.on_analog_value_changed(cb, k))
+            analog_layout.addWidget(label)
+            analog_layout.addWidget(combo_box)
+            self.analog_entries[key] = combo_box
+
+        analog_group.setLayout(analog_layout)
+        groups_layout.addWidget(analog_group)
+
+        # Save Button
+        save_button = QPushButton("Save")
+        save_button.clicked.connect(self.close)
+        main_layout.addWidget(save_button)
+
+    def on_digital_value_changed(self, combo_box, key):
+        if combo_box.currentText() == "Custom":
+            text, ok = QInputDialog.getText(self, 'Custom Value', f'Enter custom value for {key}:')
+            if ok:
+                combo_box.addItem(text)
+                combo_box.setCurrentText(text)
+
+    def on_analog_value_changed(self, combo_box, key):
+        if combo_box.currentText() == "Custom":
+            text, ok = QInputDialog.getText(self, 'Custom Value', f'Enter custom value for {key}:')
+            if ok:
+                combo_box.addItem(text)
+                combo_box.setCurrentText(text)
+
+    def save_values(self):
+        output_dictionary = {}
+
+        for key, combo_box in self.digital_entries.items():
+            value = combo_box.currentText()
+            if value != "None":
+                output_dictionary[key] = value
+
+        for key, combo_box in self.analog_entries.items():
+            value = combo_box.currentText()
+            if value != "None":
+                output_dictionary[key] = value
+
+        print("Output Dictionary:", output_dictionary)
+        self.output_wiring = output_dictionary
+        self.close()
+
+
 def main():
     app = QApplication(sys.argv)
     window = DirectorySelector()
@@ -182,7 +296,13 @@ def main():
 
     for gate in gate_paths:
         wiring_fn = list(gate.glob('nidq.wiring.json'))
-        assert wiring_fn, f'No wiring file found for {gate}. Create one before continuing'
+        if not wiring_fn:
+            wiring_editor = WiringEditor()
+            wiring_editor.exec_()
+            wiring = wiring_editor.output_wiring
+            with open(wiring_fn,'w'):
+                json.dump(wiring,wiring_fn)
+            print('Created wiring file')
 
 
     subprocess.run(cmd_archive,check=True)

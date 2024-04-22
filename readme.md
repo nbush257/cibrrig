@@ -25,6 +25,7 @@ Helper packages (Packages from other groups (e.g., kilosort)) should live in `C:
 --- 
 ## Data structure and quickstart
 
+**WARNING** These are currently broken
 Main entry points can be run from anywhere as long as the package has been pip installed
 `npx_run_all` -  Performs backup, preprocess, and spikesorting
 `backup` - Just performs backup
