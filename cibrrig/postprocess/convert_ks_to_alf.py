@@ -70,7 +70,7 @@ def sync_spikes(ap_files,spikes):
         spikes (AlfBunch): spikes alf object
     """    
     breaks_samps = get_ap_breaks_samps(ap_files)
-    rec_idx = np.searchsorted(breaks_samps,spikes.samples)-1
+    rec_idx = np.searchsorted(breaks_samps,spikes.samples,side='right')-1
     all_times_adj = []
     for ii,ap_file in enumerate(ap_files):     
         parts = alfio.files.filename_parts(ap_file.name)
