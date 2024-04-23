@@ -176,7 +176,7 @@ class OptoFileFinder(QDialog):
         return self.opto_file
 
 
-class WiringEditor(QWidget):
+class WiringEditor(QDialog):
     def __init__(self):
         super().__init__()
         self.initUI()
@@ -232,7 +232,7 @@ class WiringEditor(QWidget):
 
         # Save Button
         save_button = QPushButton("Save")
-        save_button.clicked.connect(self.close)
+        save_button.clicked.connect(self.save_values)
         main_layout.addWidget(save_button)
 
     def on_digital_value_changed(self, combo_box, key):
@@ -250,21 +250,27 @@ class WiringEditor(QWidget):
                 combo_box.setCurrentText(text)
 
     def save_values(self):
-        output_dictionary = {}
+        output_dictionary = {
+            'SYSTEM':'3B',
+            'SYNC_WIRING_ANALOG':{},
+            'SYNC_WIRING_DIGITAL':{}
+        }
 
         for key, combo_box in self.digital_entries.items():
             value = combo_box.currentText()
             if value != "None":
-                output_dictionary[key] = value
+                output_dictionary['SYNC_WIRING_DIGITAL'][key] = value
 
         for key, combo_box in self.analog_entries.items():
             value = combo_box.currentText()
             if value != "None":
-                output_dictionary[key] = value
+                output_dictionary['SYNC_WIRING_ANALOG'][key] = value
 
         print("Output Dictionary:", output_dictionary)
         self.output_wiring = output_dictionary
         self.close()
+    def get_output_wiring(self):
+        return(self.output_wiring)
 
 
 def main():
@@ -297,11 +303,12 @@ def main():
     for gate in gate_paths:
         wiring_fn = list(gate.glob('nidq.wiring.json'))
         if not wiring_fn:
+            wiring_fn = gate.joinpath('nidq.wiring.json')
             wiring_editor = WiringEditor()
             wiring_editor.exec_()
-            wiring = wiring_editor.output_wiring
-            with open(wiring_fn,'w'):
-                json.dump(wiring,wiring_fn)
+            wiring = wiring_editor.get_output_wiring()
+            with open(wiring_fn,'w') as fid:
+                json.dump(wiring,fid)
             print('Created wiring file')
 
 
