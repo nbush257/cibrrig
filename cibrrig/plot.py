@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.colors as mcolors
+from .utils.utils import weighted_histogram
 
 
 def plot_laser(intervals,amplitudes,ax=None):
@@ -125,4 +126,65 @@ def clean_polar_axis(ax):
     ax.set_yticks([ax.get_yticks()[-1]])
     ax.set_xticks([0,np.pi/2,np.pi,np.pi*3/2])
     ax.set_xticklabels(['0','$\\frac{\pi}{2}$','$\pi$','$\\frac{-\pi}{2}$'])
+
+
+def plot_polar_average(x,y,t,ax=None,t0=None,tf=None,color='k',bins=50,multi='sem',alpha=0.3,**plot_kwargs):
+    #TODO: Sanitize t0,tf to be iterable
+    #TODO: Sanitze
+
+    try:
+        iter(t0)
+    except:
+        t0 = [t0]
+
+    try:
+        iter(tf)
+    except:
+        tf = [tf]
+
+    try:
+        iter(color)
+    except:
+        color = [color]
+    assert(len(t0)==len(tf)),f'{len(t0)=} and {len(tf)=}; they must have same shape'
+
+    
+    n = len(t0)
+    y_polar_out = []
+
+    for ii,(start,stop) in enumerate(zip(t0,tf)):
+        s0,sf = np.searchsorted(t,[start,stop])
+        phase_bins,y_polar = weighted_histogram(x[s0:sf],y[s0:sf],bins=bins,wrap=True)
+        y_polar_out.append(y_polar)
+
+    y_polar_out = np.vstack(y_polar_out)
+    m = np.mean(y_polar_out,0)
+
+    # Plotting
+    if ax is None:
+        f = plt.figure()
+        ax = f.add_subplot(projection='polar')
+
+    if multi=='sem':
+        lb = m - np.nanstd(y_polar_out,0)/np.sqrt(y_polar_out.shape[0])
+        ub = m + np.nanstd(y_polar_out,0)/np.sqrt(y_polar_out.shape[0])
+        ax.plot(phase_bins,np.mean(y_polar_out,0),color=color[0],**plot_kwargs)
+        ax.fill_between(phase_bins,lb,ub,color=color[0],alpha=alpha)
+    elif multi=='std':
+        lb = m - np.nanstd(y_polar_out,0)
+        ub = m + np.nanstd(y_polar_out,0)
+        ax.plot(phase_bins,np.mean(y_polar_out,0),color=color[0],**plot_kwargs)
+        ax.fill_between(phase_bins,lb,ub,color=color[0],alpha=alpha)
+    else:
+
+        for ii,y_polar in enumerate(y_polar_out):
+            if len(color)==1:
+                c = color[0]
+            else:
+                c = color[ii]
+            ax.plot(phase_bins,y_polar,color=c,**plot_kwargs)
+    clean_polar_axis(ax)
+
+
+
 
