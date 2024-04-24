@@ -8,6 +8,11 @@ _log = logging.getLogger(__name__)
 _log.setLevel(logging.INFO)
 
 
+# These are all the potential keys that contain time relative to experiment start
+# and thus need to be modified during concatenation
+TEMPORAL_FEATURES = ['intervals','times','on_sec','off_sec','pk_time','inhale_peaks',
+                     'exhale_troughs','inhale_onsets','exhale_onsets','inhale_offsets','exhale_offsets',
+                     'inhale_pause_onsetes','exhale_pause_onsets']
 class Recording:
     def __init__(self,session_path):
         self.session_path = session_path
@@ -16,6 +21,7 @@ class Recording:
         self.alf_path = self.session_path.joinpath('alf')
         assert self.raw_ephys_path.is_dir(),'Alf path does not exist as expected'
         self.ni_fns = list(self.raw_ephys_path.glob('*nidq.bin'))
+        self.ni_fns.sort()
         self.n_recs = len(self.ni_fns)
         _log.info(f'Found {self.n_recs} recordings:\n\t'+'\n\t'.join([x.name for x in self.ni_fns]))
         self.get_breaks_times()
@@ -31,6 +37,12 @@ class Recording:
         self.breaks = np.array(breaks)
     
 
+    def list_all_alf_objects(self):
+        object_parts = alfio.filter_by(self.alf_path)[1]
+        object_names = list(set([x[1] for x in object_parts]))
+        object_names.sort()
+        self.alf_objects = object_names
+
     def concatenate_triggers(self,object_name):
         try:
             alf_obj_out = alfio.load_object(self.alf_path,object_name,extra=f't0',short_keys=True)
@@ -45,18 +57,11 @@ class Recording:
             for k in alf_obj.keys():
                 if len(alf_obj[k])==0:
                     continue
-                if k=='intervals' or k=='times':
+                if k in TEMPORAL_FEATURES:
                     alf_obj[k] +=self.breaks[ii]
                 alf_obj_out[k] = np.concatenate([alf_obj_out[k],alf_obj[k]])
         return(alf_obj_out)
     
-
-    def list_all_alf_objects(self):
-        object_parts = alfio.filter_by(self.alf_path)[1]
-        object_names = list(set([x[1] for x in object_parts]))
-        object_names.sort()
-        self.alf_objects = object_names
-
 
     def concatenate_alf_objects(self,save = True,overwrite=True):
 
