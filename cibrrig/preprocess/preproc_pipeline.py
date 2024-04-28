@@ -5,6 +5,7 @@ from ibllib.ephys.ephysqc import extract_rmsmap,EphysQC
 import spikeglx
 import sys
 from pathlib import Path
+from . import extract_frame_times,extract_opto_times,extract_physiology,extract_sync_times
 logging.basicConfig()
 _log = logging.getLogger('PIPELINE')
 _log.setLevel(logging.INFO)
@@ -55,15 +56,11 @@ def run_ephys_qc_session(session_path):
 def main(session_path,skip_ephysqc):
     _log.info('RUNNING PREPROCESSING')
     _log.info('Skipping ephysQC') if skip_ephysqc else None
-    command_extract_sync = ['python','extract_sync_times.py',session_path]
-    command_extract_frames = ['python','extract_frame_times.py',session_path]
-    command_extract_opto = ['python','extract_opto_times.py',session_path]
-    command_extract_physiology = ['python','extract_physiology.py',session_path] 
     try:
-        subprocess.run(command_extract_sync)
-        subprocess.run(command_extract_frames)
-        subprocess.run(command_extract_opto)
-        subprocess.run(command_extract_physiology)
+        extract_sync_times.main(session_path)
+        extract_frame_times.main(session_path)
+        extract_opto_times.main(session_path)
+        extract_physiology.main(session_path)
         if not skip_ephysqc:
             run_ephys_qc_session(session_path)
     except:
