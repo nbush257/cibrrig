@@ -315,7 +315,7 @@ def main():
     backup.no_gui(local_run_path,remote_archive_path)
 
     # RUN RENAME
-    ephys_data_to_alf.main(local_run_path)
+    ephys_data_to_alf.run(local_run_path)
     
 
     # Get all sessions
@@ -324,12 +324,12 @@ def main():
     for session in sessions_paths:
 
         # RUN PREPROCESS
-        preproc_pipeline.main(session,~run_ephysQC)
+        preproc_pipeline.run(session,~run_ephysQC)
         rec = Recording(session)
         rec.concatenate_alf_objects()
 
         # RUN SPIKESORTING
-        spikeinterface_ks4.main(session,~remove_opto_artifact)
+        spikeinterface_ks4.run(session,~remove_opto_artifact)
 
     # Move all data:
     shutil.move(local_run_path,remote_working_path)

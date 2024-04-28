@@ -53,14 +53,17 @@ def run_ephys_qc_session(session_path):
 @click.command()
 @click.argument('session_path', type=click.Path(exists=True))
 @click.option('--skip_ephysqc',is_flag=True)
-def main(session_path,skip_ephysqc):
+def cli(session_path,skip_ephysqc):
+    run(session_path,skip_ephysqc)
+
+def run(session_path,skip_ephysqc=False):
     _log.info('RUNNING PREPROCESSING')
     _log.info('Skipping ephysQC') if skip_ephysqc else None
     try:
-        extract_sync_times.main(session_path)
-        extract_frame_times.main(session_path)
-        extract_opto_times.main(session_path)
-        extract_physiology.main(session_path)
+        extract_sync_times.run(session_path)
+        extract_frame_times.run(session_path)
+        extract_opto_times.run(session_path)
+        extract_physiology.run(session_path)
         if not skip_ephysqc:
             run_ephys_qc_session(session_path)
     except:
@@ -68,4 +71,4 @@ def main(session_path,skip_ephysqc):
 
 
 if __name__ == '__main__':
-    main()
+    cli()

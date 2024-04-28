@@ -166,13 +166,7 @@ def run_session(session_path,v_thresh):
             # df.to_parquet(dest_path.joinpath(fn))
 
 
-@click.command()
-@click.argument('input_path')
-@click.option('--opto_chan','-o',default=None,type=int,help = 'Analog channel of the optogenetic pulses',show_default=True)
-@click.option('--v_thresh','-v',default=0.6,type=float,help = 'voltage threshold to register a pulse',show_default=True)
-@click.option('-l','--label',default='laser')
-@click.option('--calib',default=None)
-def main(input_path,opto_chan,v_thresh,label,calib):
+def run(input_path,opto_cha=None,v_thresh=0.5,label='laser',calib=None):
     calib = Path(calib) if calib is not None else None
     input_path = Path(input_path)
     if input_path.is_dir():
@@ -187,6 +181,15 @@ def main(input_path,opto_chan,v_thresh,label,calib):
                     pass
         run_file(input_path,opto_chan,v_thresh,calib,label)
         
+@click.command()
+@click.argument('input_path')
+@click.option('--opto_chan','-o',default=None,type=int,help = 'Analog channel of the optogenetic pulses',show_default=True)
+@click.option('--v_thresh','-v',default=0.5,type=float,help = 'voltage threshold to register a pulse',show_default=True)
+@click.option('-l','--label',default='laser')
+@click.option('--calib',default=None)
+def main(input_path,opto_chan,v_thresh,label,calib):
+    run(input_path,opto_chan,v_thresh,label,calib)
+
 
 if __name__ == '__main__':
     main()

@@ -172,11 +172,7 @@ class Run:
         self.sessions = sessions
 
 
-
-@click.command()
-@click.argument('run_path')
-@click.option('--skip_backup_check',is_flag=True)
-def main(run_path,skip_backup_check):
+def run(run_path,skip_backup_check=False):
     run_path = Path(run_path)
     run = Run(run_path)
     if skip_backup_check:
@@ -188,5 +184,12 @@ def main(run_path,skip_backup_check):
     for session in run.sessions:
         rename_session(session)
 
+
+@click.command()
+@click.argument('run_path')
+@click.option('--skip_backup_check',is_flag=True)
+def cli(run_path,skip_backup_check):
+    run(run_path,skip_backup_check)
+
 if __name__ == '__main__':
-    main()
+    cli()

@@ -378,7 +378,10 @@ def run_probe(probe_dir,probe_local,label='kilosort4',testing=False,skip_remove_
 @click.option('--testing',is_flag=True)
 @click.option('--no_move_final',is_flag=True)
 @click.option('--skip_remove_opto',is_flag=True,help='Flag to skip removal of the light artifacts. Probably advisable if light is presented far from the probe.')
-def run_session(session_path,dest,testing,no_move_final,skip_remove_opto):
+def cli(session_path,dest,testing,no_move_final,skip_remove_opto):
+    run(session_path,dest,testing,no_move_final,skip_remove_opto)
+
+def run(session_path,dest=None,testing=False,no_move_final=False,skip_remove_opto=False):
     """Spike sort a session. A session is multiple simultanesouly recorded probes. Any instances of multiple 
     recordings must occur in the same anatomical location
 
@@ -455,4 +458,4 @@ def run_session(session_path,dest,testing,no_move_final,skip_remove_opto):
 
 
 if __name__=='__main__':
-    run_session()
+    cli()
