@@ -253,7 +253,11 @@ def run(session_path, v_in=9, inhale_pos=False, save_path=None,debug=False):
                 
             except Exception as e:
                 _log.error(e)
-                _log.error('Continuing')
+                _log.error('='*50)
+                _log.error('='*15+ 'BREATHMETRICS FAILED Is it installed on the Matlab path?!!'+ '='*15)
+                _log.error('='*50)
+                import time
+                time.sleep(5)
                 continue
 
         else:

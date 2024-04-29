@@ -329,7 +329,7 @@ def main():
         rec.concatenate_alf_objects()
 
         # RUN SPIKESORTING
-        spikeinterface_ks4.run(session,~remove_opto_artifact)
+        spikeinterface_ks4.run(session,skip_remove_opto=~remove_opto_artifact)
 
     # Move all data:
     shutil.move(local_run_path,remote_working_path)
