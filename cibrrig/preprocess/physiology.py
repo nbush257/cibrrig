@@ -102,7 +102,29 @@ def burst_stats_dia(integrated,sr,dia_thresh=1,rel_height=0.9,min_distance=0.1,m
     return(dia_df)
 
 
-def remove_EKG(x,sr,thresh=2):
+def remove_EKG(x,sr,thresh=2,heartbeats=None):
+    '''
+    Wrapper to remove EKG signal.
+    Can either infer the heartbeat times from the signal to clean,
+    or take an explicit set of heartbeat times
+    '''
+    if heartbeats:
+        remove_EKG_explicit(x,sr,thresh=thresh,heartbeats=heartbeats)
+    else:
+        remove_EKG_inferred(x,sr,thresh)
+
+
+
+def remove_EKG_explicit(x,sr,thresh,heartbeats):
+    '''
+    EKG removal if the heartbeat times have already been extracted from a 
+    dedicated EKG signal source
+    '''
+    raise NotImplementedError('Explicit removal of EKG artifact from defined times is not yet implemented')
+    #TODO: extract the ekg given heartbeats in timestamps
+
+
+def remove_EKG_inferred(x,sr,thresh):
     """Remove the EKG from an ephys trace using a BGM classifier
     Implements a [5,500] bandpass filter to try to isolate the ekg
 
@@ -118,7 +140,7 @@ def remove_EKG(x,sr,thresh=2):
 
     warnings.filterwarnings('ignore')
     sos = scipy.signal.butter(2,[5/sr/2,500/sr/2],btype='bandpass',output='sos')
-    xs = scipy.signal.sosfilt(sos,x)
+    xs = scipy.signal.sosfiltfilt(sos,x)
     pks = scipy.signal.find_peaks(xs,prominence=thresh*np.std(xs),distance=0.05*sr)[0]
     pks = pks[1:-1]
     amps = xs[pks]
@@ -196,7 +218,7 @@ def get_hr_from_dia(pks,dia_df,sr):
     return(hr_smooth,pks/sr)
 
 
-def extract_hr_from_ekg(x,sr,thresh=5,min_distance = 0.05,low=100,high=1000,in_samples= False):
+def extract_hr_from_ekg(x,sr,thresh=5,min_distance = 0.05,low=100,high=1000,in_samples= False,filter=False):
     """
     Finds heartbeats in an EKG trace. 
     Uses a bandpass filter and peak detection
@@ -210,9 +232,12 @@ def extract_hr_from_ekg(x,sr,thresh=5,min_distance = 0.05,low=100,high=1000,in_s
         high (int, optional): High cut frequency in the bandpass filter (Hz). Defaults to 1000.
         raw_pks(bool,optional): whether to return the peaks as samples. Defualts to False
     """    
-    order = 8
-    sos = scipy.signal.butter(order,[low/sr/2,high/sr/2],btype='bandpass',output='sos')
-    xs = scipy.signal.sosfilt(sos,x)
+    if filter:
+        order = 8
+        sos = scipy.signal.butter(order,[low/sr/2,high/sr/2],btype='bandpass',output='sos')
+        xs = scipy.signal.sosfiltfilt(sos,x)
+    else:
+        xs = x
     pks = scipy.signal.find_peaks(xs,prominence=thresh*np.std(xs),distance=int(min_distance*sr))[0]
     if in_samples:
         return(pks)
