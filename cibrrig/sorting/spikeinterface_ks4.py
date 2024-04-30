@@ -398,7 +398,7 @@ def run(session_path,dest=None,testing=False,no_move_final=False,skip_remove_opt
 
     # Get paths
     session_path = Path(session_path)
-    session_local = SCRATCH_DIR.joinpath(session_path.name)
+    session_local = SCRATCH_DIR.joinpath(session_path.parent.name+'_'+session_path.name)
     ephys_dir = session_path.joinpath('raw_ephys_data')
     _log.debug(f'{session_local=}')
     probe_dirs = list(ephys_dir.glob('probe*')) + list(ephys_dir.glob('*imec[0-9]'))
