@@ -1,9 +1,7 @@
-import subprocess
 import click
 import logging
 from ibllib.ephys.ephysqc import extract_rmsmap,EphysQC
 import spikeglx
-import sys
 from pathlib import Path
 from . import extract_frame_times,extract_opto_times,extract_physiology,extract_sync_times
 logging.basicConfig()
@@ -50,12 +48,6 @@ def run_ephys_qc_session(session_path):
         qc.run()
 
 
-@click.command()
-@click.argument('session_path', type=click.Path(exists=True))
-@click.option('--skip_ephysqc',is_flag=True)
-def cli(session_path,skip_ephysqc):
-    run(session_path,skip_ephysqc)
-
 def run(session_path,skip_ephysqc=False):
     _log.info('RUNNING PREPROCESSING')
     _log.info('Skipping ephysQC') if skip_ephysqc else None
@@ -68,6 +60,12 @@ def run(session_path,skip_ephysqc=False):
             run_ephys_qc_session(session_path)
     except:
         _log.error('Errored out')
+
+@click.command()
+@click.argument('session_path', type=click.Path(exists=True))
+@click.option('--skip_ephysqc',is_flag=True)
+def cli(session_path,skip_ephysqc):
+    run(session_path,skip_ephysqc)
 
 
 if __name__ == '__main__':
