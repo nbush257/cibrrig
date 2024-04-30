@@ -219,16 +219,7 @@ def run_one(SR, wiring, v_in, inhale_pos, save_path):
         np.save(save_path.joinpath(fn_breath_onsets),np.array([]))
 
         
-
-
-
-@click.command()
-@click.argument('session_path')
-@click.option('-v','--v_in','v_in',default=9,type=float,show_default=True)
-@click.option('-i','--inhale_pos',is_flag=True,default=False,show_default=True)
-@click.option('-s','--save_path','save_path',default=None,show_default=True)
-@click.option('--debug',is_flag=True)
-def main(session_path, v_in, inhale_pos, save_path,debug):
+def run(session_path, v_in=9, inhale_pos=False, save_path=None,debug=False):
     '''
     Set chan to -1 if no data is recorded.
     '''
@@ -265,12 +256,26 @@ def main(session_path, v_in, inhale_pos, save_path,debug):
                 
             except Exception as e:
                 _log.error(e)
-                _log.error('Continuing')
+                _log.error('='*50)
+                _log.error('='*15+ 'BREATHMETRICS FAILED Is it installed on the Matlab path?!!'+ '='*15)
+                _log.error('='*50)
+                import time
+                time.sleep(5)
                 continue
 
         else:
             _log.info('No airflow signal so not performing BM')
         
+
+@click.command()
+@click.argument('session_path')
+@click.option('-v','--v_in','v_in',default=9,type=float,show_default=True)
+@click.option('-i','--inhale_pos',is_flag=True,default=False,show_default=True)
+@click.option('-s','--save_path','save_path',default=None,show_default=True)
+@click.option('--debug',is_flag=True)
+def main(session_path, v_in, inhale_pos, save_path,debug):
+    run(session_path, v_in, inhale_pos, save_path,debug)
+
 
 if __name__=='__main__':
     main()

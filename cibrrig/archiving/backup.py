@@ -14,6 +14,10 @@ import shutil
 import click
 import subprocess
 import datetime
+import logging
+logging.basicConfig()
+_log = logging.getLogger(name=__name__)
+_log.setLevel(logging.INFO)
 DEFAULT_SUBJECTS_PATH =  Path(r'D:\remote_test\Subjects')
 DEFAULT_SESSION_PATH  =  Path(r'D:\test\Subjects')
 DEFAULT_VIDEO_DIRECTORY = Path('D:\sglx_data')
@@ -74,7 +78,16 @@ class Archiver:
                 print(f"{bin_file.name} is already compressed")
                 return(None)
 
-            SR.compress_file(keep_original=self.keep_raw)
+            try:
+                SR.compress_file(keep_original=self.keep_raw)
+            except PermissionError:
+                if ~self.keep_raw:
+                    SR.close()
+                    import time
+                    time.sleep(1)
+                    bin_file.unlink()
+                    _log.warning('Compression likely did not succeed in deleting. Deleting manually.')
+
             print(f'Compressing {bin_file.name}')
 
 

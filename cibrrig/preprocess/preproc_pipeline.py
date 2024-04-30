@@ -1,10 +1,9 @@
-import subprocess
 import click
 import logging
 from ibllib.ephys.ephysqc import extract_rmsmap,EphysQC
 import spikeglx
-import sys
 from pathlib import Path
+from . import extract_frame_times,extract_opto_times,extract_physiology,extract_sync_times
 logging.basicConfig()
 _log = logging.getLogger('PIPELINE')
 _log.setLevel(logging.INFO)
@@ -49,26 +48,25 @@ def run_ephys_qc_session(session_path):
         qc.run()
 
 
-@click.command()
-@click.argument('session_path', type=click.Path(exists=True))
-@click.option('--skip_ephysqc',is_flag=True)
-def main(session_path,skip_ephysqc):
+def run(session_path,skip_ephysqc=False):
     _log.info('RUNNING PREPROCESSING')
     _log.info('Skipping ephysQC') if skip_ephysqc else None
-    command_extract_sync = ['python','extract_sync_times.py',session_path]
-    command_extract_frames = ['python','extract_frame_times.py',session_path]
-    command_extract_opto = ['python','extract_opto_times.py',session_path]
-    command_extract_physiology = ['python','extract_physiology.py',session_path] 
     try:
-        subprocess.run(command_extract_sync)
-        subprocess.run(command_extract_frames)
-        subprocess.run(command_extract_opto)
-        subprocess.run(command_extract_physiology)
+        extract_sync_times.run(session_path)
+        extract_frame_times.run(session_path)
+        extract_opto_times.run(session_path)
+        extract_physiology.run(session_path)
         if not skip_ephysqc:
             run_ephys_qc_session(session_path)
     except:
         _log.error('Errored out')
 
+@click.command()
+@click.argument('session_path', type=click.Path(exists=True))
+@click.option('--skip_ephysqc',is_flag=True)
+def cli(session_path,skip_ephysqc):
+    run(session_path,skip_ephysqc)
+
 
 if __name__ == '__main__':
-    main()
+    cli()

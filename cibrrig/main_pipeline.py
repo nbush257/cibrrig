@@ -12,11 +12,13 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from pathlib import Path
 import shutil
 import sys
-import subprocess
 import one.alf.io as alfio
 import shutil
 from .utils.alf_utils import Recording
 import json
+from .archiving import backup,ephys_data_to_alf
+from .preprocess import preproc_pipeline
+from .sorting import spikeinterface_ks4
 
 DEFAULT_WIRING = {
     "SYSTEM": "3B",
@@ -282,9 +284,6 @@ def main():
     # After the GUI is closed, retrieve the selected paths
     local_run_path, remote_archive_path, remote_working_path, remove_opto_artifact, run_ephysQC = window.get_paths()
 
-    cmd_archive = ['python','./archiving/backup.py',str(local_run_path),str(remote_archive_path)]
-    cmd_rename = ['python','./archiving/ephys_data_to_alf.py',str(local_run_path)]
-
     gate_paths = list(local_run_path.glob('*_g[0-9]*'))
 
     for gate in gate_paths:
@@ -311,28 +310,26 @@ def main():
                 json.dump(wiring,fid)
             print('Created wiring file')
 
+    
+    # RUN BACKUP
+    backup.no_gui(local_run_path,remote_archive_path)
 
-    subprocess.run(cmd_archive,check=True)
-    subprocess.run(cmd_rename,check=True)
+    # RUN RENAME
+    ephys_data_to_alf.run(local_run_path)
+    
 
     # Get all sessions
     sessions_paths = list(alfio.iter_sessions(local_run_path))
     sessions_paths.sort()
     for session in sessions_paths:
-        if not run_ephysQC:
-            preproc_cmd = ['python','preproc_pipeline.py',str(session),'--skip_ephysQC']
-        else:
-            preproc_cmd = ['python','preproc_pipeline.py',str(session)]
-    
-        if not remove_opto_artifact:
-            sort_cmd = ['python','-W','ignore','spikeinterface_ks4.py',str(session),'--skip_remove_opto']
-        else:
-            sort_cmd = ['python','-W','ignore' ,'spikeinterface_ks4.py',str(session)]
 
-        subprocess.run(preproc_cmd,check=True,cwd='./preprocess')
+        # RUN PREPROCESS
+        preproc_pipeline.run(session,~run_ephysQC)
         rec = Recording(session)
         rec.concatenate_alf_objects()
-        subprocess.run(sort_cmd,check=True,cwd='./sorting')
+
+        # RUN SPIKESORTING
+        spikeinterface_ks4.run(session,skip_remove_opto=~remove_opto_artifact)
 
     # Move all data:
     shutil.move(local_run_path,remote_working_path)

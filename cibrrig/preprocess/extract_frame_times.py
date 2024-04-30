@@ -127,13 +127,7 @@ def run_file(ni_fn,chan,label='camera'):
     np.save(ni_fn.parent.joinpath(fn),frame_times)
 
 
-
-
-@click.command()
-@click.argument('input_path')
-@click.option('--trig_chan','-c',default=None,type=int,help = 'Digital channel of the frame_trigger',show_default=True)
-@click.option('-l','--label',default='camera')
-def main(input_path,trig_chan,label):
+def run(input_path,trig_chan=None,label='camera'):
     input_path = Path(input_path)
     if input_path.is_dir():
         run_session(input_path)
@@ -149,6 +143,13 @@ def main(input_path,trig_chan,label):
     else:
         raise ValueError ('Input not a valid session path or file')
 
+
+@click.command()
+@click.argument('input_path')
+@click.option('--trig_chan','-c',default=None,type=int,help = 'Digital channel of the frame_trigger',show_default=True)
+@click.option('-l','--label',default='camera')
+def main(input_path,trig_chan,label):
+    run(input_path,trig_chan,label)
 
 
 if __name__ == '__main__':

@@ -22,11 +22,7 @@ _log = logging.getLogger('extract_sync_times')
 _log.setLevel(logging.INFO)
 
 
-@click.command()
-@click.argument('session_path')
-@click.option('--debug',is_flag=bool,help='Sets logging level to DEBUG')
-@click.option('--no_display',is_flag=bool,help='Toggles display')
-def main(session_path,debug,no_display):
+def run(session_path,debug=False,no_display=False):
     display = not no_display
     type = None
     session_path = Path(session_path)
@@ -77,6 +73,14 @@ def main(session_path,debug,no_display):
             ef = alfio.Bunch()
             ef['ap'] = probe_fn
             out_files.extend(_save_timestamps_npy(ef, timestamps, sr))
+
+
+@click.command()
+@click.argument('session_path')
+@click.option('--debug',is_flag=bool,help='Sets logging level to DEBUG')
+@click.option('--no_display',is_flag=bool,help='Toggles display')
+def main(session_path,debug,no_display):
+    run(session_path,debug,no_display)
 
 
 if __name__ == '__main__':
