@@ -131,17 +131,20 @@ def run_one(SR, wiring, v_in, inhale_pos, save_path):
     # Must do before explicit ekg processing because it attempts
     # to find the heartbeats, but it is not as good as the
     # explicit EKG channel and so we want to overwrite heartbeats with those data if they exist
-    if has_dia:
-        _log.info('Processing diaphragm')
-        raw_dia,sr_dia = nidq_utils.load_dia_emg(SR,dia_chan)
-        dia_df,dia_sub,sr_dia_sub,HR,dia_filt,heartbeats = nidq_utils.filt_int_ds_dia(raw_dia,sr_dia,ds_factor=DS_FACTOR)
-        t,dia_sub = _crop_traces(t,dia_sub)
 
     # Process EKG
+    heartbeats = None # Initialize heartbeats to be none in the case that EKG is not recorded
     if has_ekg:
         _log.info('Processing EKG')
         heartbeats = nidq_utils.extract_hr_channel(SR,ekg_chan)
         _,hr_bpm = physiology.compute_avg_hr(heartbeats,t_target=t)
+
+    # Process dia
+    if has_dia:
+        _log.info('Processing diaphragm')
+        raw_dia,sr_dia = nidq_utils.load_dia_emg(SR,dia_chan)
+        dia_df,dia_sub,sr_dia_sub,HR,dia_filt,heartbeats = nidq_utils.filt_int_ds_dia(raw_dia,sr_dia,ds_factor=DS_FACTOR,heartbeats=heartbeats)
+        t,dia_sub = _crop_traces(t,dia_sub)
 
 
     # Process PDIFF
@@ -268,10 +271,6 @@ def main(session_path, v_in, inhale_pos, save_path,debug):
         else:
             _log.info('No airflow signal so not performing BM')
         
-
-
-
-
 
 if __name__=='__main__':
     main()

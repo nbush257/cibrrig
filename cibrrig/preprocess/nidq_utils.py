@@ -158,7 +158,7 @@ def load_dia_emg(SR,chan_id):
     return(dat,sr)
 
 
-def filt_int_ds_dia(x,sr,ds_factor=10,rel_height=0.95):
+def filt_int_ds_dia(x,sr,ds_factor=10,rel_height=0.95,heartbeats=None):
     '''
     Filter, integrate and downsample the diaphragm. Detect and summarize the diaphragm bursts
     Uses medfilt to smooth so it is a little slow, but it is worth it.
@@ -171,7 +171,7 @@ def filt_int_ds_dia(x,sr,ds_factor=10,rel_height=0.95):
 
     #Remove the EKG artifact
     _log.info('Removing the EKG...')
-    dia_filt,pulse = physiology.remove_EKG(x,sr,thresh=2)
+    dia_filt,pulse = physiology.remove_EKG(x,sr,thresh=2,heartbeats=heartbeats)
     dia_filt[np.isnan(dia_filt)] = np.nanmedian(dia_filt)
 
 

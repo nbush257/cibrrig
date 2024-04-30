@@ -6,7 +6,6 @@ Only does processing. No I/O
 import sklearn
 import numpy as np
 import pandas as pd
-import warnings
 from sklearn.mixture import BayesianGaussianMixture
 import scipy.signal
 import scipy.interpolate
@@ -107,43 +106,31 @@ def remove_EKG(x,sr,thresh=2,heartbeats=None):
     Wrapper to remove EKG signal.
     Can either infer the heartbeat times from the signal to clean,
     or take an explicit set of heartbeat times
+    Remove the EKG from an ephys trace using a BGM classifier
     '''
-    if heartbeats:
-        remove_EKG_explicit(x,sr,thresh=thresh,heartbeats=heartbeats)
+    if heartbeats is not None:
+        print("Removing pre-computed heartbeats")
+        x_filt = _remove_EKG_explicit(x,sr,heartbeats)
     else:
-        remove_EKG_inferred(x,sr,thresh)
+        x_filt,heartbeat_samps = _remove_EKG_inferred(x,sr,thresh)
+        heartbeats = heartbeat_samps/sr
 
+    return(x_filt,heartbeats)
+    
 
-
-def remove_EKG_explicit(x,sr,thresh,heartbeats):
-    '''
-    EKG removal if the heartbeat times have already been extracted from a 
-    dedicated EKG signal source
-    '''
-    raise NotImplementedError('Explicit removal of EKG artifact from defined times is not yet implemented')
-    #TODO: extract the ekg given heartbeats in timestamps
-
-
-def remove_EKG_inferred(x,sr,thresh):
-    """Remove the EKG from an ephys trace using a BGM classifier
-    Implements a [5,500] bandpass filter to try to isolate the ekg
+def _remove_EKG_explicit(x,sr,heartbeats):
+    """
+    Remove the EKG from an ephys trace using a BGM classifier
+    EKG removal if the heartbeat times have already been extracted
 
     Args:
-        x (1D numpy array): ephys trace to clean (diaphragm or other emg)
-        sr (float): sampling rate (samples/sec)
-        thresh (int, optional): threshold in standard deviations to detect a heartbeat. Defaults to 2.
-
-    Returns: 
-            y (1D numpy array): x with the EKG filtered out. Has the same timestamps as x
-            pks (1D numpy array): samples of the detected  heartbeats 
-    """    
-
-    warnings.filterwarnings('ignore')
-    sos = scipy.signal.butter(2,[5/sr/2,500/sr/2],btype='bandpass',output='sos')
-    xs = scipy.signal.sosfiltfilt(sos,x)
-    pks = scipy.signal.find_peaks(xs,prominence=thresh*np.std(xs),distance=0.05*sr)[0]
-    pks = pks[1:-1]
-    amps = xs[pks]
+        x (_type_): Signal to remove EKG from
+        sr (_type_): Sampling rate of x (in samps/second)
+        heartbeats (_type_): Time in seconds of the detected heartbeats
+    """
+    pks = heartbeats*sr
+    pks = pks.astype('int')
+    amps = x[pks]
     win = int(0.010 *sr)
     y = x.copy()
     ekg = np.zeros([2*win,len(pks)])
@@ -167,6 +154,7 @@ def remove_EKG_inferred(x,sr,thresh):
     if m0>m1:
         cls = -cls
 
+    # Define Sgolay filter window
     ww = int(.0005 * sr)
     ww += ww % 2 - 1
 
@@ -179,14 +167,37 @@ def remove_EKG_inferred(x,sr,thresh):
             sm_ekg = scipy.signal.savgol_filter(ekg[:,ii],ww,1)
             y[pk - win:pk + win] -= sm_ekg
         else:
-            med_ekg = np.nanmedian(ekg[:,ii-5:ii+5],1)
-            med_amp = np.median(amps[ii-5:ii+5])
+            first_examp = max(ii-5,0)
+            second_examp = min(ii+5,y.shape[0])
+            med_ekg = np.nanmedian(ekg[:,first_examp:second_examp],1)
+            med_amp = np.median(amps[first_examp:second_examp])
             scl = amps[ii]/med_amp
             y[pk - win:pk + win] -=med_ekg*scl
 
     y[np.isnan(y)] = np.nanmedian(y)
-    warnings.filterwarnings('default')
-    return(y,pks)
+    return(y)
+
+
+def _remove_EKG_inferred(x,sr,thresh):
+    """
+    Implements a [5,500] bandpass filter to try to isolate the ekg
+
+    Args:
+        x (1D numpy array): ephys trace to clean (diaphragm or other emg)
+        sr (float): sampling rate (samples/sec)
+        thresh (int, optional): threshold in standard deviations to detect a heartbeat. Defaults to 2.
+
+    Returns: 
+            y (1D numpy array): x with the EKG filtered out. Has the same timestamps as x
+            pks (1D numpy array): samples of the detected  heartbeats 
+    """    
+
+    sos = scipy.signal.butter(2,[5/sr/2,500/sr/2],btype='bandpass',output='sos')
+    xs = scipy.signal.sosfiltfilt(sos,x)
+    pks = scipy.signal.find_peaks(xs,prominence=thresh*np.std(xs),distance=0.05*sr)[0]
+
+    x_filt = _remove_EKG_explicit(x,sr,pks/sr)
+    return(x_filt,pks)
 
 
 def get_hr_from_dia(pks,dia_df,sr):
@@ -238,7 +249,7 @@ def extract_hr_from_ekg(x,sr,thresh=5,min_distance = 0.05,low=100,high=1000,in_s
         xs = scipy.signal.sosfiltfilt(sos,x)
     else:
         xs = x
-    pks = scipy.signal.find_peaks(xs,prominence=thresh*np.std(xs),distance=int(min_distance*sr))[0]
+    pks = scipy.signal.find_peaks(np.abs(xs),prominence=thresh*np.std(xs),distance=int(min_distance*sr))[0]
     if in_samples:
         return(pks)
     return(pks/sr)
