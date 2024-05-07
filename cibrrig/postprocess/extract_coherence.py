@@ -133,6 +133,35 @@ def reshape_chronux_output(chronux_rez,cluster_ids,n_total_clusters,mode = 'unit
         raise ValueError(f'Mode {mode} not supported. Must be "mat" or "unit_level"')
 
 
+def run_phy_probe(phy_path,t0,tf,x,xt,use_good=True,verbose=True):
+    _log.info(f'Running {phy_path.name}')
+    spike_times = np.load(phy_path.joinpath('spike_times.npy'))
+    spike_clusters = np.load(phy_path.joinpath('spike_clusters.npy'))
+    groups = pd.read_csv(phy_path.joinpath('cluster_group.tsv'),sep='\t')
+
+    n_total_clusters = np.unique(spike_clusters).shape[0]
+    if use_good:
+        cluster_ids = groups['cluster_id'][groups['group']=='good'].values
+        idx = np.isin(spike_clusters,cluster_ids)
+        spike_times = spike_times[idx]
+        spike_clusters = spike_clusters[idx]
+    else:
+        cluster_ids = np.unique(spike_clusters)
+    
+
+    # Run Chronux
+    chronux_rez = run_chronux(spike_times,spike_clusters,cluster_ids,x,xt,t0,tf,verbose=verbose)
+
+    # Shape results 
+    unit_coh = reshape_chronux_output(chronux_rez,cluster_ids,n_total_clusters,mode='unit_level')
+    
+    # Save results
+    fn_chronux = alfio.files.spec.to_alf('clusters','coherence','pqt')
+    unit_coh.to_parquet(phy_path.joinpath(fn_chronux))
+
+
+
+
 def run_probe(probe_path,t0,tf,x,xt,use_good=True,verbose=True):
     """
     Compute coherence using chronux ALF organized spike data in a probe path
