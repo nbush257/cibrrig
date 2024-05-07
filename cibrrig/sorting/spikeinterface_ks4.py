@@ -42,8 +42,13 @@ MIN_SPIKES = 500
 RUN_PC = False
 MOTION_PRESET ='kilosort_like' # 'kilosort_like','nonrigid_accurate'
 SORTER = 'kilosort4' 
-SCRATCH_DIR = Path(r'D:/si_temp')
-SCRATCH_DIR.mkdir(exist_ok=True)
+try:
+    SCRATCH_DIR = Path(r'D:/si_temp')
+    SCRATCH_DIR.mkdir(exist_ok=True)
+except:
+    _log.warning('D: drive not found. Are you sorting on the correct computer?')
+
+
 
 def print_elapsed_time(start_time):
     _log.info(f'Elapsed time: {time.time()-start_time:0.0f} seconds')
@@ -224,7 +229,6 @@ def apply_preprocessing(recording,session_path,probe_dir,testing,skip_remove_opt
             rec_processed = remove_opto_artifacts(rec_destriped,session_path,probe_dir,ms_before=0.5,ms_after=2)
         else:
             rec_processed = rec_destriped
-    
     tf = 60 if testing else None
     rec_out = concatenate_recording(rec_processed,tf=tf)
     return(rec_out)
@@ -430,7 +434,11 @@ def run(session_path,dest=None,testing=False,no_move_final=False,skip_remove_opt
             '='*100 +
             f'\nRunning SpikeInterface {SORTER}:' +
             f"\n\tGate: {session_path}" +
-            f"\n\tProbe: {probe_dir.name}\n" +
+            f"\n\tProbe: {probe_dir.name}" +
+            f"\n\t{dest=}" + 
+            f"\n\t{testing=}" + 
+            f"\n\t{skip_remove_opto=}" + 
+            f"\n\t{label=}\n" + 
             '='*100
         )
 
