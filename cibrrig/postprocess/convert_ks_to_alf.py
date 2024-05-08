@@ -3,6 +3,7 @@ Apply sync and export to alf for all probes given a session path
 '''
 
 from ibllib.ephys.spikes import ks2_to_alf,apply_sync
+from ibllib.ephys.ephysqc import spike_sorting_metrics
 from pathlib import Path
 import spikeglx
 import one.alf.io as alfio
@@ -10,6 +11,8 @@ import pandas as pd
 import logging
 import numpy as np
 import click
+from phylib.io.model import TemplateModel
+import phylib.io.alf
 logging.basicConfig()
 _log = logging.getLogger('convert_to_alf')
 _log.setLevel(logging.INFO)
@@ -85,6 +88,26 @@ def sync_spikes(ap_files,spikes):
 
     return(all_times_adj)
 
+
+def convert_model(ks_path,alf_path,sample_rate,ampfactor):
+    mdl = TemplateModel(dir_path=ks_path,sample_rate=sample_rate)
+
+    ac = phylib.io.alf.EphysAlfCreator(mdl)
+    ac.convert(alf_path,ampfactor=ampfactor)
+    ac.make_depths()
+
+    cluster_shanks = mdl.channel_shanks[mdl.clusters_channels]
+    np.save(alf_path.joinpath('clusters.shanks.npy'),cluster_shanks)
+
+    # Change amplitudes to properly scaled
+    np.save(alf_path.joinpath('spikes.amps.npy'),np.abs(mdl.amplitudes))
+    # Need to recompute since clusters have been modified
+    cluster_amps = np.zeros(mdl.n_clusters)*np.nan
+    for ii in mdl.cluster_ids:
+        cluster_amps[ii] = np.mean(np.abs(mdl.amplitudes[mdl.spike_clusters==ii]))
+    np.save(alf_path.joinpath('clusters.amps.npy'),cluster_amps)
+    
+    #TODO: Confirm waveforms are properly scaled
     
 def run_session(session_path,sorting_name = 'kilosort4'):
     """Convert all sorting in the session to alf standard.
@@ -104,10 +127,10 @@ def run_session(session_path,sorting_name = 'kilosort4'):
 
     for probe_alf in probes_alfs:
         _log.info(f'Converting {probe_alf.name}')
+        ap_fn = next(ephys_path.joinpath(probe_alf.name).rglob('*ap.bin'))
 
         # Get paths
         ks4_dir = probe_alf.joinpath(sorting_name)
-        bin_path = ks4_dir.joinpath('recording.dat')
         out_path = probe_alf
         
         # Extract cluster shanks
@@ -115,12 +138,17 @@ def run_session(session_path,sorting_name = 'kilosort4'):
         np.save(ks4_dir.joinpath('cluster_shanks.npy'),cluster_shanks_df['channel_group'].values)
 
         # Convert to ALF
-        ks2_to_alf(ks4_dir,bin_path,out_path)
+        # ks2_to_alf(ks4_dir,bin_path,out_path)
+        sr = spikeglx.Reader(ap_fn)
+        sampling_rate = sr.fs
+        s2v = sr.sample2volts[0]
+        convert_model(ks4_dir,out_path,sampling_rate,s2v)
 
-        # Get metrics
-        _log.info('Extracting spike metrics')
-        metrics = get_metrics_from_si(ks4_dir)
-        save_metrics(metrics,out_path)
+        spikes = alfio.load_object(out_path,'spikes')
+        cluster_ids = np.arange(spikes.clusters.max()+1)
+        df_units,drift = spike_sorting_metrics(spikes.times,spikes.clusters,spikes.amps,spikes.depths,cluster_ids = cluster_ids)
+        df_units.to_parquet(out_path.joinpath('clusters.metrics.pqt'))
+
 
         # Get ap files for synchronizing
         _log.info('Syncronizing to NIDAQ clock')
@@ -141,6 +169,8 @@ def run_session(session_path,sorting_name = 'kilosort4'):
         np.save(out_path.joinpath(times_old_fn),spikes.times)
         np.save(out_path.joinpath(times_adj_fn),times_adj)
         
+
+
 
 @click.command()
 @click.argument('session_path')

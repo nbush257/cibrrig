@@ -362,6 +362,8 @@ def run_probe(probe_dir,probe_local,label='kilosort4',testing=False,skip_remove_
     np.save(PHY_DEST.joinpath('cluster_locations.npy'),unit_locations)
     shutil.copy(PHY_DEST.joinpath('channel_groups.npy'),PHY_DEST.joinpath('channel_shanks.npy'))
 
+    # Make cluster shanks a tsv!
+
     for col in template_metrics:
         this_col = pd.DataFrame(template_metrics[col])
         this_col['cluster_id'] = sort_rez.get_unit_ids()
@@ -383,9 +385,9 @@ def run_probe(probe_dir,probe_local,label='kilosort4',testing=False,skip_remove_
 @click.option('--no_move_final',is_flag=True)
 @click.option('--skip_remove_opto',is_flag=True,help='Flag to skip removal of the light artifacts. Probably advisable if light is presented far from the probe.')
 def cli(session_path,dest,testing,no_move_final,skip_remove_opto):
-    run(session_path,dest,testing,no_move_final,skip_remove_opto)
+    run(session_path,dest,testing,no_move_final,skip_remove_opto,rm_intermediate=True)
 
-def run(session_path,dest=None,testing=False,no_move_final=False,skip_remove_opto=False):
+def run(session_path,dest=None,testing=False,no_move_final=False,skip_remove_opto=False,rm_intermediate=True):
     """Spike sort a session. A session is multiple simultanesouly recorded probes. Any instances of multiple 
     recordings must occur in the same anatomical location
 
@@ -396,7 +398,6 @@ def run(session_path,dest=None,testing=False,no_move_final=False,skip_remove_opt
         no_move_final (_type_): _description_
         no_clean (_type_): _description_
     """
-    rm_intermediate = True
     move_final = not no_move_final
     label = 'kilosort4'
 
