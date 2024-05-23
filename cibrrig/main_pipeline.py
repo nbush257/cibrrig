@@ -46,8 +46,8 @@ class DirectorySelector(QWidget):
     def __init__(self):
         super().__init__()
         self.local_run_path = Path("D:/sglx_data/Subjects")
-        self.remote_archive_path = Path("Z:/projects")
-        self.remote_working_path = Path("Y:/projects")
+        self.remote_archive_path = Path("U:/alf_data_repo/ramirez/Subjects")
+        self.remote_working_path = Path("X:/alf_data_repo/ramirez/Subjects")
         self.remove_opto_artifact = True
         self.run_ephys_qc = True
 
@@ -171,7 +171,8 @@ class OptoFileFinder(QDialog):
             self.close()
 
     def skip_file(self):
-        self.opto_file_selected.emit(None)  # Emit signal with None (skipped)
+        self.opto_file = Path('')
+        self.opto_file_selected.emit(self.opto_file)  # Emit signal with None (skipped)
         self.close()
 
     def get_opto_file(self):  # Method to get opto file after dialog is closed
@@ -293,11 +294,11 @@ def main():
             opto_finder.exec_()
             opto_fn = opto_finder.get_opto_file()
             print(opto_fn)
-            if opto_fn:
+            if opto_fn.name!='':
                 print(f"Copying {opto_fn}")
                 shutil.copy(opto_fn, gate)
             else:
-                print('g')
+                print('Skipping opto file')
 
     for gate in gate_paths:
         wiring_fn = list(gate.glob('nidq.wiring.json'))

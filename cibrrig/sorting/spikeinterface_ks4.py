@@ -407,6 +407,8 @@ def run(session_path,dest=None,testing=False,no_move_final=False,skip_remove_opt
     ephys_dir = session_path.joinpath('raw_ephys_data')
     _log.debug(f'{session_local=}')
     probe_dirs = list(ephys_dir.glob('probe*')) + list(ephys_dir.glob('*imec[0-9]'))
+    n_probes = len(probe_dirs)
+    _log.info(f'{n_probes=}')
 
     
     # Set destination
@@ -460,7 +462,7 @@ def run(session_path,dest=None,testing=False,no_move_final=False,skip_remove_opt
             else:
                 _log.info(f'Moving sorted data from {phy_local} to {phy_dest}')
                 shutil.move(str(phy_local),str(phy_dest))
-    if move_final and rm_intermediate:
+    if move_final and rm_intermediate and n_probes>0:
         _log.info(f'Removing {session_local}')
         shutil.rmtree(session_local)
 
