@@ -57,6 +57,42 @@ def event_counts_per_epochs(event_times,starts,stops,rate=False):
     
 
 
+def parse_opto_log(rr):
+    '''
+    make a readable string from the opto log
+    '''
+    label = rr.label.replace('opto_','')
+    try:
+        np.isnan(rr.phase)
+        phase=''
+    except:
+        phase = rr.phase + ' '
+        
+    try:
+        np.isnan(rr['mode'])
+        mode = ''
+    except:
+        mode= rr['mode']+' '
+        
+    if 'amplitude_mw' in rr.keys():
+        amp = f'{rr.amplitude_mw:2.1f}mW '
+    else:
+        amp = f'{rr.amplitude:1.2f}V '
+    
+    if np.isnan(rr.frequency):
+        freq = ''
+    else:
+        freq = f'{rr.frequency:2.0f}Hz '
+    
+    if np.isnan(rr.pulse_duration):
+        pulse_dur = ''
+    else:
+        pulse_dur = f'{rr.pulse_duration*1000:.0f}ms'
+    
+    
+    out = f'{label} {phase}{mode}{amp}{freq}{pulse_dur}'
+    return(out)
+
 
 def weighted_histogram(x,weights,bins,wrap=False):
     """

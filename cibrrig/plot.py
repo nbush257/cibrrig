@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.colors as mcolors
-from .utils.utils import weighted_histogram
+from .utils.utils import weighted_histogram,parse_opto_log
 from one.alf.io import AlfBunch
 import seaborn as sns
 
@@ -13,8 +13,21 @@ laser_colors ={
 }
 
 def plot_laser(laser_in,**kwargs):
+    '''
+    kwargs:
+    amplitudes
+    ax
+    mode (shade,bar,vline)
+    amp_label
+    wavelength
+    alpha
+    **plot kwargs
+    '''
     if isinstance(laser_in,AlfBunch):
-        _plot_laser_alf(laser_in,**kwargs)
+        if 'category' in laser_in.keys():
+            _plot_laser_log(laser_in,**kwargs)
+        else:
+            _plot_laser_alf(laser_in,**kwargs)
     else:
         _plot_laser_intervals(laser_in,**kwargs)
 
@@ -22,7 +35,7 @@ def _plot_laser_alf(laser_in,**kwargs):
     intervals = laser_in.intervals
     if 'amplitudesMilliwatts' in laser_in.keys():
         amplitudes = laser_in.amplitudesMilliwatts
-        amp_label='mw'
+        amp_label='mW'
     elif 'amplitudesVolts' in laser_in.keys():
         amplitudes = laser_in.amplitudesVolts
         amp_label='command volts'
@@ -37,6 +50,9 @@ def _plot_laser_intervals(intervals,amplitudes=None,ax=None,mode='shade',amp_lab
     if ax is None:
         f = plt.figure()
         ax = f.add_subplot(111)
+    else:
+        ax = ax.twinx()
+
     try:
         iter(alpha)
         alpha_list = True
@@ -66,8 +82,26 @@ def _plot_laser_intervals(intervals,amplitudes=None,ax=None,mode='shade',amp_lab
             new_amps = np.vstack([np.zeros_like(amplitudes),amplitudes]).T.ravel()
         ax.step(intervals.ravel(),new_amps,color=laser_colors[wavelength],**kwargs)
         ax.set_ylabel(amp_label)
+    plt.xlabel('Time (s)')
         
+
+def _plot_laser_log(log,query=None,rotation=45,fontsize=6,**kwargs):
+    opto_df = log.to_df().query('category=="opto"')
+    intervals = opto_df[['start_time','end_time']].values
+    if 'amplitude_mw' in  opto_df.keys():
+        amps = opto_df['amplitude_mw']
+        amp_units='mW'
+    else:
+        amps = opto_df['amplitude']
+        amp_units='command_volts'
     
+    _plot_laser_intervals(intervals,amplitudes=amps,amp_label=amp_units,**kwargs)
+    if query:
+        opto_df = opto_df.query(query)
+    for _, rr in opto_df.iterrows():
+        s = parse_opto_log(rr)
+        plt.text(np.mean([rr.start_time,rr.end_time]),plt.gca().get_ylim()[1],s,rotation=rotation,fontsize=fontsize)
+
 
 # TODO: This works, but needs to be expanded to work for 3D and to be more complete.
 def plot_projection_line(X,cvar,dims=[0,1],cmap='viridis'):
@@ -137,6 +171,7 @@ def plot_3D_projection(X,dims=[0,1,2],cvar=None,ax=None,title='',
 
     return(f,ax)
     
+
 def plot_2D_projection(X,dims=[0,1],cvar=None,ax=None,title='',
                        s=1,vmin=None,vmax=None,cmap='viridis',c='k',alpha=0.2,
                        lims=[-4,4],plot_colorbar=True,colorbar_title=''):
@@ -180,6 +215,7 @@ def clean_polar_axis(ax):
     ax.set_yticks([ax.get_yticks()[-1]])
     ax.set_xticks([0,np.pi/2,np.pi,np.pi*3/2])
     ax.set_xticklabels(['0','$\\frac{\pi}{2}$','$\pi$','$\\frac{-\pi}{2}$'])
+
 
 def clean_linear_radial_axis(ax):
     ax.set_xticks([-np.pi,-np.pi/2,0,np.pi/2,np.pi])
@@ -246,7 +282,3 @@ def plot_polar_average(x,y,t,ax=None,t0=None,tf=None,color='k',bins=50,multi='se
             ax.plot(phase_bins,y_polar,color=c,**plot_kwargs)
     clean_polar_axis(ax)
     return(f,ax,y_polar_out,phase_bins)
-
-
-
-

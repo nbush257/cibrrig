@@ -3,6 +3,8 @@ from pathlib import Path
 import numpy as np
 import spikeglx
 import logging
+import pandas as pd
+from ..preprocess.extract_opto_times import load_opto_calibration
 logging.basicConfig()
 _log = logging.getLogger(__name__)
 _log.setLevel(logging.INFO)
@@ -12,10 +14,10 @@ _log.setLevel(logging.INFO)
 # and thus need to be modified during concatenation
 TEMPORAL_FEATURES = ['intervals','times','on_sec','off_sec','pk_time','inhale_peaks',
                      'exhale_troughs','inhale_onsets','exhale_onsets','inhale_offsets','exhale_offsets',
-                     'inhale_pause_onsetes','exhale_pause_onsets']
+                     'inhale_pause_onsetes','exhale_pause_onsets','start_time','end_time']
 class Recording:
     def __init__(self,session_path):
-        self.session_path = session_path
+        self.session_path = Path(session_path)
         self.raw_ephys_path = self.session_path.joinpath('raw_ephys_data')
         assert self.raw_ephys_path.is_dir(),'Raw ephys data folder does not exist as expected'
         self.alf_path = self.session_path.joinpath('alf')
@@ -63,9 +65,64 @@ class Recording:
         return(alf_obj_out)
     
 
+    def concatenate_log(self,save=True,overwrite=True):
+        try:
+            alf_obj_out = alfio.load_object(self.session_path,'log',extra=f't0',short_keys=True)
+            log_df_out = alf_obj_out.to_df()
+        except:
+            # Doing it this way so that if the files can be loaded, we do not error, but do throw an error if the problem is not the trigger label
+            alf_obj_out = alfio.load_object(self.session_path,'log',short_keys=True)
+            _log.info('Triggers not found. Has this already been concatenated?')
+            # return(alf_obj_out)
+        
+        old_files,old_file_parts = alfio.filter_by(self.session_path,object='log')
+        for ii in range(1,self.n_recs):
+            alf_obj= alfio.load_object(self.session_path,'log',extra=f't{ii:0.0f}',short_keys=True)
+            log_df = alf_obj.to_df()
+            for k in log_df.keys():
+                if len(log_df[k])==0:
+                    continue
+                if k in TEMPORAL_FEATURES:
+                    log_df[k] +=self.breaks[ii]
+
+
+            log_df_out = pd.concat([log_df_out,log_df])
+        log_df_out.reset_index(inplace=True,drop=True)
+        log_df_out = self.improve_opto_log(log_df_out)
+        if save:
+            table_fn = alfio.files.spec.to_alf('log','table',extension='tsv',namespace='cibrrig')
+            log_df_out.drop('Unnamed: 0',axis=1,inplace=True)
+            log_df_out.to_csv(self.session_path.joinpath(table_fn),sep='\t',index=None)
+
+        if overwrite:
+            _log.info('Removing old files')
+            _log.debug(f'\n\t'+'\n\t'.join(old_files))
+            for fn in old_files:
+                self.session_path.joinpath(fn).unlink()
+
+        return(alf_obj_out)
+        
+
+    def improve_opto_log(self,log):
+        '''
+        Grab the amplitudes from the opto json and add scale to log
+        Make pulses have an end time of the pulse duration
+        '''
+
+        opto_calib  = load_opto_calibration(self.session_path)
+        amps_mw = opto_calib(log['amplitude'].values.astype('f'))
+        log['amplitude_mw'] = amps_mw
+        log.loc[log['label']=="opto_pulse",'end_time'] = log['start_time']+log['duration']
+
+        return(log)
+
+
     def concatenate_alf_objects(self,save = True,overwrite=True):
 
         for object_name in self.alf_objects:
+            if  object_name == 'log':
+                _log.debug(f'Do not concatenate log here - it requires special handling')
+                continue
             _log.info(f'Concatenating {object_name}')
             obj_cat = self.concatenate_triggers(object_name)
             old_files,old_file_parts = alfio.filter_by(self.alf_path,object=object_name)
@@ -96,6 +153,11 @@ class Recording:
                     self.alf_path.joinpath(fn).unlink()
             
         
+    def concatenate_session(self,save=True,overwrite=True):
+        self.concatenate_alf_objects(save=save,overwrite=overwrite)
+        self.concatenate_log(save=save,overwrite=overwrite)
+
+
     def load_spikes():
         #TODO: Only keep good cells?
         #TODO: Work with multiple probes?
