@@ -2,6 +2,11 @@
 Standard utility functions
 '''
 import numpy as np
+import pandas as pd
+import logging
+logging.basicConfig()
+_log = logging.getLogger(__name__)
+_log.setLevel(level=logging.INFO)
 
 # May be better in a utils file
 def validate_intervals(starts,stops):
@@ -119,7 +124,17 @@ def weighted_histogram(x,weights,bins,wrap=False):
     return(bins,likli)
 
 def time_to_interval(ts,starts,stops=None,labels=None):
+    """
+    For each event in ts, assign it to an interval defined by starts
+    Stops can be provided to close the interval. If stops is not provided
+    then the interval is closed by the next event in starts
 
+    Args:
+        ts (1D numpy array): Array of event times to classify
+        starts (1D numpy array): Start times of all the intervals to define
+        stops (1D numpy array, optional): Stop times of all the intervals. Must be the same length as starts. Defaults to None.
+        labels (1D numpy array or list, optional): Labels for each interval. Must be the same size as starts. Defaults to None.
+    """
     # Sanitize starts and stops
     if stops:
         validate_intervals(starts,stops)
@@ -137,3 +152,70 @@ def time_to_interval(ts,starts,stops=None,labels=None):
         group = np.vectorize(mapper.get)(group)
 
     return(group)
+
+
+def make_pre_post_trial(alf_object,intervals,window=None,pad=0,vars=None):
+    """
+    Gets paired test/control data from a set of intervals (trials)
+
+    Takes an alf object with a times attribute and finds all the 
+    observations of that variable in each interval. Then comptues a 
+    "control" period that immediately precedes each test interval.
+
+    outputs a pandas pivot table where rows are trial number, split into columns for test and control
+
+
+    Example use case: getting the average value of a variable before and during an opto stimulus train
+
+    Args:
+        alf_object (_type_): _description_
+        intervals (_type_): _description_
+        window (_type_, optional): Size of the control window in seconds. If None, uses the same duration as the test duration. Defaults to None.
+        pad (int, optional): Seconds before the test interval to exclude. Defaults to 0.
+        vars (list,optional): Variables in alf object to aggregate
+    """    
+    #TODO: allow for multiple conditions
+
+    # Unpack
+    ts = alf_object.times
+    starts = intervals[:,0]
+    stops = intervals[:,1]
+
+    # Create control intervals to preceed the test intervals
+    window = window or stops-starts
+    control_starts = starts-window-pad
+    control_stops = starts-pad
+    if np.any(control_starts<0):
+        _log.warning(f"control starts has entries less than 0:\n{control_starts}")
+
+    # Assign observation indicies to intervals
+    test_trial_num = time_to_interval(ts,starts,stops)
+    control_trial_num = time_to_interval(ts,control_starts,control_stops)
+
+    # Make sure observations are not assigned to both test and control
+    overlap = np.logical_and(np.isfinite(test_trial_num),np.isfinite(control_trial_num))
+    if np.any(overlap):
+        _log.warning(f"Observations{np.where(overlap)} are assigned to both test and control")
+
+    # Create condition array
+    condition = np.where(np.isfinite(test_trial_num), 'test', np.where(np.isfinite(control_trial_num), 'control', np.nan))
+
+    # Create trial array
+    trial = np.where(np.isfinite(test_trial_num), test_trial_num, control_trial_num)
+    
+
+    # Pandas manipulations to shape the output data
+    out_df = alf_object.to_df()
+    if vars:
+        if type(vars)!=list:
+            vars = [vars]
+        out_df = out_df[vars]
+    out_df['condition'] = condition
+    out_df['trial'] = trial
+    out_df.dropna(axis=0,subset=['trial'],inplace=True)
+    out_df['trial'] = out_df['trial'].astype('int')
+    agg_data = pd.pivot_table(out_df,columns=['condition'],index='trial')
+
+    return(agg_data)
+
+
