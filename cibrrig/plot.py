@@ -25,11 +25,12 @@ def plot_laser(laser_in,**kwargs):
     '''
     if isinstance(laser_in,AlfBunch):
         if 'category' in laser_in.keys():
-            _plot_laser_log(laser_in,**kwargs)
+            ax=_plot_laser_log(laser_in,**kwargs)
         else:
-            _plot_laser_alf(laser_in,**kwargs)
+            ax=_plot_laser_alf(laser_in,**kwargs)
     else:
-        _plot_laser_intervals(laser_in,**kwargs)
+        ax=_plot_laser_intervals(laser_in,**kwargs)
+    return(ax)
 
 def _plot_laser_alf(laser_in,**kwargs):
     intervals = laser_in.intervals
@@ -50,8 +51,6 @@ def _plot_laser_intervals(intervals,amplitudes=None,ax=None,mode='shade',amp_lab
     if ax is None:
         f = plt.figure()
         ax = f.add_subplot(111)
-    else:
-        ax = ax.twinx()
 
     try:
         iter(alpha)
@@ -76,6 +75,8 @@ def _plot_laser_intervals(intervals,amplitudes=None,ax=None,mode='shade',amp_lab
         ax.vlines(intervals[:,0],y0,y1,color=laser_colors[wavelength],**kwargs)
     else:
     # interleave zeros for the offsets
+        print(f'mode {mode} not found. Plotting as steps')
+        ax = ax.twinx()
         if amplitudes is None:
             new_amps = np.vstack([np.zeros_like(intervals[:,0]),np.ones_like(intervals[:,0])]).T.ravel()
         else:
@@ -83,6 +84,7 @@ def _plot_laser_intervals(intervals,amplitudes=None,ax=None,mode='shade',amp_lab
         ax.step(intervals.ravel(),new_amps,color=laser_colors[wavelength],**kwargs)
         ax.set_ylabel(amp_label)
     plt.xlabel('Time (s)')
+    return(ax)
         
 
 def _plot_laser_log(log,query=None,rotation=45,fontsize=6,**kwargs):
@@ -95,12 +97,14 @@ def _plot_laser_log(log,query=None,rotation=45,fontsize=6,**kwargs):
         amps = opto_df['amplitude']
         amp_units='command_volts'
     
-    _plot_laser_intervals(intervals,amplitudes=amps,amp_label=amp_units,**kwargs)
+    ax = _plot_laser_intervals(intervals,amplitudes=amps,amp_label=amp_units,**kwargs)
     if query:
         opto_df = opto_df.query(query)
     for _, rr in opto_df.iterrows():
         s = parse_opto_log(rr)
-        plt.text(np.mean([rr.start_time,rr.end_time]),plt.gca().get_ylim()[1],s,rotation=rotation,fontsize=fontsize)
+        #TODO: Fix text going big
+        ax.text(np.mean([rr.start_time,rr.end_time]),plt.gca().get_ylim()[1],s,rotation=rotation,fontsize=fontsize)
+    return(ax)
 
 
 # TODO: This works, but needs to be expanded to work for 3D and to be more complete.

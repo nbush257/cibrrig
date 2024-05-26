@@ -117,3 +117,23 @@ def weighted_histogram(x,weights,bins,wrap=False):
         bins = np.concatenate([bins, [bins[0]]])
         likli = np.concatenate([likli, [likli[0]]])
     return(bins,likli)
+
+def time_to_interval(ts,starts,stops=None,labels=None):
+
+    # Sanitize starts and stops
+    if stops:
+        validate_intervals(starts,stops)
+
+    # Preallocate group
+    group = np.zeros(ts.shape[0],dtype='int')*np.nan
+    for ii,(start,stop) in enumerate(zip(starts,stops)):
+        mask = np.logical_and(ts>start,ts<stop)
+        group[mask] = ii
+    
+    # Map integer group to label
+    if labels is not None:
+        assert(len(labels) == len(starts))
+        mapper = {k:v for k,v in enumerate(labels)}
+        group = np.vectorize(mapper.get)(group)
+
+    return(group)
