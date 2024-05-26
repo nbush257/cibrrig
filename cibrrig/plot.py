@@ -286,3 +286,144 @@ def plot_polar_average(x,y,t,ax=None,t0=None,tf=None,color='k',bins=50,multi='se
             ax.plot(phase_bins,y_polar,color=c,**plot_kwargs)
     clean_polar_axis(ax)
     return(f,ax,y_polar_out,phase_bins)
+
+
+def plot_reset_curve(breaths,events,wavelength=473,annotate=False,norm=True,plot_tgl=True):
+    """
+    Plot a reset curve. Designed for opto stimulation plotting
+    TODO: Make general for times, not specifically a breaths alf object since it really only needs on and off timing
+    TODO: maybe normalize to -pi->pi
+
+    returns: (cycle_stim_time,cycle_duration,cycle_stim_time_rand,cycle_duration_rand)
+    (x_stim,y_stim,x_control,y_control)
+
+
+    Args:
+        breaths (AlfBunch): Breath timing data. Needs attributes "times","IBI", and "duration_sec". 
+        events (1D numpy array): Times of events to compute the phase reset for
+        wavelength (int, optional): Wavelength of the optical stimulus. Defaults to 473.
+        annotate (bool, optional): Make annotations and colors on the plot to aid in understanding. Can be noisy. Defaults to False.
+        norm (bool, optional): Whether to normalize the times to phase (0-1). Defaults to True.
+        plot_tgl (bool, optional): Flag to include plotting. Defaults to True.
+    """    
+
+    def _get_relative_times(times,events):
+        idx_last = np.searchsorted(times,events)-1
+        idx_next = idx_last+1
+        t_last = events - times[idx_last]
+        t_next = times[idx_next] - events
+        return(t_last,t_next)
+
+
+    t0,tf = events.min(),events.max()
+    idx = np.logical_and(breaths.times>t0,breaths.times<tf)
+
+    mean_IBI = breaths.IBI[idx].mean()
+    mean_dur = breaths.duration_sec[idx].mean()
+    if norm:
+        norm_value = mean_IBI
+    else:
+        norm_value = 1
+    xmax = []
+    ymax = []
+    rand_samp = np.random.uniform(low=t0,high=tf,size=(100,))
+
+    # Compute and plot vals
+    t_since_last_on_rand,t_to_next_on_end = _get_relative_times(breaths.times,rand_samp)
+    cycle_duration_rand = (t_to_next_on_end+t_since_last_on_rand)/norm_value
+    cycle_stim_time_rand = t_since_last_on_rand/norm_value
+    if plot_tgl:
+        ctrls, = plt.plot(cycle_stim_time_rand, cycle_duration_rand, 'ko', ms=3, alpha=0.5)
+
+    t_since_last_on,t_to_next_on = _get_relative_times(breaths.times,events)
+    cycle_duration= (t_to_next_on+t_since_last_on)/norm_value
+    cycle_stim_time = t_since_last_on/norm_value
+    if plot_tgl:
+        stims, = plt.plot(cycle_stim_time, cycle_duration, 'o', color=laser_colors[wavelength], mec='k', mew=0)
+
+    # # Skip plotting and just output data
+    if not plot_tgl:
+        return(cycle_stim_time,cycle_duration,cycle_stim_time_rand,cycle_duration_rand)
+
+    # Prettify plot
+    if norm:
+        # Essential plot features
+        plt.axvline(mean_dur / mean_IBI, color='k', ls='--', lw=0.5)
+        plt.axhline(1, color='k', ls='--', lw=0.5)
+        plt.plot([0, 2], [0, 2], color='tab:red')
+        plt.xlabel('Stim time (normalized)')
+        plt.ylabel('Cycle duration (normalized)')
+        plt.xlim(0, 1.5)
+        plt.ylim(0, 2)
+        plt.yticks([0, 1, 2])
+        plt.xticks([0, 0.5, 1])
+
+        # Accessory plot features
+        if plot_tgl & annotate:
+            plt.text(0.01, 1.5, 'Prolong inspiration', ha='left', va='bottom', rotation=90)
+            plt.text(0.01, 0.01, 'Shorten inspiration', ha='left', va='bottom', rotation=90)
+            plt.text(mean_dur / mean_IBI + 0.01, mean_dur / mean_IBI + 0.05, 'Phase advance', ha='left', va='bottom',
+                    rotation=90)
+            plt.text(mean_dur / mean_IBI + 0.01, 1.5, 'Phase delay', ha='left', va='bottom', rotation=90)
+
+            plt.fill_between([0, mean_dur / mean_IBI], [0, mean_dur / mean_IBI], [1, 1], color='tab:purple', alpha=0.2)
+            plt.fill_between([0, mean_dur / mean_IBI], [1, 1], [2, 2], color='tab:green', alpha=0.2)
+            pts = np.array([[mean_dur / mean_IBI,1],[1,1],[1.5,1.5],[1.5,2],[mean_dur/mean_IBI,2]])
+            plt.fill(pts[:,0],pts[:,1],color='tab:orange',alpha=0.2)
+            # plt.fill_between([mean_dur / mean_IBI, 1], [1, 1], [2, 2], color='tab:orange', alpha=0.2)
+            plt.fill_between([mean_dur / mean_IBI, 1], [mean_dur / mean_IBI, 1], [1, 1], color='tab:grey', alpha=0.2)
+
+            plt.text(mean_dur / mean_IBI / 2, mean_dur / mean_IBI / 2 * 0.8, 'Lower bound', color='tab:red', rotation=26)
+
+            plt.text(mean_dur / mean_IBI / 2, plt.gca().get_ylim()[1], 'Inspiration', ha='center', va='top')
+            plt.text(mean_dur / mean_IBI + (1 - mean_dur / mean_IBI) / 2, plt.gca().get_ylim()[1], 'Expiration', ha='center',
+                    va='top')
+
+            plt.xlim(0, 1.5)
+            plt.ylim(0, 2)
+            plt.yticks([0, 1, 2])
+            plt.xticks([0, 0.5, 1,1.5])
+    else:
+        xmax = np.max(np.concatenate([t_since_last_on,t_since_last_on_rand]))
+        ymax = np.max(np.concatenate([t_to_next_on,t_to_next_on_end]))
+        plt.axvline(mean_dur, color='k', ls='--', lw=0.5)
+        plt.axhline(mean_IBI, color='k', ls='--', lw=0.5)
+
+        plt.plot([0, mean_dur + mean_IBI], [0, mean_IBI + mean_dur], color='tab:red')
+
+        plt.xlabel('Time since last breath onset (s)')
+        plt.ylabel('Total time between breaths (s)')
+
+        plt.xlim([0,xmax])
+        plt.ylim([0, ymax*1.1])
+
+        # Phase advance
+        pts = np.array([[mean_dur, mean_dur], [mean_IBI, mean_IBI], [mean_dur, mean_IBI]])
+        plt.fill_between(pts[:, 0], pts[:, 1], color='tab:green', alpha=0.3)
+
+        # Phase delay
+        pts = np.array([[mean_dur, mean_IBI], [mean_IBI, mean_IBI], [mean_IBI + mean_dur, mean_IBI + mean_dur],
+                        [mean_IBI + mean_dur, plt.gca().get_ylim()[1]], [mean_dur, plt.gca().get_ylim()[1]]])
+        plt.fill(pts[:, 0], pts[:, 1], color='tab:grey', alpha=0.3)
+
+        # Shorten inspiration
+        pts = np.array([[0, 0], [mean_dur, mean_dur], [mean_dur, mean_IBI], [0, mean_IBI]])
+        plt.fill(pts[:, 0], pts[:, 1], color='tab:purple', alpha=0.3)
+
+        # Prolong inspiration
+        pts = np.array(
+            [[0, mean_IBI], [mean_dur, mean_IBI], [mean_dur, plt.gca().get_ylim()[1]], [0, plt.gca().get_ylim()[1]]])
+        plt.fill(pts[:, 0], pts[:, 1], color='tab:orange', alpha=0.3)
+
+        if annotate:
+            plt.text(mean_dur, mean_dur / 2, 'inspiration\nduration', rotation=90)
+            plt.text(0, (mean_dur + mean_IBI) / 2, 'Shorten inspiration', ha='left')
+            plt.text(0, plt.gca().get_ylim()[1], 'Prolong inspiration', ha='left', va='top')
+            plt.text(mean_dur, (mean_dur + mean_IBI) / 2, 'Advance phase', ha='left', va='center')
+            plt.text(mean_dur, plt.gca().get_ylim()[1], 'Delay phase', ha='left', va='top')
+            plt.text((mean_dur + mean_IBI) / 2, (mean_dur + mean_IBI) / 2, 'Lower bound', color='tab:red', ha='left', va='top')
+            plt.legend([stims, ctrls], ['Stims', 'Random'])
+
+
+    sns.despine()
+    return(cycle_stim_time,cycle_duration,cycle_stim_time_rand,cycle_duration_rand)
