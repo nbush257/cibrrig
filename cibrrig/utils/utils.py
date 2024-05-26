@@ -154,7 +154,7 @@ def time_to_interval(ts,starts,stops=None,labels=None):
     return(group)
 
 
-def make_pre_post_trial(alf_object,intervals,window=None,pad=0,vars=None):
+def make_pre_post_trial(alf_object,intervals,conditions=None,window=None,pad=0,vars=None):
     """
     Gets paired test/control data from a set of intervals (trials)
 
@@ -168,41 +168,70 @@ def make_pre_post_trial(alf_object,intervals,window=None,pad=0,vars=None):
     Example use case: getting the average value of a variable before and during an opto stimulus train
 
     Args:
-        alf_object (_type_): _description_
-        intervals (_type_): _description_
-        window (_type_, optional): Size of the control window in seconds. If None, uses the same duration as the test duration. Defaults to None.
+        alf_object (AlfBunch): Alf data to aggregate
+        intervals (2D numpy array): N x 2 of start and stop times
+        conditions (list or numpy array of strings): Conditions to assign each interval to (e.g., stimulus frequency). Default to None
+        window (float, optional): Size of the control window in seconds. If None, uses the same duration as the test duration. Defaults to None.
         pad (int, optional): Seconds before the test interval to exclude. Defaults to 0.
         vars (list,optional): Variables in alf object to aggregate
     """    
-    #TODO: allow for multiple conditions
-
-    # Unpack
-    ts = alf_object.times
     starts = intervals[:,0]
     stops = intervals[:,1]
 
     # Create control intervals to preceed the test intervals
     window = window or stops-starts
-    control_starts = starts-window-pad
+    control_starts = intervals[:,0]-window-pad
     control_stops = starts-pad
+
     if np.any(control_starts<0):
         _log.warning(f"control starts has entries less than 0:\n{control_starts}")
 
-    # Assign observation indicies to intervals
-    test_trial_num = time_to_interval(ts,starts,stops)
-    control_trial_num = time_to_interval(ts,control_starts,control_stops)
+    # Unpack
+    assert('times' in alf_object.keys()),'Input ALF object must have attribute "times"'
+    ts = alf_object.times
 
-    # Make sure observations are not assigned to both test and control
-    overlap = np.logical_and(np.isfinite(test_trial_num),np.isfinite(control_trial_num))
-    if np.any(overlap):
-        _log.warning(f"Observations{np.where(overlap)} are assigned to both test and control")
+    use_conditions = False
+    if conditions:
+        assert(len(conditions)==intervals.shape[0]),f"Length of conditions ({len(conditions)}) must match length of intervals ({intervals.shape[0]})"
+        unique_conditions = np.unique(conditions)
+        use_conditions = True
+    else:
+        unique_conditions = ['test']
+        conditions = np.array(['test']*len(starts))
 
-    # Create condition array
-    condition = np.where(np.isfinite(test_trial_num), 'test', np.where(np.isfinite(control_trial_num), 'control', np.nan))
 
-    # Create trial array
-    trial = np.where(np.isfinite(test_trial_num), test_trial_num, control_trial_num)
-    
+    # Initialize condition and trial arrays
+    condition = np.full_like(ts, np.nan, dtype=object)
+    comparison = np.full_like(ts, np.nan, dtype=object)
+    trial = np.full_like(ts, np.nan, dtype=float)
+
+    for cond in unique_conditions:
+        # Subset
+        this_condition = np.array(conditions)==cond
+        _starts = starts[this_condition]
+        _stops = stops[this_condition]
+        _control_starts = control_starts[this_condition]
+        _control_stops = control_stops[this_condition]
+
+        # Assign observation indicies to intervals
+        test_trial_num = time_to_interval(ts,_starts,_stops)
+        control_trial_num = time_to_interval(ts,_control_starts,_control_stops)
+
+        # Make sure observations are not assigned to both test and control
+        overlap = np.logical_and(np.isfinite(test_trial_num),np.isfinite(control_trial_num))
+        if np.any(overlap):
+            _log.warning(f"Observations{np.where(overlap)} are assigned to both test and control")
+
+        # Assign condition and trial numbers for test and control
+        condition[np.isfinite(test_trial_num)] = cond
+        condition[np.isfinite(control_trial_num)] = cond
+
+        comparison[np.isfinite(test_trial_num)] = 'test'
+        comparison[np.isfinite(control_trial_num)] = 'control'
+
+        trial[np.isfinite(test_trial_num)] = test_trial_num[np.isfinite(test_trial_num)]
+        trial[np.isfinite(control_trial_num)] = control_trial_num[np.isfinite(control_trial_num)]
+
 
     # Pandas manipulations to shape the output data
     out_df = alf_object.to_df()
@@ -210,11 +239,16 @@ def make_pre_post_trial(alf_object,intervals,window=None,pad=0,vars=None):
         if type(vars)!=list:
             vars = [vars]
         out_df = out_df[vars]
-    out_df['condition'] = condition
+    if use_conditions:
+        out_df['condition'] = condition
     out_df['trial'] = trial
+    out_df['comparison'] = comparison
     out_df.dropna(axis=0,subset=['trial'],inplace=True)
     out_df['trial'] = out_df['trial'].astype('int')
-    agg_data = pd.pivot_table(out_df,columns=['condition'],index='trial')
+    if use_conditions:
+        agg_data = pd.pivot_table(out_df,columns=['condition','comparison'],index='trial')
+    else:
+        agg_data = pd.pivot_table(out_df,columns=['comparison'],index='trial')
 
     return(agg_data)
 
