@@ -228,8 +228,25 @@ def clean_linear_radial_axis(ax):
 
 
 def plot_polar_average(x,y,t,ax=None,t0=None,tf=None,color='k',bins=50,multi='sem',alpha=0.3,**plot_kwargs):
-    #TODO: Sanitize t0,tf to be iterable
-    #TODO: Sanitze
+    """Plot y as a function of x on a polar scale. 
+    x should have domain [-pi,pi]
+    t0 and tf can be times or lists of times. If left  None, the entire data will be considered
+    if t0 and tf are lists or arrays, then  the average of the intervals defined by[t0_i,tf_i] will be computed, and the shaded region will be defined by "multi"
+
+    # TODO: work with multiple conditions
+
+    Args:
+        x (1D numpy array): _description_
+        y (1D numpy array): _description_
+        t (1D numpy array): _description_
+        ax (matplotlib axis, optional): _description_. Defaults to None.
+        t0 (int or list, optional): start times of the epochs to consider. Defaults to None.
+        tf (int or list, optional): end times of the epochs to consider. Defaults to None.
+        color (str, optional): color. Defaults to 'k'.
+        bins (int, optional): number of bins to split the unit circle into. Defaults to 50.
+        multi (str, optional): What metrics to use for the shaded region. Can be ['std','sem']. If not these, then individual traces are plotted. Defaults to 'sem'.
+        alpha (float, optional): Transparency of shaded region. Defaults to 0.3.
+    """    
 
     try:
         iter(t0)
@@ -241,10 +258,9 @@ def plot_polar_average(x,y,t,ax=None,t0=None,tf=None,color='k',bins=50,multi='se
     except:
         tf = [tf]
 
-    try:
-        iter(color)
-    except:
+    if type(color) is not list:
         color = [color]
+
     assert(len(t0)==len(tf)),f'{len(t0)=} and {len(tf)=}; they must have same shape'
 
     
