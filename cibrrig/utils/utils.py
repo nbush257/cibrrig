@@ -136,8 +136,10 @@ def time_to_interval(ts,starts,stops=None,labels=None):
         labels (1D numpy array or list, optional): Labels for each interval. Must be the same size as starts. Defaults to None.
     """
     # Sanitize starts and stops
-    if stops:
+    if stops is not None:
         validate_intervals(starts,stops)
+    else:
+        stops = np.concatenate([starts[1:],[np.inf]])
 
     # Preallocate group
     group = np.zeros(ts.shape[0],dtype='int')*np.nan
@@ -154,7 +156,7 @@ def time_to_interval(ts,starts,stops=None,labels=None):
     return(group)
 
 
-def make_pre_post_trial(alf_object,intervals,conditions=None,window=None,pad=0,vars=None):
+def make_pre_post_trial(alf_object,intervals,conditions=None,window=None,pad=0,vars=None,wide=False):
     """
     Gets paired test/control data from a set of intervals (trials)
     Optionally and flexibly accepts combinatorial condition assignments for each interval
@@ -164,7 +166,8 @@ def make_pre_post_trial(alf_object,intervals,conditions=None,window=None,pad=0,v
     observations of that variable in each interval. Then comptues a 
     "control" period that immediately precedes each test interval.
 
-    outputs a pandas pivot table where rows are trial number, split into columns for test and control
+
+    Can output in "wide" form by creating a pandas pivot table where rows are trial number, split into columns for test and control
 
 
     Example use case: getting the average value of a variable before and during an opto stimulus train
@@ -178,6 +181,7 @@ def make_pre_post_trial(alf_object,intervals,conditions=None,window=None,pad=0,v
         window (float, optional): Size of the control window in seconds. If None, uses the same duration as the test duration. Defaults to None.
         pad (int, optional): Seconds before the test interval to exclude. Defaults to 0.
         vars (list,optional): Variables in alf object to aggregate
+        wide (bool,optional): If true, makes the data wideform
     """    
     starts = intervals[:,0]
     stops = intervals[:,1]
@@ -256,9 +260,16 @@ def make_pre_post_trial(alf_object,intervals,conditions=None,window=None,pad=0,v
     out_df['comparison'] = comparison
     out_df.dropna(axis=0,subset=['trial'],inplace=True)
     out_df['trial'] = out_df['trial'].astype('int')
+    out_df = out_df.reset_index(drop=True)
     if use_conditions:
         agg_data = pd.pivot_table(out_df,columns=categories+['comparison'],index='trial')
     else:
         agg_data = pd.pivot_table(out_df,columns=['comparison'],index='trial')
 
-    return(agg_data)
+    if wide:
+        return(agg_data)
+    else:
+        long_data = agg_data.melt(ignore_index=True)
+        long_data = long_data.rename({None:'vars'},axis=1)
+        return(long_data)
+
