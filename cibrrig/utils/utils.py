@@ -157,6 +157,8 @@ def time_to_interval(ts,starts,stops=None,labels=None):
 def make_pre_post_trial(alf_object,intervals,conditions=None,window=None,pad=0,vars=None):
     """
     Gets paired test/control data from a set of intervals (trials)
+    Optionally and flexibly accepts combinatorial condition assignments for each interval
+    (e.g. grid search on stimulus frequency and amplitude)
 
     Takes an alf object with a times attribute and finds all the 
     observations of that variable in each interval. Then comptues a 
@@ -167,10 +169,12 @@ def make_pre_post_trial(alf_object,intervals,conditions=None,window=None,pad=0,v
 
     Example use case: getting the average value of a variable before and during an opto stimulus train
 
+    If conditions is a pandas dataframe with multiple columns, keeps the column name in the output
+
     Args:
         alf_object (AlfBunch): Alf data to aggregate
         intervals (2D numpy array): N x 2 of start and stop times
-        conditions (list or numpy array of strings): Conditions to assign each interval to (e.g., stimulus frequency). Default to None
+        conditions (list,numpy array, or pandas dataframe): Conditions to assign each interval to (e.g., stimulus frequency). Default to None
         window (float, optional): Size of the control window in seconds. If None, uses the same duration as the test duration. Defaults to None.
         pad (int, optional): Seconds before the test interval to exclude. Defaults to 0.
         vars (list,optional): Variables in alf object to aggregate
@@ -191,27 +195,34 @@ def make_pre_post_trial(alf_object,intervals,conditions=None,window=None,pad=0,v
     ts = alf_object.times
 
     use_conditions = False
-    if conditions:
+    if conditions is not None:
         assert(len(conditions)==intervals.shape[0]),f"Length of conditions ({len(conditions)}) must match length of intervals ({intervals.shape[0]})"
-        unique_conditions = np.unique(conditions)
         use_conditions = True
+        if type(conditions)==list or type(conditions)==np.ndarray:
+            conditions = pd.DataFrame(conditions,columns=['condition'])
     else:
-        unique_conditions = ['test']
-        conditions = np.array(['test']*len(starts))
-
+        conditions = pd.DataFrame(np.array(['test']*len(starts)), columns=['condition'])
+    conditions = conditions.reset_index(drop=True)
+    
+    categories = conditions.columns.to_list()
+    grouped = conditions.groupby(categories)
 
     # Initialize condition and trial arrays
-    condition = np.full_like(ts, np.nan, dtype=object)
+    condition = pd.DataFrame(np.full([ts.shape[0],len(categories)],np.nan,dtype=object),columns=conditions.columns)
     comparison = np.full_like(ts, np.nan, dtype=object)
     trial = np.full_like(ts, np.nan, dtype=float)
 
-    for cond in unique_conditions:
-        # Subset
-        this_condition = np.array(conditions)==cond
-        _starts = starts[this_condition]
-        _stops = stops[this_condition]
-        _control_starts = control_starts[this_condition]
-        _control_stops = control_stops[this_condition]
+    # for category in categories:
+    #     unique_conditions = conditions[category].unique()
+    #     for cond in unique_conditions:
+    #         # Subset
+    for group_keys, group in grouped:
+        # this_condition = conditions[category]==cond
+        # this_condition = this_condition.values
+        _starts = starts[group.index]
+        _stops = stops[group.index]
+        _control_starts = control_starts[group.index]
+        _control_stops = control_stops[group.index]
 
         # Assign observation indicies to intervals
         test_trial_num = time_to_interval(ts,_starts,_stops)
@@ -223,8 +234,8 @@ def make_pre_post_trial(alf_object,intervals,conditions=None,window=None,pad=0,v
             _log.warning(f"Observations{np.where(overlap)} are assigned to both test and control")
 
         # Assign condition and trial numbers for test and control
-        condition[np.isfinite(test_trial_num)] = cond
-        condition[np.isfinite(control_trial_num)] = cond
+        condition.loc[np.isfinite(test_trial_num),categories] = group_keys
+        condition.loc[np.isfinite(control_trial_num),categories] = group_keys
 
         comparison[np.isfinite(test_trial_num)] = 'test'
         comparison[np.isfinite(control_trial_num)] = 'control'
@@ -240,16 +251,14 @@ def make_pre_post_trial(alf_object,intervals,conditions=None,window=None,pad=0,v
             vars = [vars]
         out_df = out_df[vars]
     if use_conditions:
-        out_df['condition'] = condition
+        out_df = out_df.merge(condition,left_index=True,right_index=True)
     out_df['trial'] = trial
     out_df['comparison'] = comparison
     out_df.dropna(axis=0,subset=['trial'],inplace=True)
     out_df['trial'] = out_df['trial'].astype('int')
     if use_conditions:
-        agg_data = pd.pivot_table(out_df,columns=['condition','comparison'],index='trial')
+        agg_data = pd.pivot_table(out_df,columns=categories+['comparison'],index='trial')
     else:
         agg_data = pd.pivot_table(out_df,columns=['comparison'],index='trial')
 
     return(agg_data)
-
-
