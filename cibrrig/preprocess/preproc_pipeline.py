@@ -51,15 +51,16 @@ def run_ephys_qc_session(session_path):
 def run(session_path,skip_ephysqc=False):
     _log.info('RUNNING PREPROCESSING')
     _log.info('Skipping ephysQC') if skip_ephysqc else None
-    try:
-        extract_sync_times.run(session_path)
-        extract_frame_times.run(session_path)
-        extract_opto_times.run(session_path)
-        extract_physiology.run(session_path)
-        if not skip_ephysqc:
-            run_ephys_qc_session(session_path)
-    except:
-        _log.error('Errored out')
+    # try:
+    extract_sync_times.run(session_path)
+    extract_frame_times.run(session_path)
+    extract_opto_times.run(session_path)
+    extract_physiology.run(session_path)
+    if not skip_ephysqc:
+        run_ephys_qc_session(session_path)
+    # except Exception as e:
+        # _log.error('Errored out')
+        # print(e)
 
 @click.command()
 @click.argument('session_path', type=click.Path(exists=True))

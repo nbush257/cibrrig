@@ -275,7 +275,7 @@ class WiringEditor(QDialog):
     def get_output_wiring(self):
         return(self.output_wiring)
 
-
+#TODO: Move video files around intelligently
 def main():
     app = QApplication(sys.argv)
     window = DirectorySelector()

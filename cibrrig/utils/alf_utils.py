@@ -21,7 +21,7 @@ class Recording:
         self.raw_ephys_path = self.session_path.joinpath('raw_ephys_data')
         assert self.raw_ephys_path.is_dir(),'Raw ephys data folder does not exist as expected'
         self.alf_path = self.session_path.joinpath('alf')
-        assert self.raw_ephys_path.is_dir(),'Alf path does not exist as expected'
+        assert self.alf_path.is_dir(),'Alf path does not exist as expected'
         self.ni_fns = list(self.raw_ephys_path.glob('*nidq.bin'))
         self.ni_fns.sort()
         self.n_recs = len(self.ni_fns)
@@ -55,7 +55,11 @@ class Recording:
             return(alf_obj_out)
 
         for ii in range(1,self.n_recs):
-            alf_obj= alfio.load_object(self.alf_path,object_name,extra=f't{ii:0.0f}',short_keys=True)
+            try:
+                alf_obj= alfio.load_object(self.alf_path,object_name,extra=f't{ii:0.0f}',short_keys=True)
+            except:
+                _log.warning(f'{object_name} for trigger {ii} not found. If this was recorded then this is an issue.')
+                continue
             for k in alf_obj.keys():
                 if len(alf_obj[k])==0:
                     continue
