@@ -284,6 +284,8 @@ def main():
 
     # After the GUI is closed, retrieve the selected paths
     local_run_path, remote_archive_path, remote_working_path, remove_opto_artifact, run_ephysQC = window.get_paths()
+    if local_run_path == 'D:/sglx_data/Subjects':
+        raise ValueError('You picked the root Subjects folder. This is a scary thing to do and incorrect.')
 
     gate_paths = list(local_run_path.glob('*_g[0-9]*'))
 

@@ -261,15 +261,36 @@ def make_pre_post_trial(alf_object,intervals,conditions=None,window=None,pad=0,v
     out_df.dropna(axis=0,subset=['trial'],inplace=True)
     out_df['trial'] = out_df['trial'].astype('int')
     out_df = out_df.reset_index(drop=True)
-    if use_conditions:
-        agg_data = pd.pivot_table(out_df,columns=categories+['comparison'],index='trial')
-    else:
-        agg_data = pd.pivot_table(out_df,columns=['comparison'],index='trial')
+    agg_data = out_df.groupby(categories+['comparison','trial']).mean().reset_index()
 
     if wide:
-        return(agg_data)
-    else:
-        long_data = agg_data.melt(ignore_index=True)
-        long_data = long_data.rename({None:'vars'},axis=1)
-        return(long_data)
+        if use_conditions:
+            agg_data = pd.pivot_table(out_df,values=vars,columns=categories+['comparison'],index='trial')
+        else:
+            agg_data = pd.pivot_table(out_df,values=vars,columns=['comparison'],index='trial')
 
+    return(agg_data)
+
+
+def get_pct_diff(df,condition_names,vars):
+    """Given a long form output from "make_pre_post_trial" calculate the percent difference
+
+    Args:
+        df (pandas dataframe): long form pandas data. Must have columns['trial','comparison'] Comparison must be either ['test','control']
+        condition_names (list): columns to treat as conditions (Categories)
+        vars (list): columns to treat as variables and compute %diff on, must be numeric
+    """    
+    control_df = df[df['comparison'] == 'control']
+    test_df = df[df['comparison'] == 'test']
+    merged_df = pd.merge(control_df, test_df, on=condition_names+['trial'], suffixes=('_control', '_test'))
+
+    # Calculate the difference in inst_freq
+    for vv in vars:
+        x = merged_df[f'{vv}_test']
+        y = merged_df[f'{vv}_control']
+        merged_df[f'{vv}_pct_diff'] = 100*((x-y)/y)
+        merged_df[f'{vv}_diff'] = x-y
+    
+    out_columns = condition_names+['trial']+[f'{vv}_pct_diff' for vv in vars] + [f'{vv}_diff' for vv in vars]
+    result_df = merged_df[out_columns]
+    return(result_df)
