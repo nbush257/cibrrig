@@ -68,8 +68,8 @@ def rename_and_move_video(session_path):
     raw_video_folder = session_path.joinpath('raw_video_data')
     raw_video_folder.mkdir()
     for ii,fn in enumerate(video_files):
-        prefix = fn.stem[:-20]
-        alf_fn = spec.to_alf(prefix,'raw',fn.suffix,'cibrrig',extra=f'v{ii:02.0f}')
+        prefix = fn.stem[:-20].split('.')
+        alf_fn = spec.to_alf(prefix[0],'raw',fn.suffix,'cibrrig',extra='.'.join(prefix[1:]))
         fn_out = raw_video_folder.joinpath(alf_fn)
         _log.info(f'Renaming {fn} to {fn_out}')
         shutil.move(fn,fn_out)

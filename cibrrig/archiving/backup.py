@@ -151,7 +151,7 @@ class Archiver:
         self.get_videos_in_sessions()
         print(f'{self.video_files=}')
         if len(self.video_files)==0:
-            print('No video files found. Continuing')
+            print('No uncompressed video files found. Continuing')
             return
         for fn in self.video_files:
             fn_comp = fn.with_suffix('.mp4')
