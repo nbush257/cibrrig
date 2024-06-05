@@ -19,12 +19,12 @@ from pathlib import Path
 import click
 import pandas as pd
 import spikeglx
+import sys
 from one.alf import spec
 try:
     from . import physiology
     from . import nidq_utils
 except:
-    import sys
     sys.path.append('../')
     import physiology
     import nidq_utils
@@ -33,6 +33,11 @@ logging.basicConfig()
 _log = logging.getLogger('extract_physiology')
 _log.setLevel(logging.INFO)
 
+# This is fragile
+if sys.platform == 'linux':
+    BM_PATH = '/active/ramirez_j/ramirezlab/nbush/projects/cibrrig/cibrrig/preprocess'
+else:
+    BM_PATH = r'Y:/projects/cibrrig/cibrrig/preprocess'
 
 def _crop_traces(t,x):
     '''
@@ -218,7 +223,9 @@ def run_one(SR, wiring, v_in, inhale_pos, save_path):
         dia_df.to_parquet(save_path.joinpath(fn_breaths))
         np.save(save_path.joinpath(fn_breath_onsets),np.array([]))
 
-        
+#TODO:
+# Running this not from the cibrrig preprocess folder is problematic because it needs to run the breathmetrics_proc.m file 
+# At this point I don't know how best to incorporate this matlab script into a python workflow without hacking paths         
 def run(session_path, v_in=9, inhale_pos=False, save_path=None,debug=False):
     '''
     Set chan to -1 if no data is recorded.
@@ -248,7 +255,7 @@ def run(session_path, v_in=9, inhale_pos=False, save_path=None,debug=False):
             _log.info('Sending to Breathmetrics')
             command = ['matlab','-batch',f"breathmetrics_proc('{save_path}','{trigger_label}')"]
             try:
-                subprocess.run(command,check=True)
+                subprocess.run(command,check=True,cwd=BM_PATH)
                 # Rewrite using pandas for a strange compatability issue
                 fn = list(save_path.glob(f'*breaths*table*{trigger_label}*.pqt'))[0]
                 aa = pd.read_parquet(fn)
@@ -257,7 +264,7 @@ def run(session_path, v_in=9, inhale_pos=False, save_path=None,debug=False):
             except Exception as e:
                 _log.error(e)
                 _log.error('='*50)
-                _log.error('='*15+ 'BREATHMETRICS FAILED Is it installed on the Matlab path?!!'+ '='*15)
+                _log.error('='*15+ 'BREATHMETRICS FAILED Is it installed on the Matlab path or are you not running from the preprocess folder?!!'+ '='*15)
                 _log.error('='*50)
                 import time
                 time.sleep(5)
