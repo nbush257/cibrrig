@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.colors as mcolors
-from .utils.utils import weighted_histogram,parse_opto_log
+from .utils.utils import weighted_histogram,parse_opto_log,validate_intervals
 from one.alf.io import AlfBunch
 import seaborn as sns
 
@@ -107,16 +107,88 @@ def _plot_laser_log(log,query=None,rotation=45,fontsize=6,**kwargs):
     return(ax)
 
 
-# TODO: This works, but needs to be expanded to work for 3D and to be more complete.
-def plot_projection_line(X,cvar,dims=[0,1],cmap='viridis'):
+#TODO: Clean and refactor some of this line plotting. 
+#TODO: Wrap into population object.
+def plot_projection_line_multicondition(X,tbins,intervals,colors,dims=[0,1],ax=None):
+    '''
+    overlay multiple conditions each with a defined color
+    '''
+    validate_intervals(intervals[:,0],intervals[:,1])
+    assert(len(colors) == intervals.shape[0])
+    if ax is None:
+        f = plt.figure()
+        if len(dims)==2:
+            ax = f.add_subplot()        
+        elif len(dims)==2:
+            ax = f.add_subplot(projection='3d')
+    for ii,cc in enumerate(colors):
+        t0,tf = intervals[ii]
+        s0,sf = np.searchsorted(tbins,[t0,tf])
+        X_sub = X[s0:sf,:]
+        ax = plot_projection_line(X_sub,dims=dims,cvar=None,color=cc,ax=ax)
+
+    pass
+
+def plot_projection_line(X,cvar=None,dims=[0,1],cmap='viridis',**kwargs):
     # Lines are way slower than scatters
     samps = np.arange(X.shape[0])
-    cmap = plt.get_cmap(cmap)  # You can use any other colormap as well
-
+    this_cmap = plt.get_cmap(cmap)  # You can use any other colormap as well
     norm = mcolors.Normalize(vmin=np.min(cvar), vmax=np.max(cvar))
+    if len(dims)==2:
+        ax = _plot_projection_line_2D(X,cvar,dims,cmap=cmap,**kwargs)
+    elif len(dims)==3:
+        ax = _plot_projection_line_3D(X,cvar,dims=dims,**kwargs)
+    else:
+        raise ValueError('Number of dims must be two or three')
 
-    for s0 in samps:
-        plt.plot(X[s0:s0+2,dims[0]],X[s0:s0+2,dims[1]],color=cmap(norm(cvar[s0])))
+    # # TODO Fix colorbar
+    # if plot_colorbar:
+    #     cax = plt.gcf().add_axes([0.25, 0.85, 0.5, 0.02])
+    #     cbar = plt.gcf().colorbar(p,cax=cax,orientation='horizontal')
+    #     cbar.set_label(colorbar_title)
+    #     cbar.solids.set(alpha=1)
+    return(ax)
+
+def _plot_projection_line_2D(X,cvar=None,dims=[0,1],cmap='viridis',color = 'k',ax=None,alpha=0.5):
+    if ax is None:
+        f = plt.figure()
+        ax = f.add_subplot()
+
+    samps = np.arange(X.shape[0])
+    if cvar is not None:
+        norm = mcolors.Normalize(vmin=np.min(cvar), vmax=np.max(cvar))
+        this_cmap = plt.get_cmap(cmap)  
+        for s0 in samps:
+            ax.plot(X[s0:s0+2,dims[0]],X[s0:s0+2,dims[1]],color=this_cmap(norm(cvar[s0])),alpha=alpha)
+    else:
+        for s0 in samps:
+            ax.plot(X[s0:s0+2,dims[0]],X[s0:s0+2,dims[1]],color=color,alpha=alpha)
+    
+    return(ax)
+
+
+def _plot_projection_line_3D(X,cvar=None,dims=[0,1,2],cmap='viridis',color = 'k',
+                             ax=None,title='',alpha=0.5,lims=[-4,4],pane_color=None,
+                             colorbar_title='',plot_colorbar=True):
+    if ax is None:
+        f = plt.figure()
+        ax = f.add_subplot(projection='3d')
+
+    samps = np.arange(X.shape[0])
+    if cvar is not None:
+        norm = mcolors.Normalize(vmin=np.min(cvar), vmax=np.max(cvar))
+        this_cmap = plt.get_cmap(cmap)  # You can use any other colormap as well
+        for s0 in samps:
+            ax.plot(X[s0:s0+2,dims[0]],X[s0:s0+2,dims[1]],X[s0:s0+2,dims[2]],color=this_cmap(norm(cvar[s0])),alpha=alpha)
+    else:
+        for s0 in samps:
+            ax.plot(X[s0:s0+2,dims[0]],X[s0:s0+2,dims[1]],X[s0:s0+2,dims[2]],color=color,alpha=alpha)
+    
+
+
+    _clean_3d_axes(ax,title,dims,pane_color,lims)
+
+    return(ax)
 
 
 def plot_projection(X,dims,**kwargs):
@@ -156,6 +228,11 @@ def plot_3D_projection(X,dims=[0,1,2],cvar=None,ax=None,title='',
             cbar.set_label(colorbar_title)
             cbar.solids.set(alpha=1)
     
+    _clean_3d_axes(ax,title,dims,pane_color,lims)
+
+    return(f,ax)
+
+def _clean_3d_axes(ax,title,dims,pane_color,lims):
     ax.set_title(title)
 
     ax.set_xlim(lims)
@@ -171,10 +248,7 @@ def plot_3D_projection(X,dims=[0,1,2],cvar=None,ax=None,title='',
     if pane_color is not None:
         ax.xaxis.set_pane_color(pane_color)  # Set the color of the x-axis pane
         ax.yaxis.set_pane_color(pane_color)  # Set the color of the y-axis pane
-        ax.zaxis.set_pane_color(pane_color)  # Set the color of the z-axis pane
-
-    return(f,ax)
-    
+        ax.zaxis.set_pane_color(pane_color)  # Set the color of the z-axis pane    
 
 def plot_2D_projection(X,dims=[0,1],cvar=None,ax=None,title='',
                        s=1,vmin=None,vmax=None,cmap='viridis',c='k',alpha=0.2,
