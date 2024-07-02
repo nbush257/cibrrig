@@ -159,7 +159,11 @@ class Recording:
         
     def concatenate_session(self,save=True,overwrite=True):
         self.concatenate_alf_objects(save=save,overwrite=overwrite)
-        self.concatenate_log(save=save,overwrite=overwrite)
+        try:
+            self.concatenate_log(save=save,overwrite=overwrite)
+        except Exception as e:
+            _log.error(e)
+            _log.warning('Log file concatenation failure. This should not happen on new data.')
 
 
     def load_spikes():

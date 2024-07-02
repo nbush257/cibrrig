@@ -202,7 +202,9 @@ def filt_int_ds_dia(x,sr,ds_factor=10,rel_height=0.95,heartbeats=None):
     dia_df = physiology.burst_stats_dia(dia_sub,sr_sub,rel_height=rel_height)
     warnings.filterwarnings('default')
 
-    HR,heartbeats = physiology.get_hr_from_dia(pulse/ds_factor,dia_df,sr_sub)
+    HR = None
+    if heartbeats is None:
+        HR,heartbeats = physiology.get_hr_from_dia(pulse/ds_factor,dia_df,sr_sub)
 
     # Normalize the integrated diaphragm to a z-score.
     dia_df['amp_z'] = dia_df['amp']/np.std(dia_sub)

@@ -130,7 +130,6 @@ def _remove_EKG_explicit(x,sr,heartbeats):
     """
     pks = heartbeats*sr
     pks = pks.astype('int')
-    amps = x[pks]
     win = int(0.010 *sr)
     y = x.copy()
     ekg = np.zeros([2*win,len(pks)])
@@ -151,6 +150,7 @@ def _remove_EKG_explicit(x,sr,heartbeats):
     cls[cls==0]=-1
     m0 = np.nanmean(ekg_std[cls==-1])
     m1 = np.nanmean(ekg_std[cls==1])
+    # Make it so the CLS=1 is the larger standard deviation class (i.e. during a breath)
     if m0>m1:
         cls = -cls
 
@@ -170,9 +170,7 @@ def _remove_EKG_explicit(x,sr,heartbeats):
             first_examp = max(ii-5,0)
             second_examp = min(ii+5,y.shape[0])
             med_ekg = np.nanmedian(ekg[:,first_examp:second_examp],1)
-            med_amp = np.median(amps[first_examp:second_examp])
-            scl = amps[ii]/med_amp
-            y[pk - win:pk + win] -=med_ekg*scl
+            y[pk - win:pk + win] -=med_ekg
 
     y[np.isnan(y)] = np.nanmedian(y)
     return(y)
