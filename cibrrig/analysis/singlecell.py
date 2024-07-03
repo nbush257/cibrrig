@@ -73,6 +73,7 @@ def get_phase_curve(ts,breaths,phi_t=None,phi=None,nbins=100):
     # Package
     out_dict = {}
     out_dict['bins'] = bins
+    out_dict['rate'] = rate
     out_dict['rate_mean'] = rate_mean
     out_dict['rate_std'] = rate_std
     out_dict['rate_sem'] = rate_sem
@@ -102,12 +103,15 @@ def get_all_phase_curves(spike_times,spike_clusters,cluster_ids,breaths,nbins=10
     
     all_rate = np.zeros([nbins,cluster_ids.shape[0]])
     all_sem = np.zeros([nbins,cluster_ids.shape[0]])
+    all_rate_raw = np.zeros([nbins,cluster_ids.shape[0],breaths.on_sec.shape[0]-1])
+
     for ii,clu in enumerate(tqdm(cluster_ids)):
         ts = spike_times[spike_clusters == clu]
         rez = get_phase_curve(ts,breaths,phi_t,phi,nbins=nbins)
+        all_rate_raw[:,ii,:] = rez['rate']
         all_rate[:,ii] = rez['rate_mean']
         all_sem[:,ii] = rez['rate_sem']
-    return(rez['bins'],all_rate,all_sem)
+    return(rez['bins'],all_rate,all_sem,all_rate_raw)
 
 
 

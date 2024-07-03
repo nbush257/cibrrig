@@ -14,7 +14,7 @@ import pandas as pd
 import logging
 import one.alf.io as alfio
 logging.basicConfig()
-_log = logging.getLogger('extract_coherence')
+_log = logging.getLogger('extract_chronux')
 _log.setLevel(logging.INFO)
 sys.path.append('../..') # There are some funky, circular dependencies that will need to be cleaned up
 
