@@ -5,15 +5,20 @@ Not using coherence for the potential concerns that coherence may not be the mos
 """
 
 import logging
+from pathlib import Path
+
+import click
+import matplotlib.pyplot as plt
 import numpy as np
 import one.alf.io as alfio
-import matplotlib.pyplot as plt
 
 try:
-    from ..preprocess.physiology import compute_dia_phase
     from ..analysis.singlecell import get_all_phase_curves
+    from ..preprocess.physiology import compute_dia_phase
 except:
+    from cibrrig.analysis.singlecell import get_all_phase_curves
     from cibrrig.preprocess.physiology import compute_dia_phase
+
 import pandas as pd
 
 logging.basicConfig()
@@ -102,17 +107,38 @@ def _get_eta_squareds(rates):
     return p
 
 
-def compute_resp_mod(spike_times, spike_clusters, cluster_ids, breaths, t0, tf):
-    """Compute respiratory modulation
+# TODO: If no diaphragm data, then breaths probably does not contain on_sec and off_sec...
+def compute_resp_mod(
+    spike_times, spike_clusters, cluster_ids, breaths, t0=None, tf=None
+):
+    """
+    Compute respiratory modulation a la Mazurek et al.
+    Implicitly performs a computation of Phi (i.e., phase from -pi to pi)
+
+    Returns intermediate products of the firing rate as a function of phase primarily for other
+    functions in this module.
+
+    I think this only works for data with diaphragm currently
 
     Args:
-        spikes (_type_): _description_
-        clusters (_type_): _description_
-        breaths (_type_): _description_
-        t0 (_type_): _description_
-        tf (_type_): _description_
-        use_good (bool, optional): _description_. Defaults to False.
+        spike_times (array): Times of all spike occurances
+        spike_clusters (array): Cluster ID of all spike occurances
+        cluster_ids (array): Clusters to compute on.
+        breaths (AlfBunch): Breaths structure that contains on_sec and off_sec
+        t0 (float): Defines the start of the window to compute respiratory modulation, defaults to 0
+        tf (float): Defines the end of the window to compute respiratory modulation, defaults to last spike or breath
+
+    Returns:
+        bins - phase bins
+        rates - spike rate as a function of phase for each cluster
+        sems - spike rate Standard Error as a function of phase for each cluster
+        theta - Preffered phase for each cluster
+        L_dir - Respiratory modulation strength for each cluster
     """
+    t0 = t0 or 0
+    tf = tf or np.min(
+        spike_times, breaths.on_sec
+    )  # Default to the last breath or spike, whichever is earlier
 
     idx = np.logical_and(spike_times > t0, spike_times < tf)
     spike_times = spike_times[idx]
@@ -132,19 +158,28 @@ def compute_resp_mod(spike_times, spike_clusters, cluster_ids, breaths, t0, tf):
 
 # TODO: Set up to use label==1 or metrics=='good'
 def run_probe(
-    probe_path, t0, tf, breaths, use_good=True, verbose=True, plot_tgl=True, save=True
+    probe_path,
+    breaths,
+    t0=None,
+    tf=None,
+    use_good=False,
+    plot_tgl=True,
+    save_tgl=True,
 ):
     """
     Compute coherence using chronux ALF organized spike data in a probe path
+    Wrapper to pass to "compute_resp_mod"
 
     Args:
         probe_path (Pathlib path): path to the ALF spiking data
-        t0 (float): start of the epoch to comute on
-        tf (float): end of the epoch to compute on
-        x (1D numpy array): continuous variable to compute coherence against
-        xt (1D numpy array): timestamps of the x variable
-        use_good (bool, optional): Flag to only compute on neurons that have been designated good. Defaults to True.
+        breaths (AlfBunch): Breaths structure that contains on_sec and off_sec
+        t0 (float): Defines the start of the window to compute respiratory modulation, defaults to 0
+        tf (float): Defines the end of the window to compute respiratory modulation, defaults to last spike or breath
+        use_good (bool, optional): If True, only use "good" units. Defaults to False.
+        plot_tgl (bool, optional): _description_. Defaults to True.
+        save (bool, optional): _description_. Defaults to True.
     """
+
     _log.info(f"Running {probe_path.name}")
     spikes = alfio.load_object(probe_path, "spikes")
     clusters = alfio.load_object(probe_path, "clusters")
@@ -171,9 +206,12 @@ def run_probe(
 
     max_phase = _get_phase_max(bins, rates)
 
-    np.save(probe_path.joinpath("_cibrrig_clusters.respMod.npy"), L_dir)
-    np.save(probe_path.joinpath("_cibrrig_clusters.preferredPhase.npy"), theta)
-    np.save(probe_path.joinpath("_cibrrig_clusters.maxFiringRatePhase.npy"), max_phase)
+    if save_tgl:
+        np.save(probe_path.joinpath("_cibrrig_clusters.respMod.npy"), L_dir)
+        np.save(probe_path.joinpath("_cibrrig_clusters.preferredPhase.npy"), theta)
+        np.save(
+            probe_path.joinpath("_cibrrig_clusters.maxFiringRatePhase.npy"), max_phase
+        )
 
 
 def sanity_check_plots(probe_path, bins, rates, sems, theta, L_dir):
@@ -261,16 +299,16 @@ def sanity_check_plots(probe_path, bins, rates, sems, theta, L_dir):
     plt.savefig(probe_path.joinpath("respMod_all.png"))
 
 
-def run_session(session_path, t0, tf, use_good=True, verbose=True, plot_tgl=True):
+def run_session(session_path, t0=None, tf=None, use_good=False, plot_tgl=True):
     """Run respiratory modulation computation on all probes for a sesssion
 
     Args:
         session_path (Path): _description_
-        t0 (float): start of the epoch to comute on
-        tf (float): end of the epoch to compute on
+        t0 (float,optional): start of the epoch to comute on
+        tf (float,optional): end of the epoch to compute on
         var (str, optional): variable to compute phase locking against. Defaults to 'dia'. Must be in "physiology"
-        use_good (bool, optional): If true, only compute for the "good" units. Defaults to True.
-        verbose (bool, optional): Defaults to True.
+        use_good (bool, optional): If true, only compute for the "good" units. Defaults to False.
+        plot_tgl (bool,optional): Defaults to True
     """
     _log.info(
         f"\nComputing respiratory modulation for {session_path}.\n\t{t0=}\n\t{tf=}\n\t{use_good=}"
@@ -280,5 +318,31 @@ def run_session(session_path, t0, tf, use_good=True, verbose=True, plot_tgl=True
     probe_paths = list(session_path.joinpath("alf").glob("probe[0-9][0-9]"))
     for probe in probe_paths:
         run_probe(
-            probe, t0, tf, x, xt, use_good=use_good, verbose=verbose, plot_tgl=plot_tgl
+            probe,
+            breaths,
+            t0=t0,
+            tf=tf,
+            use_good=use_good,
+            plot_tgl=plot_tgl,
+            save_tgl=True,
         )
+
+
+@click.command()
+@click.argument("session_path")
+@click.option("--t0", is_bool=True)
+@click.option("--tf", is_bool=True)
+@click.option("--use_good", is_bool=True)
+@click.option("--no_plot", is_bool=True)
+def main(session_path, t0, tf, use_good, no_plot):
+    session_path = Path(session_path)
+    run_session(
+        session_path,
+        t0=t0,
+        tf=tf,
+        use_good=use_good,
+        plot_tgl=~no_plot,
+    )
+
+if __name__ == '__main__':
+    main()
