@@ -2,6 +2,7 @@ from ..preprocess.physiology import compute_dia_phase
 import numpy as np
 import warnings
 from tqdm import tqdm
+from joblib import Parallel, delayed
 
 
 def get_phase_curve(ts,breaths,phi_t=None,phi=None,nbins=100):
@@ -100,18 +101,23 @@ def get_all_phase_curves(spike_times,spike_clusters,cluster_ids,breaths,nbins=10
     bins,rate,sem. rate and sem are [nbins x n_cluster_ids]
     '''
     phi_t, phi = compute_dia_phase(breaths.on_sec, breaths.off_sec)
-    
-    all_rate = np.zeros([nbins,cluster_ids.shape[0]])
-    all_sem = np.zeros([nbins,cluster_ids.shape[0]])
-    all_rate_raw = np.zeros([nbins,cluster_ids.shape[0],breaths.on_sec.shape[0]-1])
+    all_rate = np.zeros([nbins, cluster_ids.shape[0]])
+    all_sem = np.zeros([nbins, cluster_ids.shape[0]])
+    all_rate_raw = np.zeros([nbins, cluster_ids.shape[0], breaths.on_sec.shape[0] - 1])
 
-    for ii,clu in enumerate(tqdm(cluster_ids)):
+    def process_cluster(ii, clu):
         ts = spike_times[spike_clusters == clu]
-        rez = get_phase_curve(ts,breaths,phi_t,phi,nbins=nbins)
-        all_rate_raw[:,ii,:] = rez['rate']
-        all_rate[:,ii] = rez['rate_mean']
-        all_sem[:,ii] = rez['rate_sem']
-    return(rez['bins'],all_rate,all_sem,all_rate_raw)
+        rez = get_phase_curve(ts, breaths, phi_t, phi, nbins=nbins)
+        return ii, rez['rate'], rez['rate_mean'], rez['rate_sem'],rez['bins']
+
+    results = Parallel(n_jobs=-1)(delayed(process_cluster)(ii, clu) for ii, clu in enumerate(tqdm(cluster_ids)))
+
+    for ii, rate, rate_mean, rate_sem,bins in results:
+        all_rate_raw[:, ii, :] = rate
+        all_rate[:, ii] = rate_mean
+        all_sem[:, ii] = rate_sem
+
+    return(bins,all_rate,all_sem,all_rate_raw)
 
 
 

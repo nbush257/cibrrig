@@ -137,7 +137,7 @@ def compute_resp_mod(
     """
     t0 = t0 or 0
     tf = tf or np.min(
-        spike_times, breaths.on_sec
+        [np.max(spike_times), np.max(breaths.on_sec)]
     )  # Default to the last breath or spike, whichever is earlier
 
     idx = np.logical_and(spike_times > t0, spike_times < tf)
@@ -183,8 +183,9 @@ def run_probe(
     _log.info(f"Running {probe_path.name}")
     spikes = alfio.load_object(probe_path, "spikes")
     clusters = alfio.load_object(probe_path, "clusters")
-
+    _log.info("Loaded spikes!")
     if use_good:
+        _log.warning("use_good option probably does not work on all datasets as it looks for 'good' in the metrics table")
         cluster_ids = clusters.metrics["cluster_id"][
             clusters.metrics.group == "good"
         ].values
@@ -193,20 +194,24 @@ def run_probe(
         spike_clusters = spikes.clusters[idx]
     else:
         cluster_ids = np.unique(spikes.clusters)
+        spike_times = spikes.times
+        spike_clusters = spikes.clusters
 
     if "resp_mod" in clusters.keys():
         _log.warning("Respiratory modulation already computed. Skipping")
         return
-
+    _log.info("Computing...")
     bins, rates, sems, theta, L_dir = compute_resp_mod(
         spike_times, spike_clusters, cluster_ids, breaths, t0, tf
     )
     if plot_tgl:
+        _log.info("Plotting...")
         sanity_check_plots(probe_path, bins, rates, sems, theta, L_dir)
 
     max_phase = _get_phase_max(bins, rates)
 
     if save_tgl:
+        _log.info("Saving...")
         np.save(probe_path.joinpath("_cibrrig_clusters.respMod.npy"), L_dir)
         np.save(probe_path.joinpath("_cibrrig_clusters.preferredPhase.npy"), theta)
         np.save(
@@ -244,6 +249,9 @@ def sanity_check_plots(probe_path, bins, rates, sems, theta, L_dir):
         ax.vlines(
             theta[i_near], 0, np.max(rates[:, i_near]) * L_dir[i_near], color="tab:red"
         )
+        tt = bins[np.argmax(rates[:, i_near])]
+        rr = np.max(rates[:, i_near])
+        ax.plot(tt,rr,'o',color='tab:blue',lw=0.5,markerfacecolor='w')
 
         ax.set_title(f"Mod:{L_dir[i_near]:0.2f}; Phi:{theta[i_near]:0.1f}", fontsize=6)
 
@@ -274,7 +282,7 @@ def sanity_check_plots(probe_path, bins, rates, sems, theta, L_dir):
     ax.set_title("Modulation histogram")
     plt.suptitle("Respiratory modulation sanity check")
 
-    plt.savefig(probe_path.joinpath("respMod_sanity.png"))
+    plt.savefig(probe_path.joinpath("respMod_sanity.png"),dpi=300,transparent=True)
 
     df_full = pd.DataFrame()
     df_full["L_dir"] = L_dir
@@ -296,7 +304,7 @@ def sanity_check_plots(probe_path, bins, rates, sems, theta, L_dir):
         _ax.set_xlabel("Phase ($\phi$)")
     ax[0].set_ylabel("Unit")
     plt.tight_layout()
-    plt.savefig(probe_path.joinpath("respMod_all.png"))
+    plt.savefig(probe_path.joinpath("respMod_heatmap.png"))
 
 
 def run_session(session_path, t0=None, tf=None, use_good=False, plot_tgl=True):
@@ -330,12 +338,13 @@ def run_session(session_path, t0=None, tf=None, use_good=False, plot_tgl=True):
 
 @click.command()
 @click.argument("session_path")
-@click.option("--t0", is_bool=True)
-@click.option("--tf", is_bool=True)
-@click.option("--use_good", is_bool=True)
-@click.option("--no_plot", is_bool=True)
+@click.option("--t0", default=None, type=float)
+@click.option("--tf", default=None, type=float)
+@click.option("--use_good", is_flag=True)
+@click.option("--no_plot", is_flag=True)
 def main(session_path, t0, tf, use_good, no_plot):
     session_path = Path(session_path)
+
     run_session(
         session_path,
         t0=t0,
@@ -344,5 +353,6 @@ def main(session_path, t0, tf, use_good, no_plot):
         plot_tgl=~no_plot,
     )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
