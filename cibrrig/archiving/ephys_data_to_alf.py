@@ -169,6 +169,11 @@ class Run:
             session_dir = date_dir.joinpath(f'{gate_num:03.0f}')
             gate.rename(session_dir)
             sessions.append(session_dir)
+
+            # Move log files
+            this_gate_logs = self.run_path.glob(f'*log.table*g{gate_num}.t*.tsv')
+            for _gate_log in this_gate_logs:
+                shutil.move(_gate_log,session_dir)
         self.sessions = sessions
 
 
