@@ -19,6 +19,7 @@ import json
 from .archiving import backup,ephys_data_to_alf
 from .preprocess import preproc_pipeline
 from .sorting import spikeinterface_ks4
+import subprocess
 
 DEFAULT_WIRING = {
     "SYSTEM": "3B",
@@ -333,7 +334,12 @@ def main():
 
         # RUN SPIKESORTING
         spikeinterface_ks4.run(session,skip_remove_opto=~remove_opto_artifact)
+        params_files = session.rglob('params.py')
 
+        # PHY EXTRACT WAVEFORMS
+        for pp in params_files:
+            command = ['phy','extract-waveforms',pp]
+            subprocess.run(command,cwd=pp.parent)
     # Move all data:
     shutil.move(local_run_path,remote_working_path)
 

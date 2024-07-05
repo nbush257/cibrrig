@@ -378,7 +378,7 @@ def plot_polar_average(x,y,t,ax=None,t0=None,tf=None,color='k',bins=50,multi='se
     return(f,ax,y_polar_out,phase_bins)
 
 
-def plot_reset_curve(breaths,events,wavelength=473,annotate=False,norm=True,plot_tgl=True):
+def plot_reset_curve(breaths,events,wavelength=473,annotate=False,norm=True,plot_tgl=True,n_control=100):
     """
     Plot a reset curve. Designed for opto stimulation plotting
     TODO: Make general for times, not specifically a breaths alf object since it really only needs on and off timing
@@ -416,14 +416,14 @@ def plot_reset_curve(breaths,events,wavelength=473,annotate=False,norm=True,plot
         norm_value = 1
     xmax = []
     ymax = []
-    rand_samp = np.random.uniform(low=t0,high=tf,size=(100,))
+    rand_samp = np.random.uniform(low=t0,high=tf,size=(n_control,))
 
     # Compute and plot vals
     t_since_last_on_rand,t_to_next_on_end = _get_relative_times(breaths.times,rand_samp)
     cycle_duration_rand = (t_to_next_on_end+t_since_last_on_rand)/norm_value
     cycle_stim_time_rand = t_since_last_on_rand/norm_value
     if plot_tgl:
-        ctrls, = plt.plot(cycle_stim_time_rand, cycle_duration_rand, 'ko', ms=3, alpha=0.5)
+        ctrls, = plt.plot(cycle_stim_time_rand, cycle_duration_rand, 'ko', ms=3, alpha=0.5,mew=0)
 
     t_since_last_on,t_to_next_on = _get_relative_times(breaths.times,events)
     cycle_duration= (t_to_next_on+t_since_last_on)/norm_value
@@ -517,3 +517,4 @@ def plot_reset_curve(breaths,events,wavelength=473,annotate=False,norm=True,plot
 
     sns.despine()
     return(cycle_stim_time,cycle_duration,cycle_stim_time_rand,cycle_duration_rand)
+

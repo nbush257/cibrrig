@@ -261,6 +261,8 @@ def make_pre_post_trial(alf_object,intervals,conditions=None,window=None,pad=0,v
     out_df.dropna(axis=0,subset=['trial'],inplace=True)
     out_df['trial'] = out_df['trial'].astype('int')
     out_df = out_df.reset_index(drop=True)
+    if not use_conditions:
+        categories.remove('condition')
     agg_data = out_df.groupby(categories+['comparison','trial']).mean().reset_index()
 
     if wide:
