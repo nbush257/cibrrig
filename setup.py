@@ -8,7 +8,7 @@ with open("requirements.txt") as f:
 
 setuptools.setup(
     name="cibrrig",
-    version="0.3.2",
+    version="0.3.3",
     author="Nicholas E. Bush",
     description="Tools for data analysis and organization of Neuropixel data recroded on the CIBR rig at SCRI. Influenced by the IBL",
     long_description=long_description,

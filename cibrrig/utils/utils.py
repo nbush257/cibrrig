@@ -274,7 +274,7 @@ def make_pre_post_trial(alf_object,intervals,conditions=None,window=None,pad=0,v
     return(agg_data)
 
 
-def get_pct_diff(df,condition_names,vars):
+def get_pct_diff(df,vars,condition_names=None):
     """Given a long form output from "make_pre_post_trial" calculate the percent difference
 
     Args:
@@ -282,6 +282,7 @@ def get_pct_diff(df,condition_names,vars):
         condition_names (list): columns to treat as conditions (Categories)
         vars (list): columns to treat as variables and compute %diff on, must be numeric
     """    
+    condition_names = condition_names or []
     control_df = df[df['comparison'] == 'control']
     test_df = df[df['comparison'] == 'test']
     merged_df = pd.merge(control_df, test_df, on=condition_names+['trial'], suffixes=('_control', '_test'))
