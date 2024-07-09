@@ -518,3 +518,15 @@ def plot_reset_curve(breaths,events,wavelength=473,annotate=False,norm=True,plot
     sns.despine()
     return(cycle_stim_time,cycle_duration,cycle_stim_time_rand,cycle_duration_rand)
 
+def plot_sweeps(xt,x,times,pre,post,ax = None,**kwargs):
+    '''
+    Time align a trace x to the event times in "times"
+    '''
+    if ax is None:
+        f = plt.figure()
+        ax = f.add_subplot()
+    for tt in times:
+        t0 = tt-pre
+        tf = tt+post
+        s0,st,sf = np.searchsorted(xt,[t0,tt,tf])
+        plt.plot(xt[s0:sf]-xt[st],x[s0:sf],**kwargs)

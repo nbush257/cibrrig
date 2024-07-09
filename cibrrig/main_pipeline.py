@@ -330,7 +330,7 @@ def main():
         # RUN PREPROCESS
         preproc_pipeline.run(session,~run_ephysQC)
         rec = Recording(session)
-        rec.concatenate_alf_objects()
+        rec.concatenate_session()
 
         # RUN SPIKESORTING
         spikeinterface_ks4.run(session,skip_remove_opto=~remove_opto_artifact)

@@ -156,7 +156,7 @@ def time_to_interval(ts,starts,stops=None,labels=None):
     return(group)
 
 
-def make_pre_post_trial(alf_object,intervals,conditions=None,window=None,pad=0,vars=None,wide=False):
+def make_pre_post_trial(alf_object,intervals,conditions=None,window=None,pad=0,vars=None,wide=False,agg_func='mean'):
     """
     Gets paired test/control data from a set of intervals (trials)
     Optionally and flexibly accepts combinatorial condition assignments for each interval
@@ -261,9 +261,11 @@ def make_pre_post_trial(alf_object,intervals,conditions=None,window=None,pad=0,v
     out_df.dropna(axis=0,subset=['trial'],inplace=True)
     out_df['trial'] = out_df['trial'].astype('int')
     out_df = out_df.reset_index(drop=True)
+    var_rename = {x:x+'_'+agg_func for x in vars}
+    out_df = out_df.rename(var_rename,axis=1)
     if not use_conditions:
         categories.remove('condition')
-    agg_data = out_df.groupby(categories+['comparison','trial']).mean().reset_index()
+    agg_data = out_df.groupby(categories+['comparison','trial']).agg(agg_func).reset_index()
 
     if wide:
         if use_conditions:
