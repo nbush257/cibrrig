@@ -299,3 +299,55 @@ def get_pct_diff(df,vars,condition_names=None):
     out_columns = condition_names+['trial']+[f'{vv}_pct_diff' for vv in vars] + [f'{vv}_diff' for vv in vars]
     result_df = merged_df[out_columns]
     return(result_df)
+
+def get_eta(x,xt,event,pre_win=0.5,post_win=None):
+    '''
+    Compute the event triggered average, std, sem of a covariate x
+    :param x: The analog signal to check against
+    :param tvec: the time vector for x
+    :param ts: the timestamps (in seconds) of the event
+    :param pre_win: the window before to average
+    :param post_win: the window after_the spike to average
+
+    :return:
+    '''
+    assert(len(xt)==len(x))
+    if post_win is None:
+        post_win=pre_win
+
+    dt = xt[1]-xt[0]
+    samps = np.searchsorted(xt,event)
+    win_samps_pre = int(pre_win/dt)
+    win_samps_post = int(post_win/dt)
+    event_triggered = np.zeros([win_samps_pre+win_samps_post,len(samps)])
+    for ii,samp in enumerate(samps):
+        if (samp-win_samps_pre)<0:
+            continue
+        if (samp+win_samps_post)>len(x):
+            continue
+        event_triggered[:,ii] = x[samp-win_samps_pre:samp+win_samps_post]
+
+    st_average = np.nanmean(event_triggered,1)
+    st_sem = np.nanstd(event_triggered,1)/np.sqrt(len(samps))
+    st_std = np.nanstd(event_triggered,1)
+    win_t = np.linspace(-pre_win,post_win,(win_samps_pre+win_samps_post))
+    lb = st_average-st_sem
+    ub = st_average+st_sem
+    sta = {'mean':st_average,
+           'sem':st_sem,
+           'std':st_std,
+           't':win_t,
+           'lb':lb,
+           'ub':ub}
+
+    return(sta)
+
+def get_good_spikes(spikes,clusters):
+    '''
+    Convinience function to return only good spikes
+    '''
+    cluster_ids = clusters.metrics.query('bitwise_fail==0')['cluster_id'].values
+    idx = np.isin(spikes.clusters,cluster_ids)
+    for k in spikes.keys():
+        spikes[k] = spikes[k][idx]
+    return(spikes,cluster_ids)
