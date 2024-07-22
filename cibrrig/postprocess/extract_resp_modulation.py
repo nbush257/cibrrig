@@ -185,7 +185,9 @@ def run_probe(
     clusters = alfio.load_object(probe_path, "clusters")
     _log.info("Loaded spikes!")
     if use_good:
-        _log.warning("use_good option probably does not work on all datasets as it looks for 'good' in the metrics table")
+        _log.warning(
+            "use_good option probably does not work on all datasets as it looks for 'good' in the metrics table"
+        )
         cluster_ids = clusters.metrics["cluster_id"][
             clusters.metrics.group == "good"
         ].values
@@ -251,7 +253,7 @@ def sanity_check_plots(probe_path, bins, rates, sems, theta, L_dir):
         )
         tt = bins[np.argmax(rates[:, i_near])]
         rr = np.max(rates[:, i_near])
-        ax.plot(tt,rr,'o',color='tab:blue',lw=0.5,markerfacecolor='w')
+        ax.plot(tt, rr, "o", color="tab:blue", lw=0.5, markerfacecolor="w")
 
         ax.set_title(f"Mod:{L_dir[i_near]:0.2f}; Phi:{theta[i_near]:0.1f}", fontsize=6)
 
@@ -282,7 +284,7 @@ def sanity_check_plots(probe_path, bins, rates, sems, theta, L_dir):
     ax.set_title("Modulation histogram")
     plt.suptitle("Respiratory modulation sanity check")
 
-    plt.savefig(probe_path.joinpath("respMod_sanity.png"),dpi=300,transparent=True)
+    plt.savefig(probe_path.joinpath("respMod_sanity.png"), dpi=300, transparent=True)
 
     df_full = pd.DataFrame()
     df_full["L_dir"] = L_dir
