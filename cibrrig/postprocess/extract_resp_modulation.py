@@ -15,7 +15,7 @@ import one.alf.io as alfio
 try:
     from ..analysis.singlecell import get_all_phase_curves
     from ..preprocess.physiology import compute_dia_phase
-except:
+except ImportError:
     from cibrrig.analysis.singlecell import get_all_phase_curves
     from cibrrig.preprocess.physiology import compute_dia_phase
 
@@ -59,9 +59,9 @@ def get_vector_means(bins, rates):
     L_dir = np.full(n_units, np.nan)
 
     for ii in range(n_units):
-        t, l = _get_vector_mean(bins, rates[:, ii])
+        t, L = _get_vector_mean(bins, rates[:, ii])
         theta[ii] = t
-        L_dir[ii] = l
+        L_dir[ii] = L
     return (theta, L_dir)
 
 
@@ -185,7 +185,9 @@ def run_probe(
     clusters = alfio.load_object(probe_path, "clusters")
     _log.info("Loaded spikes!")
     if use_good:
-        _log.warning("use_good option probably does not work on all datasets as it looks for 'good' in the metrics table")
+        _log.warning(
+            "use_good option probably does not work on all datasets as it looks for 'good' in the metrics table"
+        )
         cluster_ids = clusters.metrics["cluster_id"][
             clusters.metrics.group == "good"
         ].values
@@ -251,7 +253,7 @@ def sanity_check_plots(probe_path, bins, rates, sems, theta, L_dir):
         )
         tt = bins[np.argmax(rates[:, i_near])]
         rr = np.max(rates[:, i_near])
-        ax.plot(tt,rr,'o',color='tab:blue',lw=0.5,markerfacecolor='w')
+        ax.plot(tt, rr, "o", color="tab:blue", lw=0.5, markerfacecolor="w")
 
         ax.set_title(f"Mod:{L_dir[i_near]:0.2f}; Phi:{theta[i_near]:0.1f}", fontsize=6)
 
@@ -282,7 +284,7 @@ def sanity_check_plots(probe_path, bins, rates, sems, theta, L_dir):
     ax.set_title("Modulation histogram")
     plt.suptitle("Respiratory modulation sanity check")
 
-    plt.savefig(probe_path.joinpath("respMod_sanity.png"),dpi=300,transparent=True)
+    plt.savefig(probe_path.joinpath("respMod_sanity.png"), dpi=300, transparent=True)
 
     df_full = pd.DataFrame()
     df_full["L_dir"] = L_dir
@@ -291,7 +293,7 @@ def sanity_check_plots(probe_path, bins, rates, sems, theta, L_dir):
     ub = [0.25, 0.5, 0.75, 1]
     f, ax = plt.subplots(ncols=4)
 
-    for ii, (l, u) in enumerate(zip(lb, ub)):
+    for ii, (l, u) in enumerate(zip(lb, ub)):#NOQA
         df = df_full.query("L_dir>@l & L_dir<@u")
         idx = df.sort_values(["theta"]).index.values
         _ax = ax[ii]
