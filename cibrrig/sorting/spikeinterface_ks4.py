@@ -6,7 +6,7 @@ Data must be reorganized using the preprocess.ephys_data_to_alf.py script or it 
 import spikeinterface.extractors as se
 import spikeinterface.preprocessing as spre
 import spikeinterface.sorters as ss
-import spikeinterface.sortingcomponents.motion_interpolation as sim
+import spikeinterface.sortingcomponents.motion.motion_interpolation as sim
 import spikeinterface.full as si
 from pathlib import Path
 import numpy as np
@@ -24,15 +24,44 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 _log = logging.getLogger("SI-Kilosort4")
 _log.setLevel(logging.INFO)
 
-
 # May want to do a "remove duplicate spikes" after manual sorting  - this would allow manual sorting to merge  units that have some, but not a majority, of duplicated spikes
-
 # Parameters
-job_kwargs = dict(chunk_duration="1s", n_jobs=15, progress_bar=True)
-we_kwargs = dict()
-sorter_params = dict(do_CAR=False, do_correction=True)
-USE_MOTION_SI = not sorter_params["do_correction"]
+if sys.platform == 'linux':
+    import joblib
+    N_JOBS = joblib.effective_n_jobs()
+    CHUNK_DUR = '1s'
+else:
+    N_JOBS=15
+    CHUNK_DUR = '1s'
+
+MOTION_PRESET = "dredge"  # 'kilosort_like','dredge'
+SCRACTH_NAME = f'SCRATCH_{MOTION_PRESET}'
+
+job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=N_JOBS, progress_bar=True)
+si.set_global_job_kwargs(**job_kwargs)
+do_correction = False
+if MOTION_PRESET == 'kilosort_like':
+    do_correction=True
+USE_MOTION_SI = not do_correction
+sorter_params = dict(do_CAR=False, do_correction=do_correction)
 COMPUTE_MOTION_SI = True
+
+EXTENSIONS=dict(
+    random_spikes={'method':'uniform','max_spikes_per_unit':600,'seed':42},
+    waveforms={'ms_before':1.3,'ms_after':2.6},
+    templates={'operators':['average','median','std']},
+    noise_levels={},
+    amplitude_scalings = {},
+    spike_amplitudes={},
+    isi_histograms = {},
+    spike_locations={},
+    unit_locations={},
+    quality_metrics={},
+    template_metrics={},
+    # principal_components={},
+    correlograms={},
+    template_similarity={},
+)
 
 
 # QC presets
@@ -42,14 +71,13 @@ AMP_THRESH = 40.0
 MIN_SPIKES = 500
 
 RUN_PC = False
-MOTION_PRESET = "kilosort_like"  # 'kilosort_like','nonrigid_accurate'
 SORTER = "kilosort4"
-try:
+if sys.platform=='linux':
+    _log.info('Using Linux system')
+    SCRATCH_DIR = None
+else:
     SCRATCH_DIR = Path(r"D:/si_temp")
     SCRATCH_DIR.mkdir(exist_ok=True)
-except Exception:
-    _log.warning("D: drive not found. Are you sorting on the correct computer?")
-
 
 def print_elapsed_time(start_time):
     _log.info(f"Elapsed time: {time.time()-start_time:0.0f} seconds")
@@ -172,7 +200,7 @@ def si_motion(recording, MOTION_PATH):
             **motion_info["parameters"]["interpolate_motion_kwargs"],
         )
     else:
-        _log.info("Motion correction KS-like...")
+        _log.info(f"Motion correction {MOTION_PRESET}...")
         rec_mc, motion_info = si.correct_motion(
             recording,
             preset=MOTION_PRESET,
@@ -282,9 +310,9 @@ def run_probe(
     PHY_DEST = probe_local.joinpath(label)
     # Temporary paths that will not be coming with us?
     SORT_PATH = temp_local.joinpath(".ks4")
-    WVFM_PATH = temp_local.joinpath(".wvfm")
     PREPROC_PATH = temp_local.joinpath(".preproc")
     MOTION_PATH = temp_local.joinpath(".motion")
+    ANALYZER_PATH = temp_local.joinpath('sorting_analyzer')
     probe_local.mkdir(parents=True, exist_ok=True)
 
     if PHY_DEST.exists():
@@ -309,7 +337,7 @@ def run_probe(
 
         # =============== Compute motion if requested.  ============ #
         if COMPUTE_MOTION_SI:
-            rec_mc, motion = si_motion(rec_destriped, MOTION_PATH)
+            rec_mc, motion = si_motion(rec_destriped.astype('float32'), MOTION_PATH)
 
         # ============== Save motion if requested ============== #
         if COMPUTE_MOTION_SI and USE_MOTION_SI:
@@ -336,7 +364,7 @@ def run_probe(
             sorter_name=SORTER,
             recording=recording,
             grouping_property="group",
-            working_folder=SORT_PATH.parent.joinpath("ks4_working"),
+            folder=SORT_PATH.parent.joinpath("ks4_working"),
             verbose=True,
             remove_existing_folder=False,
             **sorter_params,
@@ -344,105 +372,75 @@ def run_probe(
         sort_rez.save(folder=SORT_PATH)
 
     print_elapsed_time(start_time)
+    
+    if ANALYZER_PATH.exists():
+        analyzer = si.load_sorting_analyzer(folder=ANALYZER_PATH)
+        metrics = analyzer.get_extension('quality_metrics').get_data()
 
-    # ========= WAVEFORMS ============= #
-    if WVFM_PATH.exists():
-        _log.info("Found waveforms. Loading")
-        we = si.load_waveforms(WVFM_PATH)
-        sort_rez = we.sorting
     else:
-        _log.info("Extracting waveforms...")
-        we = si.extract_waveforms(
-            recording, sort_rez, folder=WVFM_PATH, sparse=False, **job_kwargs
-        )
-        _log.info("Removing redundant spikes...")
-        sort_rez = si.remove_duplicated_spikes(sort_rez, censored_period_ms=0.166)
-        sort_rez = si.remove_redundant_units(
-            sort_rez, align=False, remove_strategy="max_spikes"
-        )
-        we = si.extract_waveforms(
-            recording,
-            sort_rez,
-            sparse=False,
-            folder=WVFM_PATH,
-            overwrite=True,
-            **job_kwargs,
-        )
+        analyzer = si.create_sorting_analyzer(sorting=sort_rez,recording=recording)
+        analyzer.compute_several_extensions(EXTENSIONS,**job_kwargs)
+        metrics = analyzer.get_extension('quality_metrics').get_data()
+        si.remove_duplicated_spikes(sort_rez, censored_period_ms=0.166)
+        si.remove_redundant_units(analyzer)
+        analyzer.save_as(format='binary_folder',folder=ANALYZER_PATH)
+    # _log.info("Getting suggested merges")
+    # auto_merge_candidates = si.get_potential_auto_merge(analyzer)
+    # pd.DataFrame(auto_merge_candidates).to_csv(
+    #     ANALYZER_PATH.joinpath("potential_merges.tsv"), sep="\t"
+    # )
+    si.export_to_phy(analyzer,output_folder=PHY_DEST,compute_pc_features=False)
 
-    _log.info("Comuting sparsity")
-    sparsity = si.compute_sparsity(we, num_channels=9)
-    print_elapsed_time(start_time)
+    
+    
+    # # Perform automated quality control
+    # query = f"amplitude_cutoff<{AMPLITUDE_CUTOFF} & sliding_rp_violation<{SLIDING_RP} & amplitude_median>{AMP_THRESH}"
+    # good_unit_ids = metrics.query(query).index
+    # metrics["group"] = "mua"
+    # metrics.loc[good_unit_ids, "group"] = "good"
+    # print_elapsed_time(start_time)
 
-    # ============ COMPUTE METRICS ============== #
-    # Compute features
-    _log.info("Computing amplitudes and locations")
-    _ = si.compute_spike_amplitudes(we, load_if_exists=True, **job_kwargs)
-    locations = si.compute_spike_locations(we, load_if_exists=True, **job_kwargs)
-    unit_locations = si.compute_unit_locations(we, load_if_exists=True)
-    _ = si.compute_drift_metrics(we)
 
-    if RUN_PC:
-        _ = si.compute_principal_components(
-            waveform_extractor=we,
-            n_components=5,
-            load_if_exists=True,
-            mode="by_channel_local",
-            **job_kwargs,
-            sparsity=sparsity,
-        )
 
-    # Compute metrics
-    _log.info("Computing metrics")
-    metrics = si.compute_quality_metrics(waveform_extractor=we, load_if_exists=True)
-    _log.info("Template metrics")
-    template_metrics = si.compute_template_metrics(we, load_if_exists=True)
+    # # =================== EXPORT ========= #
+    # _log.info("Exporting to phy")
+    # si.export_to_phy(
+    #     waveform_extractor=we,
+    #     output_folder=PHY_DEST,
+    #     # sparsity=sparsity,
+    #     use_relative_path=True,
+    #     copy_binary=True,
+    #     compute_pc_features=False,
+    #     **job_kwargs,
+    # )
 
-    # Perform automated quality control
-    query = f"amplitude_cutoff<{AMPLITUDE_CUTOFF} & sliding_rp_violation<{SLIDING_RP} & amplitude_median>{AMP_THRESH}"
-    good_unit_ids = metrics.query(query).index
-    metrics["group"] = "mua"
-    metrics.loc[good_unit_ids, "group"] = "good"
-    print_elapsed_time(start_time)
+    # _log.info("Getting suggested merges")
+    # auto_merge_candidates = si.get_potential_auto_merge(we)
+    # pd.DataFrame(auto_merge_candidates).to_csv(
+    #     PHY_DEST.joinpath("potential_merges.tsv"), sep="\t"
+    # )
 
-    # =================== EXPORT ========= #
-    _log.info("Exporting to phy")
-    si.export_to_phy(
-        waveform_extractor=we,
-        output_folder=PHY_DEST,
-        # sparsity=sparsity,
-        use_relative_path=True,
-        copy_binary=True,
-        compute_pc_features=False,
-        **job_kwargs,
-    )
+    # # Make some appends to the phy destination
+    # spike_locations = np.vstack([locations["x"], locations["y"]]).T
+    # np.save(PHY_DEST.joinpath("spike_locations.npy"), spike_locations)
+    # np.save(PHY_DEST.joinpath("cluster_locations.npy"), unit_locations)
+    # shutil.copy(
+    #     PHY_DEST.joinpath("channel_groups.npy"), PHY_DEST.joinpath("channel_shanks.npy")
+    # )
 
-    _log.info("Getting suggested merges")
-    auto_merge_candidates = si.get_potential_auto_merge(we)
-    pd.DataFrame(auto_merge_candidates).to_csv(
-        PHY_DEST.joinpath("potential_merges.tsv"), sep="\t"
-    )
+    # # Make cluster shanks a tsv!
 
-    # Make some appends to the phy destination
-    spike_locations = np.vstack([locations["x"], locations["y"]]).T
-    np.save(PHY_DEST.joinpath("spike_locations.npy"), spike_locations)
-    np.save(PHY_DEST.joinpath("cluster_locations.npy"), unit_locations)
-    shutil.copy(
-        PHY_DEST.joinpath("channel_groups.npy"), PHY_DEST.joinpath("channel_shanks.npy")
-    )
+    # for col in template_metrics:
+    #     this_col = pd.DataFrame(template_metrics[col])
+    #     this_col["cluster_id"] = sort_rez.get_unit_ids()
+    #     this_col = this_col[["cluster_id", col]]
+    #     this_col.to_csv(PHY_DEST.joinpath(f"cluster_{col}.tsv"), sep="\t", index=False)
 
-    # Make cluster shanks a tsv!
-
-    for col in template_metrics:
-        this_col = pd.DataFrame(template_metrics[col])
-        this_col["cluster_id"] = sort_rez.get_unit_ids()
-        this_col = this_col[["cluster_id", col]]
-        this_col.to_csv(PHY_DEST.joinpath(f"cluster_{col}.tsv"), sep="\t", index=False)
-
-    _log.info("Done sorting!")
+    # _log.info("Done sorting!")
 
     plot_motion(MOTION_PATH)
     move_motion_info(MOTION_PATH, PHY_DEST)
-    return PHY_DEST
+    # return PHY_DEST
 
 
 @click.command()
@@ -450,19 +448,20 @@ def run_probe(
 @click.option("--dest", "-d", default=None)
 @click.option("--testing", is_flag=True)
 @click.option("--no_move_final", is_flag=True)
+@click.option("--keep_scratch", is_flag=True)
 @click.option(
     "--skip_remove_opto",
     is_flag=True,
     help="Flag to skip removal of the light artifacts. Probably advisable if light is presented far from the probe.",
 )
-def cli(session_path, dest, testing, no_move_final, skip_remove_opto):
+def cli(session_path, dest, testing, no_move_final, skip_remove_opto,keep_scratch):
     run(
         session_path,
         dest,
         testing,
         no_move_final,
         skip_remove_opto,
-        rm_intermediate=True,
+        rm_intermediate=~keep_scratch,
     )
 
 
@@ -489,6 +488,8 @@ def run(
 
     # Get paths
     session_path = Path(session_path)
+    if sys.platform=='linux':
+        SCRATCH_DIR = session_path.joinpath(SCRACTH_NAME)
     session_local = SCRATCH_DIR.joinpath(
         session_path.parent.name + "_" + session_path.name
     )
@@ -527,7 +528,10 @@ def run(
             + f"\n\t{dest=}"
             + f"\n\t{testing=}"
             + f"\n\t{skip_remove_opto=}"
-            + f"\n\t{label=}\n"
+            + f"\n\t{USE_MOTION_SI=}"
+            + f"\n\t{label=}"
+            + f"\n\t{N_JOBS=}"
+            + f"\n\t{CHUNK_DUR=}\n"
             + "=" * 100
         )
 
