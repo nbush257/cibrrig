@@ -150,10 +150,10 @@ def plot_projection_line_multicondition(
     for ii, cc in enumerate(colors):
         t0, tf = intervals[ii]
         s0, sf = np.searchsorted(tbins, [t0, tf])
-        X_sub = X[s0:sf, :]
+
+        X_sub = X[s0-1:sf, :]
         ax = plot_projection_line(X_sub, dims=dims, cvar=None, color=cc, ax=ax)
 
-    pass
 
 
 def plot_projection_line(X, cvar=None, dims=[0, 1], cmap="viridis", **kwargs):
@@ -755,4 +755,4 @@ def plot_sweeps(xt, x, times, pre, post, ax=None, **kwargs):
         t0 = tt - pre
         tf = tt + post
         s0, st, sf = np.searchsorted(xt, [t0, tt, tf])
-        plt.plot(xt[s0:sf] - xt[st], x[s0:sf], **kwargs)
+        ax.plot(xt[s0:sf] - xt[st], x[s0:sf], **kwargs)
