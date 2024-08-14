@@ -3,7 +3,7 @@ import numpy as np
 from iblutil.numerical import bincount2D
 from scipy.ndimage import gaussian_filter1d
 import logging
-from ..plot import plot_projection
+from ..plot import plot_projection,plot_projection_line
 from ..utils.utils import validate_intervals, remap_time_basis
 
 logging.basicConfig()
@@ -230,8 +230,23 @@ class Population:
             cvar = cvar[s0:sf]
         return plot_projection(X_slice, dims, cvar=cvar, **kwargs)
 
+    def plot_projection_line(self, dims=[0, 1, 2], t0=None, tf=None, cvar=None, **kwargs):
+        t0 = t0 or self.tbins[0]
+        tf = tf or self.tbins[-1]
+        if tf > self.spike_times.max():
+            _log.warning(
+                f"Requested max time {tf=} is greater than the last spike {self.spike_times.max():0.02f}s"
+            )
+        s0, sf = np.searchsorted(self.tbins, [t0, tf])
+        X_slice = self.projection[s0:sf, :]
+        if cvar is not None:
+            cvar = cvar[s0:sf]
+        return plot_projection_line(X_slice, dims=dims, cvar=cvar, **kwargs)
+
     def sync_var(self, x, x_t):
         return remap_time_basis(x, x_t, self.tbins)
 
     def compute_path_lengths(self, t0, tf, ndims=3):
         return compute_path_lengths(self.projection, self.tbins, t0, tf, ndims)
+
+    #TODO: Map rslds data

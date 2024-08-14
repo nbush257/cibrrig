@@ -12,7 +12,7 @@ _log.setLevel(level=logging.INFO)
 
 
 # May be better in a utils file
-def validate_intervals(starts, stops):
+def validate_intervals(starts, stops,overlap_ok=False):
     """
     Validates that two vectors are indeed intervals (monotonic, causal, and non-overlapping)
     """
@@ -21,7 +21,8 @@ def validate_intervals(starts, stops):
         stops
     ), f"Number of starts {len(starts)} does not match number of stops {len(stops)}"
     assert np.all(stops >= starts), "Stops are not all after starts"
-    assert np.all(starts[1:] >= stops[:-1]), "Intervals are overlapping"
+    if not overlap_ok:
+        assert np.all(starts[1:] >= stops[:-1]), "Intervals are overlapping"
 
 
 # May be better in a utils file

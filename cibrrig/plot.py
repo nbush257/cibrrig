@@ -5,8 +5,12 @@ import matplotlib.colors as mcolors
 from .utils.utils import weighted_histogram, parse_opto_log, validate_intervals
 from one.alf.io import AlfBunch
 import seaborn as sns
+from matplotlib.collections import LineCollection
+from mpl_toolkits.mplot3d.art3d import Line3DCollection
+from matplotlib.cm import ScalarMappable
 
-laser_colors = {473: "#00b7ff", 565: "#d2ff00", 653: "#ff0000"}
+
+laser_colors = {473: "#00b7ff", 565: "#d2ff00", 635: "#ff0000"}
 
 
 def plot_laser(laser_in, **kwargs):
@@ -64,20 +68,23 @@ def _plot_laser_intervals(
     except Exception:
         alpha_list = False
 
+    if kwargs.get("color") is not None:
+        color = kwargs.pop("color")
+    else:
+        color = laser_colors[wavelength]
+
     if mode == "shade":
         for ii, stim in enumerate(intervals):
             aa = alpha[ii] if alpha_list else alpha
-            ax.axvspan(
-                stim[0], stim[1], color=laser_colors[wavelength], alpha=aa, **kwargs
-            )
+            ax.axvspan(stim[0], stim[1], color=color, alpha=aa, **kwargs)
     elif mode == "bar":
         yy = ax.get_ylim()[1]
-        yy = np.ones_like(intervals[:, 0]) * yy
+        yy = np.ones_like(intervals[:, 0]) * yy * 0.95
         ax.hlines(
             yy,
             intervals[:, 0],
             intervals[:, 1],
-            color=laser_colors[wavelength],
+            color=color,
             **kwargs,
         )
     elif mode == "vline":
@@ -86,7 +93,7 @@ def _plot_laser_intervals(
 
         y1 = ax.get_ylim()[1]
         y1 = np.ones_like(intervals[:, 0]) * y1
-        ax.vlines(intervals[:, 0], y0, y1, color=laser_colors[wavelength], **kwargs)
+        ax.vlines(intervals[:, 0], y0, y1, color=color, **kwargs)
     else:
         # interleave zeros for the offsets
         print(f"mode {mode} not found. Plotting as steps")
@@ -134,12 +141,12 @@ def _plot_laser_log(log, query=None, rotation=45, fontsize=6, **kwargs):
 # TODO: Clean and refactor some of this line plotting.
 # TODO: Wrap into population object.
 def plot_projection_line_multicondition(
-    X, tbins, intervals, colors, dims=[0, 1], ax=None
+    X, tbins, intervals, colors, dims=[0, 1], ax=None, marker=None, alpha=0.5
 ):
     """
     overlay multiple conditions each with a defined color
     """
-    validate_intervals(intervals[:, 0], intervals[:, 1])
+    validate_intervals(intervals[:, 0], intervals[:, 1], overlap_ok=True)
     assert len(colors) == intervals.shape[0]
     if ax is None:
         f = plt.figure()
@@ -151,9 +158,10 @@ def plot_projection_line_multicondition(
         t0, tf = intervals[ii]
         s0, sf = np.searchsorted(tbins, [t0, tf])
 
-        X_sub = X[s0-1:sf, :]
-        ax = plot_projection_line(X_sub, dims=dims, cvar=None, color=cc, ax=ax)
-
+        X_sub = X[s0 - 1 : sf, :]
+        ax = plot_projection_line(
+            X_sub, dims=dims, cvar=None, color=cc, marker=marker, alpha=alpha, ax=ax
+        )
 
 
 def plot_projection_line(X, cvar=None, dims=[0, 1], cmap="viridis", **kwargs):
@@ -175,31 +183,47 @@ def plot_projection_line(X, cvar=None, dims=[0, 1], cmap="viridis", **kwargs):
 
 
 def _plot_projection_line_2D(
-    X, cvar=None, dims=[0, 1], cmap="viridis", color="k", ax=None, alpha=0.5
+    X,
+    cvar=None,
+    dims=[0, 1],
+    cmap="viridis",
+    color="k",
+    ax=None,
+    alpha=0.5,
+    vmin=None,
+    vmax=None,
+    lw=0.5,
+    colorbar_title='',
+    **kwargs,
 ):
     if ax is None:
         f = plt.figure()
         ax = f.add_subplot()
 
-    samps = np.arange(X.shape[0])
+
+    segments = np.stack([X[:-1,dims], X[1:,dims]], axis=1)
+
     if cvar is not None:
-        norm = mcolors.Normalize(vmin=np.min(cvar), vmax=np.max(cvar))
-        this_cmap = plt.get_cmap(cmap)
-        for s0 in samps:
-            ax.plot(
-                X[s0 : s0 + 2, dims[0]],
-                X[s0 : s0 + 2, dims[1]],
-                color=this_cmap(norm(cvar[s0])),
-                alpha=alpha,
-            )
+        vmin = vmin or np.min(cvar)
+        vmax = vmax or np.max(cvar)
+        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+        lc = LineCollection(segments,alpha=alpha,lw=lw,cmap=cmap,**kwargs)
+        lc.set_array(cvar)
+        lc.set_norm(norm)
     else:
-        for s0 in samps:
-            ax.plot(
-                X[s0 : s0 + 2, dims[0]],
-                X[s0 : s0 + 2, dims[1]],
-                color=color,
-                alpha=alpha,
-            )
+        lc = LineCollection(segments,alpha=alpha,lw=lw,**kwargs)
+        lc.set_color(color)
+    
+    ax.add_collection(lc)
+    ax.autoscale()
+    ax.set_aspect('equal')
+    ax.set_xlabel(f'Dim {dims[0]+1}')
+    ax.set_ylabel(f'Dim {dims[1]+1}')
+
+    cbar = plt.colorbar(lc, ax=ax)
+    cbar.set_label(colorbar_title)
+    cbar.solids.set_alpha(1)
+
 
     return ax
 
@@ -217,32 +241,37 @@ def _plot_projection_line_3D(
     pane_color=None,
     colorbar_title="",
     plot_colorbar=True,
+    vmin=None,
+    vmax=None,
+    lw=0.5,
+    **kwargs,
 ):
+
+    ax = None
     if ax is None:
         f = plt.figure()
         ax = f.add_subplot(projection="3d")
+    segments = np.stack([X[:-1,dims], X[1:,dims]], axis=1)
 
-    samps = np.arange(X.shape[0])
     if cvar is not None:
-        norm = mcolors.Normalize(vmin=np.min(cvar), vmax=np.max(cvar))
-        this_cmap = plt.get_cmap(cmap)  # You can use any other colormap as well
-        for s0 in samps:
-            ax.plot(
-                X[s0 : s0 + 2, dims[0]],
-                X[s0 : s0 + 2, dims[1]],
-                X[s0 : s0 + 2, dims[2]],
-                color=this_cmap(norm(cvar[s0])),
-                alpha=alpha,
-            )
+        vmin = vmin or np.min(cvar)
+        vmax = vmax or np.max(cvar)
+        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+        cmap = plt.get_cmap(cmap)
+        colors = cmap(norm(cvar[:-1]))
+        lc = Line3DCollection(segments,alpha=np.ones_like(cvar[:-1])*alpha,lw=lw,colors=colors,**kwargs)
+        lc.set_norm(norm)
+        sm = ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array(colors)
+        cbar = plt.colorbar(sm, ax=ax, pad=0.1)
+        cbar.set_label(colorbar_title)
+        cbar.solids.set_alpha(1)
     else:
-        for s0 in samps:
-            ax.plot(
-                X[s0 : s0 + 2, dims[0]],
-                X[s0 : s0 + 2, dims[1]],
-                X[s0 : s0 + 2, dims[2]],
-                color=color,
-                alpha=alpha,
-            )
+        lc = Line3DCollection(segments,alpha=alpha,lw=lw,**kwargs)
+        lc.set_color(color)
+    
+    ax.add_collection(lc)
+    ax.autoscale()
 
     _clean_3d_axes(ax, title, dims, pane_color, lims)
 
