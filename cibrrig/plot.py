@@ -141,7 +141,7 @@ def _plot_laser_log(log, query=None, rotation=45, fontsize=6, **kwargs):
 # TODO: Clean and refactor some of this line plotting.
 # TODO: Wrap into population object.
 def plot_projection_line_multicondition(
-    X, tbins, intervals, colors, dims=[0, 1], ax=None, marker=None, alpha=0.5
+    X, tbins, intervals, colors, dims=[0, 1], ax=None, alpha=0.5,lw=1
 ):
     """
     overlay multiple conditions each with a defined color
@@ -160,7 +160,7 @@ def plot_projection_line_multicondition(
 
         X_sub = X[s0 - 1 : sf, :]
         ax = plot_projection_line(
-            X_sub, dims=dims, cvar=None, color=cc, marker=marker, alpha=alpha, ax=ax
+            X_sub, dims=dims, cvar=None, color=cc, alpha=alpha, ax=ax,lw=lw
         )
 
 
@@ -220,9 +220,10 @@ def _plot_projection_line_2D(
     ax.set_xlabel(f'Dim {dims[0]+1}')
     ax.set_ylabel(f'Dim {dims[1]+1}')
 
-    cbar = plt.colorbar(lc, ax=ax)
-    cbar.set_label(colorbar_title)
-    cbar.solids.set_alpha(1)
+    if cvar is not None:
+        cbar = plt.colorbar(lc, ax=ax)
+        cbar.set_label(colorbar_title)
+        cbar.solids.set_alpha(1)
 
 
     return ax
