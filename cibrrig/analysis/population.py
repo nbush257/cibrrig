@@ -5,6 +5,7 @@ from scipy.ndimage import gaussian_filter1d
 import logging
 from ..plot import plot_projection,plot_projection_line
 from ..utils.utils import validate_intervals, remap_time_basis
+import pickle
 
 logging.basicConfig()
 _log = logging.getLogger("population")
@@ -181,6 +182,7 @@ class Population:
         self.pca = None
         self.transform = None
         self.projection_speed = None
+        self.has_ssm = False
 
     def compute_projection(self):
         # Preprocess
@@ -249,4 +251,18 @@ class Population:
     def compute_path_lengths(self, t0, tf, ndims=3):
         return compute_path_lengths(self.projection, self.tbins, t0, tf, ndims)
 
-    #TODO: Map rslds data
+    def load_rslds(self,fn,t0,tf):
+        if self.projection is not None:
+            _log.warning('Replacing PCA projection with RSLDS Latent')
+        with open(fn,'rb') as fid:
+            dat = pickle.load(fid)
+        self.has_ssm = True
+        self.projection = dat['q'].mean_continuous_states[0]
+        self.rslds = dat['rslds']
+
+
+        #TODO: Map the rslds projection that has already been computed
+        #TODO: Infer the rslds projection based on the raster for [t0,tf]
+        #TODO: replace projection with latnet
+
+        pass
