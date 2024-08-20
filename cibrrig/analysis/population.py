@@ -156,6 +156,17 @@ def _subset_raster(raster, tbins, t0, tf):
     return (raster_out, tbins_out)
 
 
+def get_good_spikes(spikes, clusters):
+    """
+    Convinience function to return only good spikes
+    """
+    cluster_ids = clusters.metrics.query("bitwise_fail==0")["cluster_id"].values
+    idx = np.isin(spikes.clusters, cluster_ids)
+    for k in spikes.keys():
+        spikes[k] = spikes[k][idx]
+    _log.info(f'Total clusters: {clusters.metrics.shape[0]}\nQC pass {cluster_ids.size}\nKeeping only good clusters.')
+    return (spikes, cluster_ids)
+
 class Population:
     def __init__(
         self,
@@ -182,7 +193,7 @@ class Population:
         self.pca = None
         self.transform = None
         self.projection_speed = None
-        self.has_ssm = False
+        self.has_ssm = False                
 
     def compute_projection(self):
         # Preprocess

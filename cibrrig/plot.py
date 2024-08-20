@@ -248,7 +248,6 @@ def _plot_projection_line_3D(
     **kwargs,
 ):
 
-    ax = None
     if ax is None:
         f = plt.figure()
         ax = f.add_subplot(projection="3d")
