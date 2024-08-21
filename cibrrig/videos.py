@@ -19,10 +19,11 @@ HISTORY_KWARGS = dict(color="C1", lw=0.75, alpha=0.75)
 AUX_KWARGS = dict(lw=0.5, color="C1")
 
 # TODO: Organize default arguments?
-# TODO: plot only low_D
 # TODO: plot without stims (Maybe intervals can be empty)
+# TODO: Refactor?
 
-
+# TODO: allow for 3D
+# TODO: allow for rotation
 # TODO: Make stim history stay as the stim color
 def make_aux_raster_projection_with_stims(
     pop,
