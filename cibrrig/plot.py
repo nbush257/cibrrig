@@ -786,3 +786,54 @@ def plot_sweeps(xt, x, times, pre, post, ax=None, **kwargs):
         tf = tt + post
         s0, st, sf = np.searchsorted(xt, [t0, tt, tf])
         ax.plot(xt[s0:sf] - xt[st], x[s0:sf], **kwargs)
+
+
+def plot_most_likely_dynamics(
+    model,
+    xlim=(-4, 4),
+    ylim=(-3, 3),
+    nxpts=20,
+    nypts=20,
+    alpha=0.8,
+    ax=None,
+    figsize=(3, 3),
+    colors=[f'C{x}' for x in range(7)],
+):
+    '''
+    Plotting of underlying vector fields from Linderman Lab
+    '''
+
+    K = model.K
+    assert model.D == 2
+    x = np.linspace(*xlim, nxpts)
+    y = np.linspace(*ylim, nypts)
+    X, Y = np.meshgrid(x, y)
+    xy = np.column_stack((X.ravel(), Y.ravel()))
+
+    # Get the probability of each state at each xy location
+    z = np.argmax(xy.dot(model.transitions.Rs.T) + model.transitions.r, axis=1)
+
+    if ax is None:
+        fig = plt.figure(figsize=figsize)
+        ax = fig.add_subplot(111)
+
+    for k, (A, b) in enumerate(zip(model.dynamics.As, model.dynamics.bs)):
+        dxydt_m = xy.dot(A.T) + b - xy
+
+        zk = z == k
+        if zk.sum(0) > 0:
+            ax.quiver(
+                xy[zk, 0],
+                xy[zk, 1],
+                dxydt_m[zk, 0],
+                dxydt_m[zk, 1],
+                color=colors[k % len(colors)],
+                alpha=alpha,
+            )
+
+    ax.set_xlabel("$x_1$")
+    ax.set_ylabel("$x_2$")
+
+
+    return ax
+

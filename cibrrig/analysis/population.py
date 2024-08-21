@@ -3,7 +3,7 @@ import numpy as np
 from iblutil.numerical import bincount2D
 from scipy.ndimage import gaussian_filter1d
 import logging
-from ..plot import plot_projection,plot_projection_line
+from ..plot import plot_projection,plot_projection_line,plot_most_likely_dynamics
 from ..utils.utils import validate_intervals, remap_time_basis
 import pickle
 
@@ -12,7 +12,6 @@ _log = logging.getLogger("population")
 _log.setLevel(logging.INFO)
 
 
-# TODO: get phi_binned average projection (may be better in a utils folder)
 def rasterize(spike_times, spike_clusters, binsize, FR=False):
     """
     Turn spike times and cluster ids into a 2D array of spikecounts per time bin
@@ -20,8 +19,6 @@ def rasterize(spike_times, spike_clusters, binsize, FR=False):
 
     Args:
         binsize (float): Raster time bin size in seconds
-    """
-    """
     """
     raster, tbins, cbins = bincount2D(spike_times, spike_clusters, binsize)
     raster = raster.astype("float")
@@ -197,6 +194,9 @@ class Population:
 
     def compute_projection(self):
         # Preprocess
+        if self.projection is not None:
+            _log.warning('Overwriting existing projection. May casue crashses')
+
         rez = preprocess_pca(
             self.spike_times,
             self.spike_clusters,
@@ -238,7 +238,14 @@ class Population:
                 f"Requested max time {tf=} is greater than the last spike {self.spike_times.max():0.02f}s"
             )
         s0, sf = np.searchsorted(self.tbins, [t0, tf])
+        if len(dims)>self.projection.shape[1]:
+            _log.warning('Projection has fewer dims than requested. Only plotting first two requested')
+            dims = dims[:2]
+
         X_slice = self.projection[s0:sf, :]
+        if np.any(np.isnan(X_slice)):
+            _log.error('Requested projection has NaNs')
+            return
         if cvar is not None:
             cvar = cvar[s0:sf]
         return plot_projection(X_slice, dims, cvar=cvar, **kwargs)
@@ -250,8 +257,15 @@ class Population:
             _log.warning(
                 f"Requested max time {tf=} is greater than the last spike {self.spike_times.max():0.02f}s"
             )
+        if len(dims)>self.projection.shape[1]:
+            _log.warning('Projection has fewer dims than requested. Only plotting first two requested')
+            dims = dims[:2]
+
         s0, sf = np.searchsorted(self.tbins, [t0, tf])
         X_slice = self.projection[s0:sf, :]
+        if np.any(np.isnan(X_slice)):
+            _log.error('Requested projection has NaNs')
+            return
         if cvar is not None:
             cvar = cvar[s0:sf]
         return plot_projection_line(X_slice, dims=dims, cvar=cvar, **kwargs)
@@ -262,18 +276,160 @@ class Population:
     def compute_path_lengths(self, t0, tf, ndims=3):
         return compute_path_lengths(self.projection, self.tbins, t0, tf, ndims)
 
-    def load_rslds(self,fn,t0,tf):
+    def compute_raster(self,binsize=0.005,t0=None,tf=None,FR=False,cluster_ids=None):
+        '''
+        Makes compute raster a method of the population
+        De-couples the raster from the projection
+        '''
+        t0 = t0 or 0
+        tf = tf or np.max(self.spike_times)
+        idx = np.logical_and(
+            self.spike_times>t0,
+            self.spike_times<tf
+        )
+        if cluster_ids is not None:
+            idx_clusters = np.isin(self.spike_clusters,cluster_ids)
+            idx = np.logical_and(idx,idx_clusters)
+        self.raster,self.tbins,self.cbins = rasterize(self.spike_times[idx],self.spike_clusters[idx],binsize,FR=FR)
+
+
+    def load_rslds(self,ssm_fn,fit_on_load=False):
+        '''
+        Load a precomputed Linderman RSLDS model from a pickle file
+        '''
         if self.projection is not None:
             _log.warning('Replacing PCA projection with RSLDS Latent')
-        with open(fn,'rb') as fid:
+        with open(ssm_fn,'rb') as fid:
+            _log.debug(f'Loading ssm from {ssm_fn=}')
             dat = pickle.load(fid)
+            _log.debug('\n\t'.join(['']))
         self.has_ssm = True
-        self.projection = dat['q'].mean_continuous_states[0]
+        # Unpack into population object
+
+        self.pca=None
+        self.sigma=None
+
         self.rslds = dat['rslds']
+        self.q = dat['q']
+        self.ndims = dat['D']
+        self.binsize=dat['binsize']
+        self.cbins = dat['cbins']
+
+        # First check that the cluster ids match:
+        # IF they do not match, determine if we can subset the spikes
+        
+        # There is a possibility that if you load the 
+        # wrong data set and the incoming rslds model has more clusters than the 
+        # given spiking data, that this will not complain and you will work with incompatible datasets. 
+        # This is not likely I think if you are good about loading in datasets.
+        existing_clusters = np.unique(self.spike_clusters)
+        if not np.array_equal(existing_clusters,self.cbins):
+            if np.setdiff1d(self.cbins,existing_clusters).size==0:
+                # The existing clusters can all be found in the rslds dataset. We can subset
+                _log.debug('All existing clusters were found. Creating raster')
+                self.compute_raster(self.binsize,cluster_ids=self.cbins)
+                self.raster = self.raster.astype('int') # For rslds
+            else:
+                _log.error('Existing clusters are not all found in the incoming RSLDS model. Did you load the right dataset')
+        else:
+            _log.debug('Incoming RSLDS matches existing population')
+
+        #TODO: set bins where there is no projection equal to NaN
+        idx = np.searchsorted(self.tbins,dat['tbins'])
+        latent = dat['q'].mean_continuous_states[0]
+
+        self.projection = np.full([self.tbins.shape[0],latent.shape[1]],np.nan)
+        self.projection[idx,:] = latent
+
+        if fit_on_load:
+            # Must have a raster and that raster clusterids must match the fitted RSLDS
+            self.smooth_rslds()
+
+    def sim_rslds(self,duration):
+        '''
+        Simulate the latent for a given duration (in s)
+        Adds a dictionary with keys ['discrete_states','continuous_states','emissions','sim_time'] to the population object 
+
+        #TODO: pass initial state
+        '''
+        if not self.has_ssm:
+            _log.error('SSM is not computed')
+            self.sim_rslds = None
+            return None
+
+        # Determine time basis
+        sim_time = np.arange(0,duration,self.binsize)
+        nsamps = sim_time.shape[0]
+
+        #Compute
+        discrete_states,continuous_states,emissions = self.rslds.sample(nsamps)
+
+        # Add as attribute
+        self.sim_rslds = dict(
+            discrete_states=discrete_states,
+            sim_time=sim_time,
+            continuous_states=continuous_states,
+            emission=emissions
+        )
 
 
-        #TODO: Map the rslds projection that has already been computed
-        #TODO: Infer the rslds projection based on the raster for [t0,tf]
-        #TODO: replace projection with latnet
+    def transform_rslds(self,t0,tf):
+        '''
+        Compute the latent for a given interval [t0,tf]
+        First checks if the latent already exists.
+        return:
+            elbos - estimate of fit
+            posterior = slds posterior object
+            latent - continuous states of the posterior
 
-        pass
+        '''
+        if not self.has_ssm:
+            _log.error('SSM is not computed')
+            self.sim_rslds = None
+            return None
+
+        #TODO: place posterior data in projection
+        sub_raster,sub_tbins = _subset_raster(self.raster,self.tbins,t0=t0,tf=tf)
+        elbos,posterior = self.rslds.approximate_posterior(sub_raster.astype('int').T)
+        latent = posterior.mean_continuous_states[0]
+
+        idx = np.searchsorted(self.tbins,sub_tbins)
+        self.projection[idx,:] = latent
+
+        # Slot the data in to self.projection. Make sure tbins is correct
+        return(elbos,posterior,latent)
+
+
+    def plot_flowfield(self,t0=None,tf=None, ax=None,nxpts=20,nypts=20,alpha=0.8,colors=None,**kwargs):
+        '''
+        Plot the flow field of the dynamics. 
+        Wrapper to linderman Lab code in plot.py
+        '''
+        t0=t0 or 0
+        tf=tf or self.tbins.max()
+        s0,sf = np.searchsorted(self.tbins,[t0,tf])
+        colors = colors or [f'C{x}' for x in range(7)]
+
+        # Get plot ranges
+        if ax is not None:
+            xlim=ax.get_xlim()
+            ylim=ax.get_ylim()
+        else:
+            mins = self.projection.min(0)
+            maxs = self.projection.max(0)
+            xlim = (mins[0],maxs[0])
+            ylim = (mins[1],maxs[1])
+        ax = plot_most_likely_dynamics(
+            self.rslds,
+            xlim=xlim,
+            ylim=ylim,
+            ax=ax,
+            nxpts=nxpts,
+            nypts=nypts,
+            alpha=alpha,
+            colors=colors,
+            **kwargs
+
+        )
+        
+        
