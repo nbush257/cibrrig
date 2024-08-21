@@ -289,7 +289,6 @@ def _trim_axes(ax, pop, t0, tf, dims):
 def _plot_xy_plane(ax, **kwargs):
     xlim = ax.get_xlim()
     ylim = ax.get_ylim()
-    zlim = ax.get_zlim()
 
     # Define the grid for the plane based on the current x and y limits
     x = np.linspace(xlim[0], xlim[1], 10)
