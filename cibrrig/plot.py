@@ -165,7 +165,6 @@ def plot_projection_line_multicondition(
 
 
 def plot_projection_line(X, cvar=None, dims=[0, 1], cmap="viridis", **kwargs):
-    # Lines are way slower than scatters
     if len(dims) == 2:
         ax = _plot_projection_line_2D(X, cvar, dims, cmap=cmap, **kwargs)
     elif len(dims) == 3:
@@ -221,8 +220,9 @@ def _plot_projection_line_2D(
     ax.set_ylabel(f'Dim {dims[1]+1}')
 
     if cvar is not None:
-        cbar = plt.colorbar(lc, ax=ax)
+        cbar = plt.colorbar(lc, ax=ax,pad=0.1,orientation='horizontal',location='top')
         cbar.set_label(colorbar_title)
+        cbar.set_ticks([vmin,0,vmax])
         cbar.solids.set_alpha(1)
 
 
@@ -263,7 +263,7 @@ def _plot_projection_line_3D(
         lc.set_norm(norm)
         sm = ScalarMappable(cmap=cmap, norm=norm)
         sm.set_array(colors)
-        cbar = plt.colorbar(sm, ax=ax, pad=0.1)
+        cbar = plt.colorbar(sm, ax=ax, pad=0.1,location='top',orientation='horizontal')
         cbar.set_label(colorbar_title)
         cbar.solids.set_alpha(1)
     else:
@@ -303,6 +303,7 @@ def plot_3D_projection(
     plot_colorbar=True,
     colorbar_title="",
     pane_color=None,
+    **kwargs
 ):
     assert len(dims) == 3, f"Must choose 3 dimensions to plot. Chose {dims}"
     if ax is None:
@@ -330,11 +331,12 @@ def plot_3D_projection(
             alpha=alpha,
             vmin=vmin,
             vmax=vmax,
+            **kwargs
         )
         if plot_colorbar:
-            cax = f.add_axes([0.25, 0.85, 0.5, 0.02])
-            cbar = f.colorbar(p, cax=cax, orientation="horizontal")
+            cbar = plt.colorbar(p, ax=ax,pad=0.1,orientation='horizontal',location='top')
             cbar.set_label(colorbar_title)
+            cbar.set_ticks([vmin,0,vmax])
             cbar.solids.set(alpha=1)
 
     _clean_3d_axes(ax, title, dims, pane_color, lims)
@@ -371,7 +373,7 @@ def plot_2D_projection(
     vmin=None,
     vmax=None,
     cmap="viridis",
-    c="k",
+    c="C1",
     alpha=0.2,
     lims=[-4, 4],
     plot_colorbar=True,
@@ -400,16 +402,15 @@ def plot_2D_projection(
             vmax=vmax,
         )
         if plot_colorbar:
-            cax = f.add_axes([0.25, 0.85, 0.5, 0.02])
-            cbar = f.colorbar(p, cax=cax, orientation="horizontal")
+            cbar = plt.colorbar(p, ax=ax,pad=0.1,orientation='horizontal',location='top')
             cbar.set_label(colorbar_title)
+            cbar.set_ticks([vmin,0,vmax])
             cbar.solids.set(alpha=1)
 
     ax.set_title(title)
 
-    ax.axis("square")
-    ax.set_xlim(lims)
-    ax.set_ylim(lims)
+    ax.autoscale()
+    ax.set_aspect('equal')
 
     ax.set_xlabel(f"Dim {dims[0]+1}")
     ax.set_ylabel(f"Dim {dims[1]+1}")
