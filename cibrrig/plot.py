@@ -361,6 +361,7 @@ def _clean_3d_axes(ax, title, dims, pane_color, lims):
         ax.xaxis.set_pane_color(pane_color)  # Set the color of the x-axis pane
         ax.yaxis.set_pane_color(pane_color)  # Set the color of the y-axis pane
         ax.zaxis.set_pane_color(pane_color)  # Set the color of the z-axis pane
+    return(ax)
 
 
 def plot_2D_projection(
@@ -836,4 +837,66 @@ def plot_most_likely_dynamics(
 
 
     return ax
+
+
+
+def plot_most_likely_dynamics_3D(
+            model,
+    xlim=(-4, 4),
+    ylim=(-3, 3),
+    zlim=(-3, 3),
+    nxpts=10,
+    nypts=10,
+    nzpts=10,
+    alpha=0.2,
+    ax=None,
+    figsize=(3, 3),
+    length=0.2,
+    colors=[f'C{x}' for x in range(7)],
+):
+    '''
+    Extension of the linderman vectorfield plot to 3D
+
+    '''
+    assert model.D == 3
+    x = np.linspace(*xlim, nxpts)
+    y = np.linspace(*ylim, nypts)
+    z = np.linspace(*zlim, nzpts)
+    
+    X, Y, Z = np.meshgrid(x, y, z, indexing='ij')
+
+    xyz = np.column_stack((X.ravel(), Y.ravel(),Z.ravel()))
+
+    # Get the probability of each state at each xy location
+    k_state = np.argmax(xyz.dot(model.transitions.Rs.T) + model.transitions.r, axis=1)
+
+    if ax is None:
+        fig = plt.figure(figsize=figsize)
+        ax = fig.add_subplot(111,projection='3d')
+
+    for k, (A, b) in enumerate(zip(model.dynamics.As, model.dynamics.bs)):
+        dxyzdt_m = xyz.dot(A.T) + b - xyz
+
+        zk = k_state == k
+        if zk.sum(0) > 0:
+            ax.quiver(
+                xyz[zk, 0],
+                xyz[zk, 1],
+                xyz[zk, 2],
+                dxyzdt_m[zk, 0],
+                dxyzdt_m[zk, 1],
+                dxyzdt_m[zk, 2],
+                color=colors[k % len(colors)],
+                alpha=alpha,
+                length=length
+            )
+    ax.set_xlabel("$x_1$")
+    ax.set_ylabel("$x_2$")
+    ax.set_zlabel("$x_3$")
+    ax.grid(visible=False)
+    plt.tight_layout()
+
+
+    return(ax)
+
 

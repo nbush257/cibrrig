@@ -400,10 +400,11 @@ class Population:
         return(elbos,posterior,latent)
 
 
-    def plot_flowfield(self,t0=None,tf=None, ax=None,nxpts=20,nypts=20,alpha=0.8,colors=None,**kwargs):
+    def plot_vectorfield(self,t0=None,tf=None, ax=None,nxpts=20,nypts=20,alpha=0.8,colors=None,**kwargs):
         '''
         Plot the flow field of the dynamics. 
         Wrapper to linderman Lab code in plot.py
+        TODO: maybe include ability to plot 3D vector field?
         '''
         t0=t0 or 0
         tf=tf or self.tbins.max()
