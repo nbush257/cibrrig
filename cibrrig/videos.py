@@ -57,6 +57,7 @@ def make_aux_raster_projection_with_stims(
         isinstance(intervals, np.ndarray) and intervals.shape[1] == 2
     ), "Intervals must be an n x 2 array"
 
+    assert pop.projection is not None, 'Projection is not yet computed'
     t0 = intervals[0, 0] - lead_in
     tf = t0 + duration
 
@@ -122,7 +123,6 @@ def make_aux_raster_projection_with_stims(
     ax_raster.axis("off")
 
     # annotations
-    sns.despine(trim=True)
     ax_raster.set_yticks([])
     ax_raster.set_xlabel("Time (s)")
     ax_raster.set_xticks([-winsize, 0, winsize])
@@ -252,12 +252,12 @@ def _trim_axes(ax, pop, t0, tf, dims):
     ax.set_aspect("equal")
     s0, sf = np.searchsorted(pop.tbins, [t0, tf])
     xlim = (
-        np.min(pop.projection[s0:sf, dims[0]]),
-        np.max(pop.projection[s0:sf, dims[0]]),
+        np.nanmin(pop.projection[s0:sf, dims[0]]),
+        np.nanmax(pop.projection[s0:sf, dims[0]]),
     )
     ylim = (
-        np.min(pop.projection[s0:sf, dims[1]]),
-        np.max(pop.projection[s0:sf, dims[1]]),
+        np.nanmin(pop.projection[s0:sf, dims[1]]),
+        np.nanmax(pop.projection[s0:sf, dims[1]]),
     )
     if len(dims) == 2:
         ax.set_xlim(xlim)
@@ -272,8 +272,8 @@ def _trim_axes(ax, pop, t0, tf, dims):
             np.min(pop.projection[s0:sf, dims[2]]),
             np.max(pop.projection[s0:sf, dims[2]]),
         )
-        view_min = np.floor(np.min([xlim[0], ylim[0], zlim[0]]))
-        view_max = np.ceil(np.max([xlim[1], ylim[1], zlim[1]]))
+        view_min = np.floor(np.nanmin([xlim[0], ylim[0], zlim[0]]))
+        view_max = np.ceil(np.nanmax([xlim[1], ylim[1], zlim[1]]))
         ax.set_xlim([view_min, view_max])
         ax.set_ylim([view_min, view_max])
         ax.set_zlim([view_min, view_max])
@@ -366,6 +366,7 @@ def make_projection(
     tf = t0 + duration
     f = plt.figure(figsize=figsize)
     is_3D = False
+    assert pop.projection is not None, 'Projection is not yet computed'
     if baseline == 0:
         baseline = 30
         projection_kwargs["alpha"] = 0
@@ -531,6 +532,7 @@ def make_rotating_projection(
     plt.style.use(style)
     tf = t0 + duration
     assert len(dims) == 3, "Rotating projection does not make sense without 3D"
+    assert pop.projection is not None, 'Projection is not yet computed'
     f = plt.figure(figsize=figsize)
     ax = f.add_subplot(111, projection="3d")
     (line,) = ax.plot(0, 1, ".", alpha=0)
