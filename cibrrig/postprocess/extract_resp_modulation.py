@@ -258,7 +258,7 @@ def sanity_check_plots(probe_path, bins, rates, sems, theta, L_dir):
         ax.set_title(f"Mod:{L_dir[i_near]:0.2f}; Phi:{theta[i_near]:0.1f}", fontsize=6)
 
     ax = f.add_subplot(gs[1:, :2], projection="polar")
-    ax.scatter(
+    scatter = ax.scatter(
         theta,
         L_dir,
         c=L_dir,
@@ -267,10 +267,14 @@ def sanity_check_plots(probe_path, bins, rates, sems, theta, L_dir):
         edgecolor="w",
         linewidths=0.25,
     )
+    scatter.set_clim(0, 1)
     ax.set_yticks([0, 1])
     ax.set_ylim([0, 1.1])
     ax.set_xticks([0, np.pi / 2, np.pi, 3 * np.pi / 2])
     ax.set_xticklabels(["", "", "", ""])
+    cbar = plt.colorbar(scatter, ax=ax)
+    cbar.set_ticks([0, 0.5, 1])
+    cbar.set_label('L_dir')
     ax.set_title("Modulation by phase")
 
     ax = f.add_subplot(gs[1:, 3:])
@@ -304,6 +308,7 @@ def sanity_check_plots(probe_path, bins, rates, sems, theta, L_dir):
         _ax.set_ylim([0, df.shape[0]])
         _ax.axvline(0, color="w")
         _ax.set_xlabel("Phase ($\phi$)")
+        _ax.set_title(f'Mod = [{l:0.2f},{u:0.2f}]')
     ax[0].set_ylabel("Unit")
     plt.tight_layout()
     plt.savefig(probe_path.joinpath("respMod_heatmap.png"))
