@@ -3,6 +3,8 @@ import numpy as np
 import warnings
 from tqdm import tqdm
 from joblib import Parallel, delayed
+import one.alf.io as alfio
+import pandas as pd
 
 
 def get_phase_curve(ts, breaths, phi_t=None, phi=None, nbins=100):
@@ -99,8 +101,12 @@ def get_all_phase_curves(spike_times, spike_clusters, cluster_ids, breaths, nbin
     :param nbins: number of bins in the phasic PSTH (defaults to 100 bins)
 
     Returns;
-    bins,rate,sem. rate and sem are [nbins x n_cluster_ids]
+    bins,rate,sem,raster rate and sem are [nbins x n_cluster_ids]
     """
+    if isinstance(breaths,pd.DataFrame):
+        breaths = alfio.AlfBunch.from_df(breaths)
+
+
     phi_t, phi = compute_dia_phase(breaths.on_sec, breaths.off_sec)
     all_rate = np.zeros([nbins, cluster_ids.shape[0]])
     all_sem = np.zeros([nbins, cluster_ids.shape[0]])
