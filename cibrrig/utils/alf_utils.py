@@ -105,7 +105,6 @@ class Recording:
             alf_obj_out = alfio.load_object(self.session_path, "log", short_keys=True)
             _log.info("Triggers not found. Has this already been concatenated? Or is this a one-off run?")
             log_df_out = alf_obj_out.to_df()
-            _log.info(f'{log_df_out}')
             # return(alf_obj_out)
 
         old_files, old_file_parts = alfio.filter_by(self.session_path, object="log")
