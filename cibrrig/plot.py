@@ -162,6 +162,7 @@ def plot_projection_line_multicondition(
         ax = plot_projection_line(
             X_sub, dims=dims, cvar=None, color=cc, alpha=alpha, ax=ax,lw=lw
         )
+    return ax
 
 
 def plot_projection_line(X, cvar=None, dims=[0, 1], cmap="viridis", **kwargs):
@@ -302,7 +303,7 @@ def plot_3D_projection(
     cmap="viridis",
     c="k",
     alpha=0.2,
-    lims=[-4, 4],
+    lims=None,
     plot_colorbar=True,
     colorbar_title="",
     pane_color=None,
@@ -342,9 +343,13 @@ def plot_3D_projection(
             cbar.set_ticks([vmin,0,vmax])
             cbar.solids.set(alpha=1)
 
-    _clean_3d_axes(ax, title, dims, pane_color, lims)
+    ax.autoscale()
+    if lims is None:
+        lim = np.nanmax(np.abs(X[:,dims]))
+        lims = [-lim,lim]
+    _clean_3d_axes(ax, title, dims, pane_color, lims=lims)
 
-    return (f, ax)
+    return ax
 
 
 def _clean_3d_axes(ax, title, dims, pane_color, lims=None):
@@ -365,7 +370,7 @@ def _clean_3d_axes(ax, title, dims, pane_color, lims=None):
         ax.xaxis.set_pane_color(pane_color)  # Set the color of the x-axis pane
         ax.yaxis.set_pane_color(pane_color)  # Set the color of the y-axis pane
         ax.zaxis.set_pane_color(pane_color)  # Set the color of the z-axis pane
-    return(ax)
+    return ax 
 
 
 def plot_2D_projection(
@@ -421,7 +426,7 @@ def plot_2D_projection(
     ax.set_ylabel(f"Dim {dims[1]+1}")
     ax.spines[["right", "top"]].set_visible(False)
 
-    return (f, ax)
+    return ax
 
 
 def clean_polar_axis(ax):
@@ -901,6 +906,6 @@ def plot_most_likely_dynamics_3D(
     plt.tight_layout()
 
 
-    return(ax)
+    return ax
 
 
