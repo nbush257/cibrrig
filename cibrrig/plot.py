@@ -238,7 +238,7 @@ def _plot_projection_line_3D(
     ax=None,
     title="",
     alpha=0.5,
-    lims=[-4, 4],
+    lims=None,
     pane_color=None,
     colorbar_title="",
     plot_colorbar=True,
@@ -272,8 +272,11 @@ def _plot_projection_line_3D(
     
     ax.add_collection(lc)
     ax.autoscale()
+    if lims is None:
+        lim = np.nanmax(np.abs(X[:,dims]))
+        lims = [-lim,lim]
 
-    _clean_3d_axes(ax, title, dims, pane_color, lims)
+    _clean_3d_axes(ax, title, dims, pane_color, lims=lims)
 
     return ax
 
@@ -344,12 +347,13 @@ def plot_3D_projection(
     return (f, ax)
 
 
-def _clean_3d_axes(ax, title, dims, pane_color, lims):
+def _clean_3d_axes(ax, title, dims, pane_color, lims=None):
     ax.set_title(title)
 
-    ax.set_xlim(lims)
-    ax.set_ylim(lims)
-    ax.set_zlim(lims)
+    if lims is not None:
+        ax.set_xlim(lims)
+        ax.set_ylim(lims)
+        ax.set_zlim(lims)
 
     ax.set_xlabel(f"Dim {dims[0]+1}")
     ax.set_ylabel(f"Dim {dims[1]+1}")
