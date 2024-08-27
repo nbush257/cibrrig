@@ -168,7 +168,7 @@ def plot_projection_line(X, cvar=None, dims=[0, 1], cmap="viridis", **kwargs):
     if len(dims) == 2:
         ax = _plot_projection_line_2D(X, cvar, dims, cmap=cmap, **kwargs)
     elif len(dims) == 3:
-        ax = _plot_projection_line_3D(X, cvar, dims=dims, **kwargs)
+        ax = _plot_projection_line_3D(X, cvar, dims=dims, cmap=cmap,**kwargs)
     else:
         raise ValueError("Number of dims must be two or three")
 
