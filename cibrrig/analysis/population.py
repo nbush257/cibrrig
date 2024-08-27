@@ -3,9 +3,12 @@ import numpy as np
 from iblutil.numerical import bincount2D
 from scipy.ndimage import gaussian_filter1d
 import logging
-from ..plot import plot_projection, plot_projection_line, plot_most_likely_dynamics
+from ..plot import plot_projection, plot_projection_line, plot_most_likely_dynamics,plot_projection_line_multicondition
 from ..utils.utils import validate_intervals, remap_time_basis
 import pickle
+from matplotlib.colors import ListedColormap
+from matplotlib.lines import Line2D
+
 
 logging.basicConfig()
 _log = logging.getLogger("population")
@@ -271,9 +274,38 @@ class Population:
                 "Projection has fewer dims than requested. Only plotting first two requested"
             )
             dims = dims[:2]
+        if len(dims)==2:
+            kwargs.pop('lims')
 
         s0, sf = np.searchsorted(self.tbins, [t0, tf])
         X_slice = self.projection[s0:sf, :]
+        intervals = kwargs.pop('intervals',None) 
+        stim_color = kwargs.pop('stim_color',None) or 'C1'
+        base_color = kwargs.pop('color',None) or 'C0'
+        if intervals is not None:
+            intervals_baseline = []
+            _temp = t0
+            for _t0,_tf in intervals:
+                intervals_baseline.append([_temp,_t0])
+                _temp = _tf
+            if tf>_temp:
+                intervals_baseline.append([_temp,tf])
+            intervals_baseline = np.array(intervals_baseline)
+
+            stim_colors = [stim_color for _ in range(intervals.shape[0])]
+            base_colors = [base_color for _ in range(intervals_baseline.shape[0])]
+            ax = plot_projection_line_multicondition(X_slice,self.tbins[s0:sf],intervals_baseline,colors=base_colors,dims=dims,**kwargs)
+            ax = plot_projection_line_multicondition(X_slice,self.tbins[s0:sf],intervals,colors=stim_colors,dims=dims,ax=ax,**kwargs)
+            ax.legend(['Control','Stim'])
+            legend_elements = [
+                        Line2D([0], [0], color=stim_color, lw=2, label='Stim'),    # Cyan line
+                        Line2D([0], [0], color=base_color, lw=2, label='Control')  # Black line
+                        ]
+            ax.legend(handles=legend_elements, loc='upper left',bbox_to_anchor=(0.9,0.9))
+
+            return(ax)
+
+
         if np.any(np.isnan(X_slice)):
             _log.error("Requested projection has NaNs")
             return
