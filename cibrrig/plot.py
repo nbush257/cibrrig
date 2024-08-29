@@ -8,6 +8,7 @@ import seaborn as sns
 from matplotlib.collections import LineCollection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from matplotlib.cm import ScalarMappable
+from matplotlib.patches import FancyArrowPatch
 
 
 laser_colors = {473: "#00b7ff", 565: "#d2ff00", 635: "#ff0000"}
@@ -154,6 +155,12 @@ def plot_projection_line_multicondition(
             ax = f.add_subplot()
         elif len(dims) == 3:
             ax = f.add_subplot(projection="3d")
+
+    if (len(dims)==3) and (kwargs.get('lims',None) is None):
+        lim = np.nanmax(np.abs(X))
+        lims = [-lim,lim]
+        kwargs['lims'] = lim
+
     for ii, cc in enumerate(colors):
         t0, tf = intervals[ii]
         s0, sf = np.searchsorted(tbins, [t0, tf])
@@ -194,7 +201,8 @@ def _plot_projection_line_2D(
     vmax=None,
     lw=0.5,
     colorbar_title='',
-    **kwargs,
+    plot_colorbar=True,
+    **kwargs
 ):
     if ax is None:
         f = plt.figure()
@@ -202,6 +210,12 @@ def _plot_projection_line_2D(
 
 
     segments = np.stack([X[:-1,dims], X[1:,dims]], axis=1)
+    use_arrow = kwargs.pop('use_arrow',None)
+    if use_arrow:
+        a,b, =  segments[-1]
+        arrow=FancyArrowPatch(a,b,arrowstyle='-|>',color=color,lw=lw,alpha=alpha,mutation_scale=10)
+        segments = segments[:-1]
+
 
     if cvar is not None:
         vmin = vmin or np.min(cvar)
@@ -215,12 +229,15 @@ def _plot_projection_line_2D(
         lc.set_color(color)
     
     ax.add_collection(lc)
+    if use_arrow:
+        ax.add_patch(arrow)
+
     ax.autoscale()
     ax.set_aspect('equal')
     ax.set_xlabel(f'Dim {dims[0]+1}')
     ax.set_ylabel(f'Dim {dims[1]+1}')
 
-    if cvar is not None:
+    if cvar is not None and plot_colorbar:
         cbar = plt.colorbar(lc, ax=ax,pad=0.1,orientation='horizontal',location='top')
         cbar.set_label(colorbar_title)
         cbar.set_ticks([vmin,0,vmax])
@@ -876,7 +893,7 @@ def plot_most_likely_dynamics_3D(
 
     xyz = np.column_stack((X.ravel(), Y.ravel(),Z.ravel()))
 
-    # Get the probability of each state at each xy location
+    # Get the probability of each state at each xyz location
     k_state = np.argmax(xyz.dot(model.transitions.Rs.T) + model.transitions.r, axis=1)
 
     if ax is None:
@@ -907,5 +924,5 @@ def plot_most_likely_dynamics_3D(
 
 
     return ax
-
+# TODO: plot most likely dynamics slice
 

@@ -261,7 +261,7 @@ class Population:
         return plot_projection(X_slice, dims, cvar=cvar, **kwargs)
 
     def plot_projection_line(
-        self, dims=[0, 1, 2], t0=None, tf=None, cvar=None, **kwargs
+        self, dims=[0, 1, 2], t0=None, tf=None, cvar=None, ax=None,**kwargs
     ):
         t0 = t0 or self.tbins[0]
         tf = tf or self.tbins[-1]
@@ -275,7 +275,7 @@ class Population:
             )
             dims = dims[:2]
         if len(dims)==2:
-            kwargs.pop('lims')
+            kwargs.pop('lims',None)
 
         s0, sf = np.searchsorted(self.tbins, [t0, tf])
         X_slice = self.projection[s0:sf, :]
@@ -290,11 +290,17 @@ class Population:
                 _temp = _tf
             if tf>_temp:
                 intervals_baseline.append([_temp,tf])
+            if len(dims)==3:
+                lims = kwargs.get('lims',None)
+                if lims is None:
+                    lim = np.nanmax(np.abs(X_slice[:,dims]))
+                    lims =[-lim,lim]
+                    kwargs['lims'] = lims
             intervals_baseline = np.array(intervals_baseline)
 
             stim_colors = [stim_color for _ in range(intervals.shape[0])]
             base_colors = [base_color for _ in range(intervals_baseline.shape[0])]
-            ax = plot_projection_line_multicondition(X_slice,self.tbins[s0:sf],intervals_baseline,colors=base_colors,dims=dims,**kwargs)
+            ax = plot_projection_line_multicondition(X_slice,self.tbins[s0:sf],intervals_baseline,colors=base_colors,dims=dims,ax=ax,**kwargs)
             ax = plot_projection_line_multicondition(X_slice,self.tbins[s0:sf],intervals,colors=stim_colors,dims=dims,ax=ax,**kwargs)
             ax.legend(['Control','Stim'])
             legend_elements = [
@@ -303,7 +309,7 @@ class Population:
                         ]
             ax.legend(handles=legend_elements, loc='upper left',bbox_to_anchor=(0.9,0.9))
 
-            return(ax)
+            return ax
 
 
         if np.any(np.isnan(X_slice)):
@@ -311,7 +317,7 @@ class Population:
             return
         if cvar is not None:
             cvar = cvar[s0:sf]
-        return plot_projection_line(X_slice, dims=dims, cvar=cvar, **kwargs)
+        return plot_projection_line(X_slice, dims=dims, cvar=cvar, ax=ax,**kwargs)
 
     def sync_var(self, x, x_t):
         return remap_time_basis(x, x_t, self.tbins)
@@ -351,6 +357,11 @@ class Population:
 
         self.pca = None
         self.sigma = None
+        if self.binsize != dat['binsize']:
+            _log.warning('Recomputing time bins')
+            _t0 = self.spike_times.min()
+            _tf = self.spike_times.max()
+            self.tbins = np.arange(_t0,_tf,dat['binsize'])
 
         self.rslds = dat["rslds"]
         self.q = dat["q"]
@@ -452,6 +463,9 @@ class Population:
         nypts=20,
         alpha=0.8,
         colors=None,
+        xlim=None,
+        ylim=None,
+        zval=None,
         **kwargs,
     ):
         """
@@ -468,9 +482,9 @@ class Population:
         if ax is not None:
             xlim = ax.get_xlim()
             ylim = ax.get_ylim()
-        else:
-            mins = self.projection.min(0)
-            maxs = self.projection.max(0)
+        elif xlim is None:
+            mins = np.nanmin(self.projection,0)
+            maxs = np.nanmax(self.projection,0)
             xlim = (mins[0], maxs[0])
             ylim = (mins[1], maxs[1])
         ax = plot_most_likely_dynamics(
@@ -482,5 +496,10 @@ class Population:
             nypts=nypts,
             alpha=alpha,
             colors=colors,
+            zval=None,
             **kwargs,
         )
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+        ax.set_aspect('equal')
+        return ax
