@@ -57,7 +57,7 @@ def make_aux_raster_projection_with_stims(
         isinstance(intervals, np.ndarray) and intervals.shape[1] == 2
     ), "Intervals must be an n x 2 array"
 
-    assert pop.projection is not None, 'Projection is not yet computed'
+    assert pop.projection is not None, "Projection is not yet computed"
     t0 = intervals[0, 0] - lead_in
     tf = t0 + duration
 
@@ -247,98 +247,12 @@ def make_aux_raster_projection_with_stims(
     print("DONE!")
 
 
-def _trim_axes(ax, pop, t0, tf, dims):
-    ax.autoscale()
-    ax.set_aspect("equal")
-    s0, sf = np.searchsorted(pop.tbins, [t0, tf])
-    xlim = (
-        np.nanmin(pop.projection[s0:sf, dims[0]]),
-        np.nanmax(pop.projection[s0:sf, dims[0]]),
-    )
-    ylim = (
-        np.nanmin(pop.projection[s0:sf, dims[1]]),
-        np.nanmax(pop.projection[s0:sf, dims[1]]),
-    )
-    if len(dims) == 2:
-        ax.set_xlim(xlim)
-        ax.set_ylim(ylim)
-        xticks = ax.get_xticks()
-        yticks = ax.get_yticks()
-        ax.set_xticks([xticks[0], 0, xticks[-1]])
-        ax.set_yticks([yticks[0], 0, yticks[-1]])
-        plt.tight_layout()
-    elif len(dims) == 3:
-        zlim = (
-            np.min(pop.projection[s0:sf, dims[2]]),
-            np.max(pop.projection[s0:sf, dims[2]]),
-        )
-        view_min = np.floor(np.nanmin([xlim[0], ylim[0], zlim[0]]))
-        view_max = np.ceil(np.nanmax([xlim[1], ylim[1], zlim[1]]))
-        ax.set_xlim([view_min, view_max])
-        ax.set_ylim([view_min, view_max])
-        ax.set_zlim([view_min, view_max])
-        ax.set_xticks([view_min, 0, view_max])
-        ax.set_yticks([view_min, 0, view_max])
-        ax.set_zticks([view_min, 0, view_max])
-        ax.get_proj()
-        plt.subplots_adjust(left=0.2, right=0.8, top=0.9, bottom=0.1)
-    sns.despine(trim=True)
-    return ax
-
-
-def _plot_xy_plane(ax, **kwargs):
-    xlim = ax.get_xlim()
-    ylim = ax.get_ylim()
-
-    # Define the grid for the plane based on the current x and y limits
-    x = np.linspace(xlim[0], xlim[1], 10)
-    y = np.linspace(ylim[0], ylim[1], 10)
-    x, y = np.meshgrid(x, y)
-    z = np.zeros_like(x)
-
-    # Plot the surface (plane) with transparency
-    ax.plot_surface(x, y, z, rstride=100, cstride=100, **kwargs)
-
-
-def _plot_all_planes(ax, **kwargs):
-    xlim = ax.get_xlim()
-    ylim = ax.get_ylim()
-    zlim = ax.get_zlim()
-
-    # Create grid for the XY plane
-    x = np.linspace(xlim[0], xlim[1], 10)
-    y = np.linspace(ylim[0], ylim[1], 10)
-    x, y = np.meshgrid(x, y)
-    z_xy = np.zeros_like(x)  # XY plane at z = 0
-
-    # Create grid for the YZ plane
-    y = np.linspace(ylim[0], ylim[1], 10)
-    z = np.linspace(zlim[0], zlim[1], 10)
-    y, z = np.meshgrid(y, z)
-    x_yz = np.zeros_like(y)  # YZ plane at x = 0
-
-    # Create grid for the XZ plane
-    x = np.linspace(xlim[0], xlim[1], 10)
-    z = np.linspace(zlim[0], zlim[1], 10)
-    x, z = np.meshgrid(x, z)
-    y_xz = np.zeros_like(x)  # XZ plane at y = 0
-
-    # Plot the XY plane with transparency
-    ax.plot_surface(x, y, z_xy, rstride=100, cstride=100, **kwargs)
-
-    # Plot the YZ plane with transparency
-    ax.plot_surface(x_yz, y, z, rstride=100, cstride=100, **kwargs)
-
-    # Plot the XZ plane with transparency
-    ax.plot_surface(x, y_xz, z, rstride=100, cstride=100, **kwargs)
-
-
 def make_projection(
     pop,
     t0,
     duration,
     fn_out,
-    stim_color,
+    stim_color='C1',
     intervals=None,
     cvar=None,
     cvar_label="",
@@ -362,11 +276,18 @@ def make_projection(
     vmin=None,
     vmax=None,
 ):
+    '''
+    Make an animation of just the projection with temporal evolution.
+    Passing intervals will color the time periods within those intervals the value of "stim_color"
+
+    Can rotate with kwargs rotation_delay,elev_speed,azim_speed
+
+    '''
     plt.style.use(style)
     tf = t0 + duration
     f = plt.figure(figsize=figsize)
     is_3D = False
-    assert pop.projection is not None, 'Projection is not yet computed'
+    assert pop.projection is not None, "Projection is not yet computed"
     if baseline == 0:
         baseline = 30
         projection_kwargs["alpha"] = 0
@@ -529,10 +450,13 @@ def make_rotating_projection(
     n_frames=100,
     projection_kwargs=PROJECTION_KWARGS,
 ):
+    '''
+    Rotate a 3D projection without temporal evolution.
+    '''
     plt.style.use(style)
     tf = t0 + duration
     assert len(dims) == 3, "Rotating projection does not make sense without 3D"
-    assert pop.projection is not None, 'Projection is not yet computed'
+    assert pop.projection is not None, "Projection is not yet computed"
     f = plt.figure(figsize=figsize)
     ax = f.add_subplot(111, projection="3d")
     (line,) = ax.plot(0, 1, ".", alpha=0)
@@ -591,6 +515,109 @@ def make_rotating_projection(
     print(f"saving to {fn_out}")
     ani.save(fn_out, fps=fps, dpi=dpi)  # Performs and saves the animation.
     print("DONE!")
+
+
+def _trim_axes(ax, pop, t0, tf, dims):
+    """Trim the limits of the projection plots
+    N.B. Might be uneeded now that the plot module does this already
+
+    Args:
+        ax (matplotlib.axes): Axis to modify
+        pop (Population): Population object
+        t0 (float): start time of data that is plotted
+        tf (float): end time of data that is plotted
+        dims (list): Dimensions of the data that are plotted
+
+    Returns:
+        ax (matplotlib.axes): Modifiied axes
+    """    
+    ax.autoscale()
+    ax.set_aspect("equal")
+    s0, sf = np.searchsorted(pop.tbins, [t0, tf])
+    xlim = (
+        np.nanmin(pop.projection[s0:sf, dims[0]]),
+        np.nanmax(pop.projection[s0:sf, dims[0]]),
+    )
+    ylim = (
+        np.nanmin(pop.projection[s0:sf, dims[1]]),
+        np.nanmax(pop.projection[s0:sf, dims[1]]),
+    )
+    if len(dims) == 2:
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+        xticks = ax.get_xticks()
+        yticks = ax.get_yticks()
+        ax.set_xticks([xticks[0], 0, xticks[-1]])
+        ax.set_yticks([yticks[0], 0, yticks[-1]])
+        plt.tight_layout()
+    elif len(dims) == 3:
+        zlim = (
+            np.min(pop.projection[s0:sf, dims[2]]),
+            np.max(pop.projection[s0:sf, dims[2]]),
+        )
+        view_min = np.floor(np.nanmin([xlim[0], ylim[0], zlim[0]]))
+        view_max = np.ceil(np.nanmax([xlim[1], ylim[1], zlim[1]]))
+        ax.set_xlim([view_min, view_max])
+        ax.set_ylim([view_min, view_max])
+        ax.set_zlim([view_min, view_max])
+        ax.set_xticks([view_min, 0, view_max])
+        ax.set_yticks([view_min, 0, view_max])
+        ax.set_zticks([view_min, 0, view_max])
+        ax.get_proj()
+        plt.subplots_adjust(left=0.2, right=0.8, top=0.9, bottom=0.1)
+    sns.despine(trim=True)
+    return ax
+
+
+def _plot_xy_plane(ax, **kwargs):
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+
+    # Define the grid for the plane based on the current x and y limits
+    x = np.linspace(xlim[0], xlim[1], 10)
+    y = np.linspace(ylim[0], ylim[1], 10)
+    x, y = np.meshgrid(x, y)
+    z = np.zeros_like(x)
+
+    # Plot the surface (plane) with transparency
+    ax.plot_surface(x, y, z, rstride=100, cstride=100, **kwargs)
+
+
+def _plot_all_planes(ax, **kwargs):
+    '''
+    Plot transparent XY,YZ,XZ planes on a 3D axes
+    **kwargs passed to plt.plot_surface
+    '''
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+    zlim = ax.get_zlim()
+
+    # Create grid for the XY plane
+    x = np.linspace(xlim[0], xlim[1], 10)
+    y = np.linspace(ylim[0], ylim[1], 10)
+    x, y = np.meshgrid(x, y)
+    z_xy = np.zeros_like(x)  # XY plane at z = 0
+
+    # Create grid for the YZ plane
+    y = np.linspace(ylim[0], ylim[1], 10)
+    z = np.linspace(zlim[0], zlim[1], 10)
+    y, z = np.meshgrid(y, z)
+    x_yz = np.zeros_like(y)  # YZ plane at x = 0
+
+    # Create grid for the XZ plane
+    x = np.linspace(xlim[0], xlim[1], 10)
+    z = np.linspace(zlim[0], zlim[1], 10)
+    x, z = np.meshgrid(x, z)
+    y_xz = np.zeros_like(x)  # XZ plane at y = 0
+
+    # Plot the XY plane with transparency
+    ax.plot_surface(x, y, z_xy, rstride=100, cstride=100, **kwargs)
+
+    # Plot the YZ plane with transparency
+    ax.plot_surface(x_yz, y, z, rstride=100, cstride=100, **kwargs)
+
+    # Plot the XZ plane with transparency
+    ax.plot_surface(x, y_xz, z, rstride=100, cstride=100, **kwargs)
 
 
 if __name__ == "__main__":
