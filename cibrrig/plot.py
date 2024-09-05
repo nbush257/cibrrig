@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.colors as mcolors
 from .utils.utils import weighted_histogram, parse_opto_log, validate_intervals
 from one.alf.io import AlfBunch
@@ -11,6 +10,7 @@ from matplotlib.cm import ScalarMappable
 
 # Maps laser wavelengths to hex codes
 laser_colors = {473: "#00b7ff", 565: "#d2ff00", 635: "#ff0000"}
+
 
 def plot_laser(laser_in, **kwargs):
     """
@@ -38,7 +38,7 @@ def plot_laser(laser_in, **kwargs):
         - If laser_in is an AlfBunch object with a 'category' key, it calls _plot_laser_log.
         - If laser_in is an AlfBunch object without a 'category' key, it calls _plot_laser_alf.
         - For other input types, it calls _plot_laser_intervals.
-        
+
         The specific kwargs used may vary depending on which underlying plotting function is called.
     """
 
@@ -211,38 +211,105 @@ def _plot_laser_log(log, query=None, rotation=45, fontsize=6, **kwargs):
     return ax
 
 
+def _create_ax(dims, projection=None):
+    """
+    Create a new figure and axis.
+
+    Args:
+        dims (list): Dimensions to plot.
+        projection (str, optional): Type of projection for 3D plots.
+
+    Returns:
+        tuple: Figure and Axes objects.
+    """
+    f = plt.figure()
+    ax = f.add_subplot(projection=projection)
+    return f, ax
+
+
+def _setup_colorbar(ax, p, vmin, vmax, colorbar_title):
+    """
+    Set up a colorbar for the plot.
+
+    Args:
+        ax (Axes): The axes object to add the colorbar to.
+        p: The plot object to create the colorbar from.
+        vmin (float): Minimum value for the colorbar.
+        vmax (float): Maximum value for the colorbar.
+        colorbar_title (str): Title for the colorbar.
+    """
+    cbar = plt.colorbar(p, ax=ax, pad=0.1, orientation="horizontal", location="top")
+    cbar.set_label(colorbar_title)
+    cbar.set_ticks([vmin, 0, vmax])
+    cbar.solids.set_alpha(1)
+
+
 def plot_projection_line_multicondition(
-    X, tbins, intervals, colors, dims=[0, 1], ax=None, alpha=0.5,lw=1
+    X, tbins, intervals, colors, dims=[0, 1], ax=None, alpha=0.5, lw=1
 ):
     """
-    overlay multiple conditions each with a defined color
+    Plot low-D projection with unique coloring for the given intervals.
+
+    Args:
+        X (array): Data to plot.
+        tbins (array): Time bins.
+        intervals (array): Start and end times for each condition.
+        colors (list): Colors for each condition.
+        dims (list): Dimensions to plot.
+        ax (Axes, optional): Axes to plot on.
+        alpha (float): Alpha value for transparency.
+        lw (float): Line width.
+
+    Returns:
+        Axes: The axes object containing the plot.
     """
     validate_intervals(intervals[:, 0], intervals[:, 1], overlap_ok=True)
     assert len(colors) == intervals.shape[0]
-    if ax is None:
-        f = plt.figure()
-        if len(dims) == 2:
-            ax = f.add_subplot()
-        elif len(dims) == 2:
-            ax = f.add_subplot(projection="3d")
-    for ii, cc in enumerate(colors):
-        t0, tf = intervals[ii]
-        s0, sf = np.searchsorted(tbins, [t0, tf])
 
+    if ax is None:
+        _, ax = _create_ax(dims, projection="3d" if len(dims) == 3 else None)
+
+    for (t0, tf), cc in zip(intervals, colors):
+        s0, sf = np.searchsorted(tbins, [t0, tf])
         X_sub = X[s0 - 1 : sf, :]
-        ax = plot_projection_line(
-            X_sub, dims=dims, cvar=None, color=cc, alpha=alpha, ax=ax,lw=lw
-        )
+        plot_projection_line(X_sub, dims=dims, color=cc, alpha=alpha, ax=ax, lw=lw)
+
+    return ax
 
 
 def plot_projection_line(X, cvar=None, dims=[0, 1], cmap="viridis", **kwargs):
+    """
+    Plot low-d projection as a line. Optionally
+
+    Args:
+        X (array): Data to plot.
+        cvar (array, optional): Color variable.
+        dims (list): Dimensions to plot.
+        cmap (str): Colormap to use.
+        **kwargs: Additional keyword arguments.
+
+    Keyword Args:
+        ax (matplotlib.axes.Axes, optional): The axes to plot on. If not provided, a new figure and axes will be created.
+        color (str, optional): Color of the line if cvar is not provided. Default is "k" (black).
+        alpha (float, optional): The alpha blending value, between 0 (transparent) and 1 (opaque). Default is 0.5.
+        lw (float, optional): The line width. Default is 0.5.
+        vmin (float, optional): Minimum of the colormap range. If not provided, it's inferred from cvar.
+        vmax (float, optional): Maximum of the colormap range. If not provided, it's inferred from cvar.
+        colorbar_title (str, optional): Title for the colorbar. Default is an empty string.
+        title (str, optional): Title for the plot. Only used in 3D plots. Default is an empty string.
+        lims (list, optional): The x, y, (and z for 3D) limits of the plot as [min, max]. Only used in 3D plots. Default is [-4, 4].
+        pane_color (color, optional): Color of the panes in 3D plots. If None, default matplotlib style is used.
+        plot_colorbar (bool, optional): Whether to plot the colorbar. Only used in 3D plots. Default is True.
+
+    Returns:
+        Axes: The axes object containing the plot.
+    """
     if len(dims) == 2:
-        ax = _plot_projection_line_2D(X, cvar, dims, cmap=cmap, **kwargs)
+        return _plot_projection_line_2D(X, cvar, dims, cmap=cmap, **kwargs)
     elif len(dims) == 3:
-        ax = _plot_projection_line_3D(X, cvar, dims=dims, **kwargs)
+        return _plot_projection_line_3D(X, cvar, dims=dims, **kwargs)
     else:
         raise ValueError("Number of dims must be two or three")
-    return ax
 
 
 def _plot_projection_line_2D(
@@ -256,39 +323,51 @@ def _plot_projection_line_2D(
     vmin=None,
     vmax=None,
     lw=0.5,
-    colorbar_title='',
+    colorbar_title="",
     **kwargs,
 ):
+    """
+    Plot 2D projection line.
+
+    Args:
+        X (array): Data to plot.
+        cvar (array, optional): Color variable.
+        dims (list): Dimensions to plot.
+        cmap (str): Colormap to use.
+        color (str): Color for the line if cvar is None.
+        ax (Axes, optional): Axes to plot on.
+        alpha (float): Alpha value for transparency.
+        vmin (float, optional): Minimum value for colormap.
+        vmax (float, optional): Maximum value for colormap.
+        lw (float): Line width.
+        colorbar_title (str): Title for the colorbar.
+        **kwargs: Additional keyword arguments.
+
+    Returns:
+        Axes: The axes object containing the plot.
+    """
     if ax is None:
-        f = plt.figure()
-        ax = f.add_subplot()
+        _, ax = _create_ax(dims)
 
-
-    segments = np.stack([X[:-1,dims], X[1:,dims]], axis=1)
+    segments = np.stack([X[:-1, dims], X[1:, dims]], axis=1)
+    lc = LineCollection(segments, alpha=alpha, lw=lw, **kwargs)
 
     if cvar is not None:
         vmin = vmin or np.min(cvar)
         vmax = vmax or np.max(cvar)
         norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
-        lc = LineCollection(segments,alpha=alpha,lw=lw,cmap=cmap,**kwargs)
         lc.set_array(cvar)
+        lc.set_cmap(cmap)
         lc.set_norm(norm)
+        _setup_colorbar(ax, lc, vmin, vmax, colorbar_title)
     else:
-        lc = LineCollection(segments,alpha=alpha,lw=lw,**kwargs)
         lc.set_color(color)
-    
+
     ax.add_collection(lc)
     ax.autoscale()
-    ax.set_aspect('equal')
-    ax.set_xlabel(f'Dim {dims[0]+1}')
-    ax.set_ylabel(f'Dim {dims[1]+1}')
-
-    if cvar is not None:
-        cbar = plt.colorbar(lc, ax=ax,pad=0.1,orientation='horizontal',location='top')
-        cbar.set_label(colorbar_title)
-        cbar.set_ticks([vmin,0,vmax])
-        cbar.solids.set_alpha(1)
-
+    ax.set_aspect("equal")
+    ax.set_xlabel(f"Dim {dims[0]+1}")
+    ax.set_ylabel(f"Dim {dims[1]+1}")
 
     return ax
 
@@ -311,29 +390,49 @@ def _plot_projection_line_3D(
     lw=0.5,
     **kwargs,
 ):
+    """
+    Plot 3D projection line.
 
+    Args:
+        X (array): Data to plot.
+        cvar (array, optional): Color variable.
+        dims (list): Dimensions to plot.
+        cmap (str): Colormap to use.
+        color (str): Color for the line if cvar is None.
+        ax (Axes3D, optional): 3D axes to plot on.
+        title (str): Title for the plot.
+        alpha (float): Alpha value for transparency.
+        lims (list): Limits for the axes.
+        pane_color: Color for the panes.
+        colorbar_title (str): Title for the colorbar.
+        plot_colorbar (bool): Whether to plot the colorbar.
+        vmin (float, optional): Minimum value for colormap.
+        vmax (float, optional): Maximum value for colormap.
+        lw (float): Line width.
+        **kwargs: Additional keyword arguments.
+
+    Returns:
+        Axes3D: The 3D axes object containing the plot.
+    """
     if ax is None:
-        f = plt.figure()
-        ax = f.add_subplot(projection="3d")
-    segments = np.stack([X[:-1,dims], X[1:,dims]], axis=1)
+        _, ax = _create_ax(dims, projection="3d")
+
+    segments = np.stack([X[:-1, dims], X[1:, dims]], axis=1)
+    lc = Line3DCollection(segments, alpha=alpha, lw=lw, **kwargs)
 
     if cvar is not None:
         vmin = vmin or np.min(cvar)
         vmax = vmax or np.max(cvar)
         norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
-        cmap = plt.get_cmap(cmap)
-        colors = cmap(norm(cvar[:-1]))
-        lc = Line3DCollection(segments,alpha=np.ones_like(cvar[:-1])*alpha,lw=lw,colors=colors,**kwargs)
-        lc.set_norm(norm)
-        sm = ScalarMappable(cmap=cmap, norm=norm)
-        sm.set_array(colors)
-        cbar = plt.colorbar(sm, ax=ax, pad=0.1,location='top',orientation='horizontal')
-        cbar.set_label(colorbar_title)
-        cbar.solids.set_alpha(1)
+        colors = plt.get_cmap(cmap)(norm(cvar[:-1]))
+        lc.set_color(colors)
+        if plot_colorbar:
+            sm = ScalarMappable(cmap=cmap, norm=norm)
+            sm.set_array(colors)
+            _setup_colorbar(ax, sm, vmin, vmax, colorbar_title)
     else:
-        lc = Line3DCollection(segments,alpha=alpha,lw=lw,**kwargs)
         lc.set_color(color)
-    
+
     ax.add_collection(lc)
     ax.autoscale()
 
@@ -343,12 +442,42 @@ def _plot_projection_line_3D(
 
 
 def plot_projection(X, dims, **kwargs):
+    """
+    Plot projection in 2D or 3D.
+
+    Args:
+        X (array): Data to plot.
+        dims (list): Dimensions to plot.
+        **kwargs: Additional keyword arguments.
+
+    Keyword Args:
+        ax (matplotlib.axes.Axes, optional): The axes to plot on. If not provided, a new figure and axes will be created.
+        color (str, optional): The color of the data points or lines. Default is "k" (black) if no color variable (`cvar`) is provided.
+        alpha (float, optional): Transparency level for the points. Should be between 0 (fully transparent) and 1 (fully opaque).
+            - Default is 0.5.
+        lw (float, optional): Line width for plotting. Applies if plotting a line plot. Default is 0.5.
+        vmin (float, optional): Minimum value for the colormap if a color variable (`cvar`) is used. If not specified, it's inferred from `cvar`.
+        vmax (float, optional): Maximum value for the colormap if a color variable (`cvar`) is used. If not specified, it's inferred from `cvar`.
+        colorbar_title (str, optional): Title for the colorbar. Default is an empty string.
+        title (str, optional): Title for the plot. Only used in 3D plots. Default is an empty string.
+        lims (list, optional): Axis limits for the plot. Should be a list of `[min, max]` values.
+            - Default is [-4, 4] for 3D plots.
+        pane_color (str, optional): Background color of the 3D panes in 3D plots. If `None`, default style is used.
+        plot_colorbar (bool, optional): Whether to include a colorbar in the plot. Only applies to 3D plots when `cvar` is used. Default is True.
+        s (float, optional): Size of the markers used in the scatter plot. Default is 1.
+        cmap (str, optional): Colormap to use when plotting with a color variable (`cvar`). Default is "viridis".
+        cvar (array-like, optional): An array of values used to color the data points. If provided, `cmap` is applied.
+        s (float, optional): Size of the markers in the scatter plot. Default is 1.
+
+    Returns:
+        tuple: Figure and Axes objects.
+    """
     if len(dims) == 2:
         return plot_2D_projection(X, dims, **kwargs)
     elif len(dims) == 3:
         return plot_3D_projection(X, dims, **kwargs)
     else:
-        raise (ValueError(f"Number of plotted dimensions must be 2 or 3. {dims=}"))
+        raise ValueError(f"Number of plotted dimensions must be 2 or 3. {dims=}")
 
 
 def plot_3D_projection(
@@ -367,45 +496,71 @@ def plot_3D_projection(
     plot_colorbar=True,
     colorbar_title="",
     pane_color=None,
-    **kwargs
+    **kwargs,
 ):
+    """
+    Plot 3D projection.
+
+    Args:
+        X (array): Data to plot.
+        dims (list): Dimensions to plot.
+        cvar (array, optional): Color variable.
+        ax (Axes3D, optional): 3D axes to plot on.
+        title (str): Title for the plot.
+        s (float): Size of the markers.
+        vmin (float, optional): Minimum value for colormap.
+        vmax (float, optional): Maximum value for colormap.
+        cmap (str): Colormap to use.
+        c (str): Color for the markers if cvar is None.
+        alpha (float): Alpha value for transparency.
+        lims (list): Limits for the axes.
+        plot_colorbar (bool): Whether to plot the colorbar.
+        colorbar_title (str): Title for the colorbar.
+        pane_color: Color for the panes.
+        **kwargs: Additional keyword arguments.
+
+    Returns:
+        tuple: Figure and Axes3D objects.
+    """
     assert len(dims) == 3, f"Must choose 3 dimensions to plot. Chose {dims}"
+
     if ax is None:
-        f = plt.figure()
-        ax = f.add_subplot(111, projection="3d")
-    else:
-        f = ax.get_figure()
-
-    assert isinstance(ax, Axes3D), "ax must be a 3D projection"
-
+        _, ax = _create_ax(dims, projection="3d")
     if cvar is None:
-        p = ax.scatter(
-            X[:, dims[0]], X[:, dims[1]], X[:, dims[2]], c=c, s=s, alpha=alpha
-        )
-    else:
-        vmin = vmin or np.min(cvar)
-        vmax = vmax or np.max(cvar)
         p = ax.scatter(
             X[:, dims[0]],
             X[:, dims[1]],
             X[:, dims[2]],
             c=cvar,
             s=s,
-            cmap=cmap,
             alpha=alpha,
+            cmap=cmap,
             vmin=vmin,
             vmax=vmax,
-            **kwargs
+            **kwargs,
         )
-        if plot_colorbar:
-            cbar = plt.colorbar(p, ax=ax,pad=0.1,orientation='horizontal',location='top')
-            cbar.set_label(colorbar_title)
-            cbar.set_ticks([vmin,0,vmax])
-            cbar.solids.set(alpha=1)
+    else:
+        p = ax.scatter(
+            X[:, dims[0]],
+            X[:, dims[1]],
+            X[:, dims[2]],
+            c=c,
+            s=s,
+            alpha=alpha,
+            cmap=None,
+            vmin=vmin,
+            vmax=vmax,
+            **kwargs,
+        )
+
+    if cvar is not None and plot_colorbar:
+        _setup_colorbar(
+            ax, p, vmin or np.min(cvar), vmax or np.max(cvar), colorbar_title
+        )
 
     _clean_3d_axes(ax, title, dims, pane_color, lims)
 
-    return (f, ax)
+    return ax.get_figure(), ax
 
 
 def plot_2D_projection(
@@ -424,44 +579,69 @@ def plot_2D_projection(
     plot_colorbar=True,
     colorbar_title="",
 ):
-    if ax is None:
-        f = plt.figure()
-        ax = f.add_subplot(111)
-    else:
-        f = ax.get_figure()
+    """
+    Plot 2D projection.
+
+    Args:
+        X (array): Data to plot.
+        dims (list): Dimensions to plot.
+        cvar (array, optional): Color variable.
+        ax (Axes, optional): Axes to plot on.
+        title (str): Title for the plot.
+        s (float): Size of the markers.
+        vmin (float, optional): Minimum value for colormap.
+        vmax (float, optional): Maximum value for colormap.
+        cmap (str): Colormap to use.
+        c (str): Color for the markers if cvar is None.
+        alpha (float): Alpha value for transparency.
+        lims (list): Limits for the axes.
+        plot_colorbar (bool): Whether to plot the colorbar.
+        colorbar_title (str): Title for the colorbar.
+
+    Returns:
+        tuple: Figure and Axes objects.
+    """
     assert len(dims) == 2, f"Must choose 2 dimensions to plot. Chose {dims}"
 
+    if ax is None:
+        _, ax = _create_ax(dims)
+
     if cvar is None:
-        p = ax.scatter(X[:, dims[0]], X[:, dims[1]], color=c, s=s, alpha=alpha)
+        p = ax.scatter(
+            X[:, dims[0]],
+            X[:, dims[1]],
+            c=c,
+            s=s,
+            alpha=alpha,
+            cmap=None,
+            vmin=vmin,
+            vmax=vmax,
+        )
     else:
-        vmin = vmin or np.min(cvar)
-        vmax = vmax or np.max(cvar)
         p = ax.scatter(
             X[:, dims[0]],
             X[:, dims[1]],
             c=cvar,
             s=s,
-            cmap=cmap,
             alpha=alpha,
+            cmap=cmap,
             vmin=vmin,
             vmax=vmax,
         )
-        if plot_colorbar:
-            cbar = plt.colorbar(p, ax=ax,pad=0.1,orientation='horizontal',location='top')
-            cbar.set_label(colorbar_title)
-            cbar.set_ticks([vmin,0,vmax])
-            cbar.solids.set(alpha=1)
+
+    if cvar is not None and plot_colorbar:
+        _setup_colorbar(
+            ax, p, vmin or np.min(cvar), vmax or np.max(cvar), colorbar_title
+        )
 
     ax.set_title(title)
-
     ax.autoscale()
-    ax.set_aspect('equal')
-
+    ax.set_aspect("equal")
     ax.set_xlabel(f"Dim {dims[0]+1}")
     ax.set_ylabel(f"Dim {dims[1]+1}")
     ax.spines[["right", "top"]].set_visible(False)
 
-    return (f, ax)
+    return ax.get_figure(), ax
 
 
 def plot_polar_average(
@@ -477,24 +657,33 @@ def plot_polar_average(
     alpha=0.3,
     **plot_kwargs,
 ):
-    """Plot y as a function of x on a polar scale.
-    x should have domain [-pi,pi]
-    t0 and tf can be times or lists of times. If left  None, the entire data will be considered
-    if t0 and tf are lists or arrays, then  the average of the intervals defined by[t0_i,tf_i] will be computed, and the shaded region will be defined by "multi"
+    """
+    Plot covariate `y` as a function of phase `x` on a polar.
 
-    # TODO: work with multiple conditions
+    If t0,tf are arrays, will average over multiple intervals
 
     Args:
-        x (1D numpy array): _description_
-        y (1D numpy array): _description_
-        t (1D numpy array): _description_
-        ax (matplotlib axis, optional): _description_. Defaults to None.
-        t0 (int or list, optional): start times of the epochs to consider. Defaults to None.
-        tf (int or list, optional): end times of the epochs to consider. Defaults to None.
-        color (str, optional): color. Defaults to 'k'.
-        bins (int, optional): number of bins to split the unit circle into. Defaults to 50.
-        multi (str, optional): What metrics to use for the shaded region. Can be ['std','sem']. If not these, then individual traces are plotted. Defaults to 'sem'.
-        alpha (float, optional): Transparency of shaded region. Defaults to 0.3.
+        x (1D numpy array): Phase data with values in the range [-pi, pi].
+        y (1D numpy array): Signal data to be plotted against `x`.
+        t (1D numpy array): Time data corresponding to `x` and `y`.
+        ax (matplotlib.axes.Axes, optional): The axes object to plot on. If None, a new figure and axes are created. Defaults to None.
+        t0 (int, float, or list, optional): Start time(s) for epoch selection. If a list or array, averages over multiple epochs are computed. Defaults to None.
+        tf (int, float, or list, optional): End time(s) for epoch selection, matching the format of `t0`. Defaults to None.
+        color (str or list, optional): Line color(s) for the plot. Defaults to 'k'.
+        bins (int, optional): Number of bins for the polar histogram. Defaults to 50.
+        multi (str, optional): Specifies the method for calculating the shaded region. Options are 'std' for standard deviation or 'sem' for standard error of the mean. Defaults to 'sem'.
+        alpha (float, optional): Transparency of the shaded region. Defaults to 0.3.
+        **plot_kwargs: Additional keyword arguments passed to `ax.plot`.
+
+    Returns:
+        tuple: A tuple containing:
+            - `f`: The created figure object (or None if `ax` was provided).
+            - `ax`: The axes object used for plotting.
+            - `y_polar_out`: 2D numpy array of the polar data averaged over epochs.
+            - `phase_bins`: Phase bin centers for the plot.
+
+    Example:
+        >>> plot_polar_average(x, y, t, t0=0, tf=10, color='b', bins=30, multi='std')
     """
 
     try:
@@ -562,59 +751,60 @@ def plot_reset_curve(
     n_control=100,
 ):
     """
-    Plot a reset curve. Designed for opto stimulation plotting
-    TODO: Make general for times, not specifically a breaths alf object since it really only needs on and off timing
-    TODO: maybe normalize to -pi->pi
-
-    returns: (cycle_stim_time,cycle_duration,cycle_stim_time_rand,cycle_duration_rand)
-    (x_stim,y_stim,x_control,y_control)
-
+    Plot a reset curve for optogenetic stimulation, showing phase-dependent effects on breathing cycles.
 
     Args:
-        breaths (AlfBunch): Breath timing data. Needs attributes "times","IBI", and "duration_sec".
-        events (1D numpy array): Times of events to compute the phase reset for
-        wavelength (int, optional): Wavelength of the optical stimulus. Defaults to 473.
-        annotate (bool, optional): Make annotations and colors on the plot to aid in understanding. Can be noisy. Defaults to False.
-        norm (bool, optional): Whether to normalize the times to phase (0-1). Defaults to True.
-        plot_tgl (bool, optional): Flag to include plotting. Defaults to True.
+        breaths (AlfBunch): Breath timing data with attributes: 'times', 'IBI', and 'duration_sec'.
+        events (np.ndarray): 1D array of stimulation/event times.
+        wavelength (int, optional): Wavelength of optogenetic stimulus. Defaults to 473.
+        annotate (bool, optional): If True, add annotations and color overlays to the plot. Defaults to False.
+        norm (bool, optional): If True, normalizes time to phase (0-1) for plotting. Defaults to True.
+        plot_tgl (bool, optional): If True, creates a plot; if False, returns computed data. Defaults to True.
+        n_control (int, optional): Number of random control points for a control distribution. Defaults to 100.
+
+    Returns:
+        tuple:
+            - `cycle_stim_time`: Normalized/raw times of stimulation relative to breath onset.
+            - `cycle_duration`: Normalized/raw breath cycle durations following stimulation.
+            - `cycle_stim_time_rand`: Control times for stimulation from random event times.
+            - `cycle_duration_rand`: Control breath cycle durations for random events.
     """
 
     def _get_relative_times(times, events):
         idx_last = np.searchsorted(times, events) - 1
         idx_next = idx_last + 1
-        t_last = events - times[idx_last]
-        t_next = times[idx_next] - events
-        return (t_last, t_next)
+        return events - times[idx_last], times[idx_next] - events
 
+    # Filter breaths within the event range
     t0, tf = events.min(), events.max()
-    idx = np.logical_and(breaths.times > t0, breaths.times < tf)
-
-    mean_IBI = breaths.IBI[idx].mean()
-    mean_dur = breaths.duration_sec[idx].mean()
-    if norm:
-        norm_value = mean_IBI
-    else:
-        norm_value = 1
-    xmax = []
-    ymax = []
-    rand_samp = np.random.uniform(low=t0, high=tf, size=(n_control,))
-
-    # Compute and plot vals
-    t_since_last_on_rand, t_to_next_on_end = _get_relative_times(
-        breaths.times, rand_samp
+    valid_breaths = (breaths.times > t0) & (breaths.times < tf)
+    mean_IBI, mean_dur = (
+        breaths.IBI[valid_breaths].mean(),
+        breaths.duration_sec[valid_breaths].mean(),
     )
-    cycle_duration_rand = (t_to_next_on_end + t_since_last_on_rand) / norm_value
-    cycle_stim_time_rand = t_since_last_on_rand / norm_value
+
+    norm_value = mean_IBI if norm else 1
+
+    # Calculate random control data
+    rand_samp = np.random.uniform(low=t0, high=tf, size=n_control)
+    t_last_rand, t_next_rand = _get_relative_times(breaths.times, rand_samp)
+    cycle_duration_rand = (t_next_rand + t_last_rand) / norm_value
+    cycle_stim_time_rand = t_last_rand / norm_value
+
+    # Calculate stimulation event data
+    t_last, t_next = _get_relative_times(breaths.times, events)
+    cycle_duration = (t_next + t_last) / norm_value
+    cycle_stim_time = t_last / norm_value
+
+    # Plot control data
     if plot_tgl:
-        (ctrls,) = plt.plot(
+        plt.plot(
             cycle_stim_time_rand, cycle_duration_rand, "ko", ms=3, alpha=0.5, mew=0
         )
 
-    t_since_last_on, t_to_next_on = _get_relative_times(breaths.times, events)
-    cycle_duration = (t_to_next_on + t_since_last_on) / norm_value
-    cycle_stim_time = t_since_last_on / norm_value
+    # Plot stimulation event data
     if plot_tgl:
-        (stims,) = plt.plot(
+        plt.plot(
             cycle_stim_time,
             cycle_duration,
             "o",
@@ -623,7 +813,7 @@ def plot_reset_curve(
             mew=0,
         )
 
-    # # Skip plotting and just output data
+    # Return computed data if plot is disabled
     if not plot_tgl:
         return (
             cycle_stim_time,
@@ -632,21 +822,37 @@ def plot_reset_curve(
             cycle_duration_rand,
         )
 
-    # Prettify plot
-    if norm:
-        # Essential plot features
-        plt.axvline(mean_dur / mean_IBI, color="k", ls="--", lw=0.5)
-        plt.axhline(1, color="k", ls="--", lw=0.5)
-        plt.plot([0, 2], [0, 2], color="tab:red")
-        plt.xlabel("Stim time (normalized)")
-        plt.ylabel("Cycle duration (normalized)")
-        plt.xlim(0, 1.5)
-        plt.ylim(0, 2)
-        plt.yticks([0, 1, 2])
-        plt.xticks([0, 0.5, 1])
+    # Plot aesthetics
+    def _prettify_plot(norm, mean_dur, mean_IBI):
+        if norm:
+            plt.axvline(mean_dur / mean_IBI, color="k", ls="--", lw=0.5)
+            plt.axhline(1, color="k", ls="--", lw=0.5)
+            plt.plot([0, 2], [0, 2], color="tab:red")
+            plt.xlabel("Stim time (normalized)")
+            plt.ylabel("Cycle duration (normalized)")
+            plt.xlim(0, 1.5)
+            plt.ylim(0, 2)
+            plt.xticks([0, 0.5, 1])
+            plt.yticks([0, 1, 2])
+        else:
+            xmax = np.max(np.concatenate([t_last, t_last_rand]))
+            ymax = np.max(np.concatenate([t_next, t_next_rand]))
+            plt.axvline(mean_dur, color="k", ls="--", lw=0.5)
+            plt.axhline(mean_IBI, color="k", ls="--", lw=0.5)
+            plt.plot(
+                [0, mean_dur + mean_IBI], [0, mean_IBI + mean_dur], color="tab:red"
+            )
+            plt.xlabel("Time since last breath onset (s)")
+            plt.ylabel("Total time between breaths (s)")
+            plt.xlim([0, xmax])
+            plt.ylim([0, ymax * 1.1])
 
-        # Accessory plot features
-        if plot_tgl & annotate:
+    _prettify_plot(norm, mean_dur, mean_IBI)
+
+    # Add annotations and overlays if requested
+    if annotate:
+
+        def _add_annotations(mean_dur, mean_IBI):
             plt.text(
                 0.01, 1.5, "Prolong inspiration", ha="left", va="bottom", rotation=90
             )
@@ -657,18 +863,9 @@ def plot_reset_curve(
                 mean_dur / mean_IBI + 0.01,
                 mean_dur / mean_IBI + 0.05,
                 "Phase advance",
-                ha="left",
-                va="bottom",
                 rotation=90,
             )
-            plt.text(
-                mean_dur / mean_IBI + 0.01,
-                1.5,
-                "Phase delay",
-                ha="left",
-                va="bottom",
-                rotation=90,
-            )
+            plt.text(mean_dur / mean_IBI + 0.01, 1.5, "Phase delay", rotation=90)
 
             plt.fill_between(
                 [0, mean_dur / mean_IBI],
@@ -680,6 +877,7 @@ def plot_reset_curve(
             plt.fill_between(
                 [0, mean_dur / mean_IBI], [1, 1], [2, 2], color="tab:green", alpha=0.2
             )
+
             pts = np.array(
                 [
                     [mean_dur / mean_IBI, 1],
@@ -690,7 +888,6 @@ def plot_reset_curve(
                 ]
             )
             plt.fill(pts[:, 0], pts[:, 1], color="tab:orange", alpha=0.2)
-            # plt.fill_between([mean_dur / mean_IBI, 1], [1, 1], [2, 2], color='tab:orange', alpha=0.2)
             plt.fill_between(
                 [mean_dur / mean_IBI, 1],
                 [mean_dur / mean_IBI, 1],
@@ -706,7 +903,6 @@ def plot_reset_curve(
                 color="tab:red",
                 rotation=26,
             )
-
             plt.text(
                 mean_dur / mean_IBI / 2,
                 plt.gca().get_ylim()[1],
@@ -722,92 +918,27 @@ def plot_reset_curve(
                 va="top",
             )
 
-            plt.xlim(0, 1.5)
-            plt.ylim(0, 2)
-            plt.yticks([0, 1, 2])
-            plt.xticks([0, 0.5, 1, 1.5])
-    else:
-        xmax = np.max(np.concatenate([t_since_last_on, t_since_last_on_rand]))
-        ymax = np.max(np.concatenate([t_to_next_on, t_to_next_on_end]))
-        plt.axvline(mean_dur, color="k", ls="--", lw=0.5)
-        plt.axhline(mean_IBI, color="k", ls="--", lw=0.5)
-
-        plt.plot([0, mean_dur + mean_IBI], [0, mean_IBI + mean_dur], color="tab:red")
-
-        plt.xlabel("Time since last breath onset (s)")
-        plt.ylabel("Total time between breaths (s)")
-
-        plt.xlim([0, xmax])
-        plt.ylim([0, ymax * 1.1])
-
-        # Phase advance
-        pts = np.array(
-            [[mean_dur, mean_dur], [mean_IBI, mean_IBI], [mean_dur, mean_IBI]]
-        )
-        plt.fill_between(pts[:, 0], pts[:, 1], color="tab:green", alpha=0.3)
-
-        # Phase delay
-        pts = np.array(
-            [
-                [mean_dur, mean_IBI],
-                [mean_IBI, mean_IBI],
-                [mean_IBI + mean_dur, mean_IBI + mean_dur],
-                [mean_IBI + mean_dur, plt.gca().get_ylim()[1]],
-                [mean_dur, plt.gca().get_ylim()[1]],
-            ]
-        )
-        plt.fill(pts[:, 0], pts[:, 1], color="tab:grey", alpha=0.3)
-
-        # Shorten inspiration
-        pts = np.array(
-            [[0, 0], [mean_dur, mean_dur], [mean_dur, mean_IBI], [0, mean_IBI]]
-        )
-        plt.fill(pts[:, 0], pts[:, 1], color="tab:purple", alpha=0.3)
-
-        # Prolong inspiration
-        pts = np.array(
-            [
-                [0, mean_IBI],
-                [mean_dur, mean_IBI],
-                [mean_dur, plt.gca().get_ylim()[1]],
-                [0, plt.gca().get_ylim()[1]],
-            ]
-        )
-        plt.fill(pts[:, 0], pts[:, 1], color="tab:orange", alpha=0.3)
-
-        if annotate:
-            plt.text(mean_dur, mean_dur / 2, "inspiration\nduration", rotation=90)
-            plt.text(0, (mean_dur + mean_IBI) / 2, "Shorten inspiration", ha="left")
-            plt.text(
-                0, plt.gca().get_ylim()[1], "Prolong inspiration", ha="left", va="top"
-            )
-            plt.text(
-                mean_dur,
-                (mean_dur + mean_IBI) / 2,
-                "Advance phase",
-                ha="left",
-                va="center",
-            )
-            plt.text(
-                mean_dur, plt.gca().get_ylim()[1], "Delay phase", ha="left", va="top"
-            )
-            plt.text(
-                (mean_dur + mean_IBI) / 2,
-                (mean_dur + mean_IBI) / 2,
-                "Lower bound",
-                color="tab:red",
-                ha="left",
-                va="top",
-            )
-            plt.legend([stims, ctrls], ["Stims", "Random"])
+        _add_annotations(mean_dur, mean_IBI)
 
     sns.despine()
-    return (cycle_stim_time, cycle_duration, cycle_stim_time_rand, cycle_duration_rand)
+    return cycle_stim_time, cycle_duration, cycle_stim_time_rand, cycle_duration_rand
 
 
 def plot_sweeps(xt, x, times, pre, post, ax=None, **kwargs):
     """
-    Time align a trace x to the event times in "times"
+    Time-aligns a trace `x` to event times specified in `times`.
+
+    Args:
+        xt (array-like): Time values corresponding to the signal trace `x`.
+        x (array-like): Signal trace data to be plotted.
+        times (array-like): Event times to align the trace `x` to.
+        pre (float): Time before each event to start the trace.
+        post (float): Time after each event to end the trace.
+        ax (matplotlib.axes.Axes, optional): Axes to plot on. If None, a new figure and axes will be created. Default is None.
+        **kwargs: Additional keyword arguments passed to `ax.plot`, such as line style or color.
+
+    Returns:
+        ax: matplotlib axis
     """
     if ax is None:
         f = plt.figure()
@@ -817,6 +948,7 @@ def plot_sweeps(xt, x, times, pre, post, ax=None, **kwargs):
         tf = tt + post
         s0, st, sf = np.searchsorted(xt, [t0, tt, tf])
         ax.plot(xt[s0:sf] - xt[st], x[s0:sf], **kwargs)
+    return ax
 
 
 def plot_most_likely_dynamics(
@@ -828,11 +960,11 @@ def plot_most_likely_dynamics(
     alpha=0.8,
     ax=None,
     figsize=(3, 3),
-    colors=[f'C{x}' for x in range(7)],
+    colors=[f"C{x}" for x in range(7)],
 ):
-    '''
+    """
     Plotting of underlying vector fields from Linderman Lab
-    '''
+    """
 
     K = model.K
     assert model.D == 2
@@ -865,12 +997,11 @@ def plot_most_likely_dynamics(
     ax.set_xlabel("$x_1$")
     ax.set_ylabel("$x_2$")
 
-
     return ax
 
 
 def plot_most_likely_dynamics_3D(
-            model,
+    model,
     xlim=(-4, 4),
     ylim=(-3, 3),
     zlim=(-3, 3),
@@ -881,27 +1012,27 @@ def plot_most_likely_dynamics_3D(
     ax=None,
     figsize=(3, 3),
     length=0.2,
-    colors=[f'C{x}' for x in range(7)],
+    colors=[f"C{x}" for x in range(7)],
 ):
-    '''
+    """
     Extension of the linderman vectorfield plot to 3D
 
-    '''
+    """
     assert model.D == 3
     x = np.linspace(*xlim, nxpts)
     y = np.linspace(*ylim, nypts)
     z = np.linspace(*zlim, nzpts)
-    
-    X, Y, Z = np.meshgrid(x, y, z, indexing='ij')
 
-    xyz = np.column_stack((X.ravel(), Y.ravel(),Z.ravel()))
+    X, Y, Z = np.meshgrid(x, y, z, indexing="ij")
+
+    xyz = np.column_stack((X.ravel(), Y.ravel(), Z.ravel()))
 
     # Get the probability of each state at each xy location
     k_state = np.argmax(xyz.dot(model.transitions.Rs.T) + model.transitions.r, axis=1)
 
     if ax is None:
         fig = plt.figure(figsize=figsize)
-        ax = fig.add_subplot(111,projection='3d')
+        ax = fig.add_subplot(111, projection="3d")
 
     for k, (A, b) in enumerate(zip(model.dynamics.As, model.dynamics.bs)):
         dxyzdt_m = xyz.dot(A.T) + b - xyz
@@ -917,7 +1048,7 @@ def plot_most_likely_dynamics_3D(
                 dxyzdt_m[zk, 2],
                 color=colors[k % len(colors)],
                 alpha=alpha,
-                length=length
+                length=length,
             )
     ax.set_xlabel("$x_1$")
     ax.set_ylabel("$x_2$")
@@ -925,11 +1056,30 @@ def plot_most_likely_dynamics_3D(
     ax.grid(visible=False)
     plt.tight_layout()
 
-
-    return(ax)
+    return ax
 
 
 def _clean_3d_axes(ax, title, dims, pane_color, lims):
+    """Modify 3D axes to be cleaner:
+            Set title
+            set axis labels
+            make limits equal
+            turn off grid
+            set background color
+    Args:
+        ax (matplotlib.axes._subplots.Axes3DSubplot): The 3D axes object to customize.
+        title (str): The title of the plot.
+        dims (tuple or list of ints): Dimensions to label the axes, corresponding to the 3D data dimensions (e.g., (0, 1, 2) for first three components).
+        pane_color (tuple or None): RGB color to set for the panes (background of each axis). Use None for default color.
+        lims (tuple or list of floats): Axis limits to set for x, y, and z axes (e.g., (-1, 1) to set limits for all axes).
+
+    Returns:
+        ax (matplotlib.axes._subplots.Axes3DSubplot): The modified axes object.
+
+    Example:
+        ax = fig.add_subplot(111, projection='3d')
+        _clean_3d_axes(ax, "3D Plot", (0, 1, 2), (0.9, 0.9, 0.9, 0.5), (-1, 1))
+    """
     ax.set_title(title)
 
     ax.set_xlim(lims)
@@ -946,19 +1096,40 @@ def _clean_3d_axes(ax, title, dims, pane_color, lims):
         ax.xaxis.set_pane_color(pane_color)  # Set the color of the x-axis pane
         ax.yaxis.set_pane_color(pane_color)  # Set the color of the y-axis pane
         ax.zaxis.set_pane_color(pane_color)  # Set the color of the z-axis pane
-    return(ax)
+    return ax
 
 
 def clean_polar_axis(ax):
+    """
+    Clean the appearance of a polar plot.
+    Use pi/2 (90 degrees) angular ticks, no internal radial ticks, and set labels to mathtext pi
+
+    Args:
+        ax (matplotlib.projections.polar.PolarAxes): The polar axes object to modify.
+
+    Example:
+        ax = plt.subplot(projection='polar')
+        clean_polar_axis(ax)
+    """
     ax.set_yticks([ax.get_yticks()[-1]])
     ax.set_xticks([0, np.pi / 2, np.pi, np.pi * 3 / 2])
     ax.set_xticklabels(["0", "$\\frac{\pi}{2}$", "$\pi$", "$\\frac{-\pi}{2}$"])
 
 
 def clean_linear_radial_axis(ax):
+    """
+    Clean the appearance of a plot with a range o [-pi,pi] but on a normal, linear axis
+    Sets ticks to every pi/2 interval and uses math text.
+
+    Args:
+        ax (matplotlib.axes._subplots.AxesSubplot): The axes object to modify.
+
+    Example:
+        ax = plt.subplot()
+        clean_linear_radial_axis(ax)
+    """
     ax.set_xticks([-np.pi, -np.pi / 2, 0, np.pi / 2, np.pi])
     ax.set_xticklabels(
         ["$-\pi$", "$\\frac{-\pi}{2}$", "0", "$\\frac{\pi}{2}$", "$\pi$"]
     )
     sns.despine(trim=True)
-
