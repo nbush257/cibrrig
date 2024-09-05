@@ -8,6 +8,7 @@ import seaborn as sns
 from matplotlib.collections import LineCollection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from matplotlib.cm import ScalarMappable
+from matplotlib.patches import FancyArrowPatch
 
 # Maps laser wavelengths to hex codes
 laser_colors = {473: "#00b7ff", 565: "#d2ff00", 635: "#ff0000"}
@@ -212,7 +213,7 @@ def _plot_laser_log(log, query=None, rotation=45, fontsize=6, **kwargs):
 
 
 def plot_projection_line_multicondition(
-    X, tbins, intervals, colors, dims=[0, 1], ax=None, alpha=0.5,lw=1
+    X, tbins, intervals, colors, dims=[0, 1], ax=None, alpha=0.5,lw=1,**kwargs
 ):
     """
     overlay multiple conditions each with a defined color
@@ -223,23 +224,30 @@ def plot_projection_line_multicondition(
         f = plt.figure()
         if len(dims) == 2:
             ax = f.add_subplot()
-        elif len(dims) == 2:
+        elif len(dims) == 3:
             ax = f.add_subplot(projection="3d")
+
+    if (len(dims)==3) and (kwargs.get('lims',None) is None):
+        lim = np.nanmax(np.abs(X))
+        lims = [-lim,lim]
+        kwargs['lims'] = lim
+
     for ii, cc in enumerate(colors):
         t0, tf = intervals[ii]
         s0, sf = np.searchsorted(tbins, [t0, tf])
 
         X_sub = X[s0 - 1 : sf, :]
         ax = plot_projection_line(
-            X_sub, dims=dims, cvar=None, color=cc, alpha=alpha, ax=ax,lw=lw
+            X_sub, dims=dims, cvar=None, color=cc, alpha=alpha, ax=ax,lw=lw,**kwargs
         )
+    return ax
 
 
 def plot_projection_line(X, cvar=None, dims=[0, 1], cmap="viridis", **kwargs):
     if len(dims) == 2:
         ax = _plot_projection_line_2D(X, cvar, dims, cmap=cmap, **kwargs)
     elif len(dims) == 3:
-        ax = _plot_projection_line_3D(X, cvar, dims=dims, **kwargs)
+        ax = _plot_projection_line_3D(X, cvar, dims=dims, cmap=cmap,**kwargs)
     else:
         raise ValueError("Number of dims must be two or three")
     return ax
@@ -257,7 +265,8 @@ def _plot_projection_line_2D(
     vmax=None,
     lw=0.5,
     colorbar_title='',
-    **kwargs,
+    plot_colorbar=True,
+    **kwargs
 ):
     if ax is None:
         f = plt.figure()
@@ -265,6 +274,12 @@ def _plot_projection_line_2D(
 
 
     segments = np.stack([X[:-1,dims], X[1:,dims]], axis=1)
+    use_arrow = kwargs.pop('use_arrow',None)
+    if use_arrow:
+        a,b, =  segments[-1]
+        arrow=FancyArrowPatch(a,b,arrowstyle='-|>',color=color,lw=lw,alpha=alpha,mutation_scale=10)
+        segments = segments[:-1]
+
 
     if cvar is not None:
         vmin = vmin or np.min(cvar)
@@ -278,12 +293,15 @@ def _plot_projection_line_2D(
         lc.set_color(color)
     
     ax.add_collection(lc)
+    if use_arrow:
+        ax.add_patch(arrow)
+
     ax.autoscale()
     ax.set_aspect('equal')
     ax.set_xlabel(f'Dim {dims[0]+1}')
     ax.set_ylabel(f'Dim {dims[1]+1}')
 
-    if cvar is not None:
+    if cvar is not None and plot_colorbar:
         cbar = plt.colorbar(lc, ax=ax,pad=0.1,orientation='horizontal',location='top')
         cbar.set_label(colorbar_title)
         cbar.set_ticks([vmin,0,vmax])
@@ -302,7 +320,7 @@ def _plot_projection_line_3D(
     ax=None,
     title="",
     alpha=0.5,
-    lims=[-4, 4],
+    lims=None,
     pane_color=None,
     colorbar_title="",
     plot_colorbar=True,
@@ -336,8 +354,11 @@ def _plot_projection_line_3D(
     
     ax.add_collection(lc)
     ax.autoscale()
+    if lims is None:
+        lim = np.nanmax(np.abs(X[:,dims]))
+        lims = [-lim,lim]
 
-    _clean_3d_axes(ax, title, dims, pane_color, lims)
+    _clean_3d_axes(ax, title, dims, pane_color, lims=lims)
 
     return ax
 
@@ -363,7 +384,7 @@ def plot_3D_projection(
     cmap="viridis",
     c="k",
     alpha=0.2,
-    lims=[-4, 4],
+    lims=None,
     plot_colorbar=True,
     colorbar_title="",
     pane_color=None,
@@ -403,9 +424,34 @@ def plot_3D_projection(
             cbar.set_ticks([vmin,0,vmax])
             cbar.solids.set(alpha=1)
 
-    _clean_3d_axes(ax, title, dims, pane_color, lims)
+    ax.autoscale()
+    if lims is None:
+        lim = np.nanmax(np.abs(X[:,dims]))
+        lims = [-lim,lim]
+    _clean_3d_axes(ax, title, dims, pane_color, lims=lims)
 
-    return (f, ax)
+    return ax
+
+
+def _clean_3d_axes(ax, title, dims, pane_color, lims=None):
+    ax.set_title(title)
+
+    if lims is not None:
+        ax.set_xlim(lims)
+        ax.set_ylim(lims)
+        ax.set_zlim(lims)
+
+    ax.set_xlabel(f"Dim {dims[0]+1}")
+    ax.set_ylabel(f"Dim {dims[1]+1}")
+    ax.set_zlabel(f"Dim {dims[2]+1}")
+
+    ax.grid(False)
+
+    if pane_color is not None:
+        ax.xaxis.set_pane_color(pane_color)  # Set the color of the x-axis pane
+        ax.yaxis.set_pane_color(pane_color)  # Set the color of the y-axis pane
+        ax.zaxis.set_pane_color(pane_color)  # Set the color of the z-axis pane
+    return ax 
 
 
 def plot_2D_projection(
@@ -896,7 +942,7 @@ def plot_most_likely_dynamics_3D(
 
     xyz = np.column_stack((X.ravel(), Y.ravel(),Z.ravel()))
 
-    # Get the probability of each state at each xy location
+    # Get the probability of each state at each xyz location
     k_state = np.argmax(xyz.dot(model.transitions.Rs.T) + model.transitions.r, axis=1)
 
     if ax is None:
@@ -926,27 +972,8 @@ def plot_most_likely_dynamics_3D(
     plt.tight_layout()
 
 
-    return(ax)
-
-
-def _clean_3d_axes(ax, title, dims, pane_color, lims):
-    ax.set_title(title)
-
-    ax.set_xlim(lims)
-    ax.set_ylim(lims)
-    ax.set_zlim(lims)
-
-    ax.set_xlabel(f"Dim {dims[0]+1}")
-    ax.set_ylabel(f"Dim {dims[1]+1}")
-    ax.set_zlabel(f"Dim {dims[2]+1}")
-
-    ax.grid(False)
-
-    if pane_color is not None:
-        ax.xaxis.set_pane_color(pane_color)  # Set the color of the x-axis pane
-        ax.yaxis.set_pane_color(pane_color)  # Set the color of the y-axis pane
-        ax.zaxis.set_pane_color(pane_color)  # Set the color of the z-axis pane
-    return(ax)
+    return ax
+# TODO: plot most likely dynamics slice
 
 
 def clean_polar_axis(ax):
