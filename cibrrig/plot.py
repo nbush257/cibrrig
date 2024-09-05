@@ -6,6 +6,7 @@ from matplotlib.cm import ScalarMappable
 from matplotlib.patches import FancyArrowPatch
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from one.alf.io import AlfBunch
+from matplotlib.collections import LineCollection
 
 from .utils.utils import parse_opto_log, validate_intervals, weighted_histogram
 
@@ -312,6 +313,7 @@ def plot_projection_line(X, cvar=None, dims=[0, 1], cmap="viridis", **kwargs):
         ax = _plot_projection_line_3D(X, cvar, dims=dims, cmap=cmap, **kwargs)
     else:
         raise ValueError("Number of dims must be two or three")
+    return ax
 
 
 def _plot_projection_line_2D(
@@ -353,6 +355,7 @@ def _plot_projection_line_2D(
         _, ax = _create_ax(dims)
 
     segments = np.stack([X[:-1, dims], X[1:, dims]], axis=1)
+
     use_arrow = kwargs.pop("use_arrow", None)
     if use_arrow:
         (
@@ -364,6 +367,7 @@ def _plot_projection_line_2D(
         )
         segments = segments[:-1]
 
+    lc = LineCollection(segments, alpha=alpha, lw=lw, **kwargs)
     if cvar is not None:
         vmin = vmin or np.min(cvar)
         vmax = vmax or np.max(cvar)
@@ -994,8 +998,6 @@ def plot_most_likely_dynamics(
     """
     Plotting of underlying vector fields from Linderman Lab
     """
-
-    K = model.K
     assert model.D == 2
     x = np.linspace(*xlim, nxpts)
     y = np.linspace(*ylim, nypts)
@@ -1085,46 +1087,6 @@ def plot_most_likely_dynamics_3D(
     ax.grid(visible=False)
     plt.tight_layout()
 
-    return ax
-
-
-def _clean_3d_axes(ax, title, dims, pane_color, lims):
-    """Modify 3D axes to be cleaner:
-            Set title
-            set axis labels
-            make limits equal
-            turn off grid
-            set background color
-    Args:
-        ax (matplotlib.axes._subplots.Axes3DSubplot): The 3D axes object to customize.
-        title (str): The title of the plot.
-        dims (tuple or list of ints): Dimensions to label the axes, corresponding to the 3D data dimensions (e.g., (0, 1, 2) for first three components).
-        pane_color (tuple or None): RGB color to set for the panes (background of each axis). Use None for default color.
-        lims (tuple or list of floats): Axis limits to set for x, y, and z axes (e.g., (-1, 1) to set limits for all axes).
-
-    Returns:
-        ax (matplotlib.axes._subplots.Axes3DSubplot): The modified axes object.
-
-    Example:
-        ax = fig.add_subplot(111, projection='3d')
-        _clean_3d_axes(ax, "3D Plot", (0, 1, 2), (0.9, 0.9, 0.9, 0.5), (-1, 1))
-    """
-    ax.set_title(title)
-
-    ax.set_xlim(lims)
-    ax.set_ylim(lims)
-    ax.set_zlim(lims)
-
-    ax.set_xlabel(f"Dim {dims[0]+1}")
-    ax.set_ylabel(f"Dim {dims[1]+1}")
-    ax.set_zlabel(f"Dim {dims[2]+1}")
-
-    ax.grid(False)
-
-    if pane_color is not None:
-        ax.xaxis.set_pane_color(pane_color)  # Set the color of the x-axis pane
-        ax.yaxis.set_pane_color(pane_color)  # Set the color of the y-axis pane
-        ax.zaxis.set_pane_color(pane_color)  # Set the color of the z-axis pane
     return ax
 
 
