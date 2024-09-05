@@ -9,21 +9,39 @@ from matplotlib.collections import LineCollection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from matplotlib.cm import ScalarMappable
 
-
+# Maps laser wavelengths to hex codes
 laser_colors = {473: "#00b7ff", 565: "#d2ff00", 635: "#ff0000"}
-
 
 def plot_laser(laser_in, **kwargs):
     """
-    kwargs:
-    amplitudes
-    ax
-    mode (shade,bar,vline)
-    amp_label
-    wavelength
-    alpha
-    **plot kwargs
+    Flexibly overlay laser stimulation.
+
+    Args:
+        laser_in (AlfBunch or array-like): The laser data to be plotted. Can be an AlfBunch object or an array of intervals.
+        **kwargs: Additional keyword arguments to be passed to the plotting functions. These may include:
+            mode (str): The plotting mode. Options are "shade", "bar", "vline", or any other (defaults to steps).
+            ax (matplotlib.axes.Axes): The axes object to plot on. If None, a new figure and axes will be created.
+            amp_label (str): Label for the amplitude axis when plotting amplitudes.
+            wavelength (int): Laser wavelength in nm, used to determine the color of the plot.
+            alpha (float or array-like): The alpha (transparency) value(s) for shaded areas.
+            color (str or tuple): The color to use for plotting. If not provided, a default color based on wavelength is used.
+            query (str): Query string to filter the data (only used in _plot_laser_log).
+            rotation (int): Rotation angle for text annotations (only used in _plot_laser_log).
+            fontsize (int): Font size for text annotations (only used in _plot_laser_log).
+            Any other keyword arguments accepted by matplotlib plotting functions.
+
+    Returns:
+        matplotlib.axes.Axes: The axes object containing the plot.
+
+    Notes:
+        This function determines the appropriate plotting method based on the input type:
+        - If laser_in is an AlfBunch object with a 'category' key, it calls _plot_laser_log.
+        - If laser_in is an AlfBunch object without a 'category' key, it calls _plot_laser_alf.
+        - For other input types, it calls _plot_laser_intervals.
+        
+        The specific kwargs used may vary depending on which underlying plotting function is called.
     """
+
     if isinstance(laser_in, AlfBunch):
         if "category" in laser_in.keys():
             ax = _plot_laser_log(laser_in, **kwargs)
@@ -35,6 +53,18 @@ def plot_laser(laser_in, **kwargs):
 
 
 def _plot_laser_alf(laser_in, **kwargs):
+    """
+    Plot laser data from a "laser" AlfBunch.
+
+    Args:
+        laser_in (AlfBunch): The AlfBunch object containing laser data.
+        **kwargs: Additional keyword arguments to be passed to _plot_laser_intervals.
+
+    Notes:
+        This function extracts intervals and amplitudes from the AlfBunch object and calls
+        _plot_laser_intervals with the appropriate parameters. It determines whether to use
+        milliwatts or volts for the amplitude label based on the available keys in laser_in.
+    """
     intervals = laser_in.intervals
     if "amplitudesMilliwatts" in laser_in.keys():
         amplitudes = laser_in.amplitudesMilliwatts
@@ -58,6 +88,32 @@ def _plot_laser_intervals(
     alpha=0.2,
     **kwargs,
 ):
+    """
+    Plot laser intervals from arrays.
+
+    Args:
+        intervals (array-like): Array of laser intervals, where each interval is [start_time, end_time].
+        amplitudes (array-like, optional): Array of amplitude values corresponding to each interval.
+        ax (matplotlib.axes.Axes, optional): The axes object to plot on. If None, a new figure and axes will be created.
+        mode (str, optional): The plotting mode. Options are "shade", "bar", "vline", or any other (defaults to steps).
+        amp_label (str, optional): Label for the amplitude axis when plotting amplitudes.
+        wavelength (int, optional): Laser wavelength in nm, used to determine the color of the plot. Default is 473.
+        alpha (float or array-like, optional): The alpha (transparency) value(s) for shaded areas. Default is 0.2.
+        **kwargs: Additional keyword arguments to be passed to the plotting functions.
+
+    Returns:
+        matplotlib.axes.Axes: The axes object containing the plot.
+
+    Notes:
+        This function supports multiple plotting modes:
+        - "shade": Shades the intervals on the plot.
+        - "bar": Plots horizontal bars for each interval.
+        - "vline": Plots vertical lines at the start of each interval.
+        - Any other mode defaults to plotting steps of the amplitudes.
+
+        The function handles color selection based on the wavelength and can use a list
+        of alpha values for varying transparency across intervals.
+    """
     if ax is None:
         f = plt.figure()
         ax = f.add_subplot(111)
@@ -111,6 +167,23 @@ def _plot_laser_intervals(
 
 
 def _plot_laser_log(log, query=None, rotation=45, fontsize=6, **kwargs):
+    """
+    Plot laser data from a "log" AlfBunch object.
+
+    Args:
+        log (AlfBunch): The AlfBunch object containing laser log data.
+        query (str, optional): Query string to filter the data. Default is None.
+        rotation (int, optional): Rotation angle for text annotations. Default is 45.
+        fontsize (int, optional): Font size for text annotations. Default is 6.
+        **kwargs: Additional keyword arguments to be passed to _plot_laser_intervals.
+
+    Returns:
+        matplotlib.axes.Axes: The axes object containing the plot.
+
+    Notes:
+        This function extracts opto data from the log, plots the intervals using _plot_laser_intervals,
+        and adds text annotations for each interval. It handles both milliwatt and voltage amplitudes.
+    """
     opto_df = log.to_df().query('category=="opto"')
     intervals = opto_df[["start_time", "end_time"]].values
     if "amplitude_mw" in opto_df.keys():
@@ -138,8 +211,6 @@ def _plot_laser_log(log, query=None, rotation=45, fontsize=6, **kwargs):
     return ax
 
 
-# TODO: Clean and refactor some of this line plotting.
-# TODO: Wrap into population object.
 def plot_projection_line_multicondition(
     X, tbins, intervals, colors, dims=[0, 1], ax=None, alpha=0.5,lw=1
 ):
@@ -171,13 +242,6 @@ def plot_projection_line(X, cvar=None, dims=[0, 1], cmap="viridis", **kwargs):
         ax = _plot_projection_line_3D(X, cvar, dims=dims, **kwargs)
     else:
         raise ValueError("Number of dims must be two or three")
-
-    # # TODO Fix colorbar
-    # if plot_colorbar:
-    #     cax = plt.gcf().add_axes([0.25, 0.85, 0.5, 0.02])
-    #     cbar = plt.gcf().colorbar(p,cax=cax,orientation='horizontal')
-    #     cbar.set_label(colorbar_title)
-    #     cbar.solids.set(alpha=1)
     return ax
 
 
@@ -344,26 +408,6 @@ def plot_3D_projection(
     return (f, ax)
 
 
-def _clean_3d_axes(ax, title, dims, pane_color, lims):
-    ax.set_title(title)
-
-    ax.set_xlim(lims)
-    ax.set_ylim(lims)
-    ax.set_zlim(lims)
-
-    ax.set_xlabel(f"Dim {dims[0]+1}")
-    ax.set_ylabel(f"Dim {dims[1]+1}")
-    ax.set_zlabel(f"Dim {dims[2]+1}")
-
-    ax.grid(False)
-
-    if pane_color is not None:
-        ax.xaxis.set_pane_color(pane_color)  # Set the color of the x-axis pane
-        ax.yaxis.set_pane_color(pane_color)  # Set the color of the y-axis pane
-        ax.zaxis.set_pane_color(pane_color)  # Set the color of the z-axis pane
-    return(ax)
-
-
 def plot_2D_projection(
     X,
     dims=[0, 1],
@@ -418,20 +462,6 @@ def plot_2D_projection(
     ax.spines[["right", "top"]].set_visible(False)
 
     return (f, ax)
-
-
-def clean_polar_axis(ax):
-    ax.set_yticks([ax.get_yticks()[-1]])
-    ax.set_xticks([0, np.pi / 2, np.pi, np.pi * 3 / 2])
-    ax.set_xticklabels(["0", "$\\frac{\pi}{2}$", "$\pi$", "$\\frac{-\pi}{2}$"])
-
-
-def clean_linear_radial_axis(ax):
-    ax.set_xticks([-np.pi, -np.pi / 2, 0, np.pi / 2, np.pi])
-    ax.set_xticklabels(
-        ["$-\pi$", "$\\frac{-\pi}{2}$", "0", "$\\frac{\pi}{2}$", "$\pi$"]
-    )
-    sns.despine(trim=True)
 
 
 def plot_polar_average(
@@ -839,7 +869,6 @@ def plot_most_likely_dynamics(
     return ax
 
 
-
 def plot_most_likely_dynamics_3D(
             model,
     xlim=(-4, 4),
@@ -899,4 +928,37 @@ def plot_most_likely_dynamics_3D(
 
     return(ax)
 
+
+def _clean_3d_axes(ax, title, dims, pane_color, lims):
+    ax.set_title(title)
+
+    ax.set_xlim(lims)
+    ax.set_ylim(lims)
+    ax.set_zlim(lims)
+
+    ax.set_xlabel(f"Dim {dims[0]+1}")
+    ax.set_ylabel(f"Dim {dims[1]+1}")
+    ax.set_zlabel(f"Dim {dims[2]+1}")
+
+    ax.grid(False)
+
+    if pane_color is not None:
+        ax.xaxis.set_pane_color(pane_color)  # Set the color of the x-axis pane
+        ax.yaxis.set_pane_color(pane_color)  # Set the color of the y-axis pane
+        ax.zaxis.set_pane_color(pane_color)  # Set the color of the z-axis pane
+    return(ax)
+
+
+def clean_polar_axis(ax):
+    ax.set_yticks([ax.get_yticks()[-1]])
+    ax.set_xticks([0, np.pi / 2, np.pi, np.pi * 3 / 2])
+    ax.set_xticklabels(["0", "$\\frac{\pi}{2}$", "$\pi$", "$\\frac{-\pi}{2}$"])
+
+
+def clean_linear_radial_axis(ax):
+    ax.set_xticks([-np.pi, -np.pi / 2, 0, np.pi / 2, np.pi])
+    ax.set_xticklabels(
+        ["$-\pi$", "$\\frac{-\pi}{2}$", "0", "$\\frac{\pi}{2}$", "$\pi$"]
+    )
+    sns.despine(trim=True)
 

@@ -5,7 +5,7 @@ Takes a spikeglx run and performs:
 3) Preprocessing
 4) Spikesorting
 
-# Gui created by chatgpt
+# Gui created in part by chatgpt
 """
 
 from PyQt5.QtWidgets import (
@@ -66,7 +66,13 @@ POSSIBLE_WIRINGS = {
 
 
 class DirectorySelector(QWidget):
+    """GUI to select paths for backup. Expands QWIdget
+
+    Args:
+        QWidget (Qwidget): Base class Qwidget
+    """    
     def __init__(self):
+        ''' Set default settings'''
         super().__init__()
         self.local_run_path = Path("D:/sglx_data/Subjects")
         self.remote_archive_path = Path("U:/alf_data_repo/ramirez/Subjects")
@@ -77,6 +83,7 @@ class DirectorySelector(QWidget):
         self.init_ui()
 
     def init_ui(self):
+        ''' Initialize UI Layout'''
         layout = QVBoxLayout()
 
         grid_layout = QGridLayout()
@@ -178,6 +185,7 @@ class DirectorySelector(QWidget):
 
 
 class OptoFileFinder(QDialog):
+    ''' Dialog box to select the opto_calibration.json file if it is not found'''
     opto_file_selected = pyqtSignal(Path)
 
     def __init__(self):
@@ -223,6 +231,7 @@ class OptoFileFinder(QDialog):
 
 
 class WiringEditor(QDialog):
+    ''' Dialog box to select the wiring file '''
     def __init__(self):
         super().__init__()
         self.initUI()
@@ -347,13 +356,17 @@ def main():
         remove_opto_artifact,
         run_ephysQC,
     ) = window.get_paths()
+
+    # If the user selected the Subjects folder error out 
     if local_run_path == Path(r"D:/sglx_data/Subjects"):
         raise ValueError(
             "You picked the root Subjects folder. This is a scary thing to do and incorrect."
         )
 
+    # Get all the gates recorded for this subject
     gate_paths = list(local_run_path.glob("*_g[0-9]*"))
 
+    # Get the opto_calibration.json files
     for gate in gate_paths:
         opto_fn = list(gate.glob("opto_calibration.json"))
         if not opto_fn:
@@ -367,6 +380,7 @@ def main():
             else:
                 print("Skipping opto file")
 
+    # Get the wiring.json files
     for gate in gate_paths:
         wiring_fn = list(gate.glob("nidq.wiring.json"))
         if not wiring_fn:
@@ -378,7 +392,7 @@ def main():
                 json.dump(wiring, fid)
             print("Created wiring file")
 
-    # RUN BACKUP
+    # RUN BACKUP 
     backup.no_gui(local_run_path, remote_archive_path)
 
     # RUN RENAME
@@ -401,7 +415,7 @@ def main():
         for pp in params_files:
             command = ["phy", "extract-waveforms", pp]
             subprocess.run(command, cwd=pp.parent)
-    # Move all data:
+    # Move all data to RSS
     shutil.move(local_run_path, remote_working_path)
 
 
