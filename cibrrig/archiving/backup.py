@@ -1,7 +1,16 @@
 """
-Code to backup the raw data to a given folder
-This is a "Frozen copy" - should be identical to what is acquired day of.
-Much of the functionality of "Archiver" is deprecated, but retained in case it is wanted
+This module provides functionality to backup raw electrophysiological data to a specified folder. 
+The backup is a "Frozen copy" that should be identical to the data acquired on the day of recording.
+
+Much of the functionality of the `Archiver` class is deprecated but retained for legacy support.
+
+Key features:
+- Handles electrophysiological (ephys), video, audio, and metadata files.
+- Compresses electrophysiological files using SpikeGLX, optionally removing the raw data after compression.
+- Supports GUI-based file selection using PyQt5 for the backup process.
+- Supports running the backup without a GUI through the command line.
+- Copies the session data to a new target location based on the recording date.
+- Marks the backup with a timestamp indicating when it was archived.
 """
 
 from pathlib import Path
@@ -33,6 +42,20 @@ DEFAULT_VIDEO_DIRECTORY = Path("D:\sglx_data")
 
 
 class Archiver:
+    """
+    Handles the backup of electrophysiological and related session data for a given subject.
+
+    Attributes:
+        keep_raw (bool): Whether to keep raw data after compression.
+        subject_ID (str): ID of the subject being backed up.
+        ephys_files_local (list): Local electrophysiological files to back up.
+        ephys_files_remote (list): Remote electrophysiological files to back up.
+        num_sessions (int): Number of local sessions found for the subject.
+        subjects_path (Path): Path where the subjects' data is stored remotely.
+        run_path (Path): Path to the local session data.
+        today_path (Path): Path to the backup directory based on the record date.
+        video_files (list): List of video files found in the sessions.
+    """
     def __init__(self, keep_raw):
         self.subject_ID = None
         self.ephys_files_local = None
@@ -56,25 +79,31 @@ class Archiver:
         self.session_list_local = None
 
     def set_subjects_path(self, path):
+        """Set the path where the subjects' data will be archived."""
         self.subjects_path = Path(path)
         print(f"Subjects path set to: {self.subjects_path}")
 
     def get_sessions_local(self):
+        """Find local sessions to back up."""
         contents = self.run_path.glob("*_g[0-9]*")
         self.session_list_local = [x for x in contents if x.is_dir()]
         self.num_sessions = len(self.session_list_local)
 
     def guess_subject_ID(self):
+        """Infer the subject ID from the local session path."""
         self.subject_ID = self.run_path.name
         print(f"Subject ID set to: {self.subject_ID}")
 
     def get_ephys_files_remote(self):
+        """Retrieve remote electrophysiological files to be backed up."""
         self.ephys_files_remote = spikeglx.glob_ephys_files(self.today_path)
 
     def get_ephys_files_local(self):
+        """Retrieve local electrophysiological files."""
         self.ephys_files_local = spikeglx.glob_ephys_files(self.run_path)
 
     def compress_ephys_files_remote(self):
+        """Compress remote electrophysiological files."""
         if self.ephys_files_remote is None:
             self.get_ephys_files_remote()
 
@@ -112,6 +141,7 @@ class Archiver:
             _run_compress(ni_file)
 
     def get_record_date(self):
+        """Get the recording date from the metadata of local electrophysiological files."""
         if self.ephys_files_local is None:
             self.get_ephys_files_local()
         efi = self.ephys_files_local[0]
@@ -120,6 +150,7 @@ class Archiver:
         self.record_date = md.fileCreateTime[:10]  # As a string
 
     def make_rec_date_target(self):
+        """Create the target directory for the backup, named by the record date."""
         if self.record_date is None:
             self.get_record_date()
         self.subject_path = self.subjects_path.joinpath(self.subject_ID)
@@ -129,6 +160,7 @@ class Archiver:
         self.today_path.mkdir(exist_ok=True)
 
     def copy_sessions(self):
+        """Copy session data from the local to the target directory."""
         if self.today_path is None:
             self.make_rec_date_target()
 
@@ -141,6 +173,7 @@ class Archiver:
                 print(f"WARNING:Destination {dst} exists. Skipping copy!")
 
     def copy_sessions_alf(self):
+        """Compress any video files in the sessions."""
         if self.today_path is None:
             self.make_rec_date_target()
 
@@ -153,6 +186,7 @@ class Archiver:
                 print(f"WARNING:Destination {dst} exists. Skipping copy!")
 
     def compress_video_in_place(self):
+        """Compress any video files in the sessions."""
         self.get_videos_in_sessions()
         print(f"{self.video_files=}")
         if len(self.video_files) == 0:
@@ -178,12 +212,14 @@ class Archiver:
             fn.unlink()
 
     def get_videos_in_sessions(self):
+        """Find video files in the local session directories."""
         print(f"{self.run_path=}")
         self.video_files = list(self.run_path.rglob("*.avi"))
         if len(self.video_files) > 0:
             self.has_video = True
 
     def mark_backup(self):
+        """Create a flag file in each session directory to indicate the backup date."""
         for session in self.session_list_local:
             backup_flag = session.joinpath("is_backed_up.txt")
             with open(backup_flag, "w") as fid:
@@ -191,10 +227,11 @@ class Archiver:
 
 
 class RecordingInfoUI(QWidget):
-    """Ask user for the destination (Subjects path), source .run_path), and subject_ID (spikeglx run name)
-
-    Args:
-        QWidget (_type_): _description_
+    """
+    GUI to ask the user for the destination (Subjects path), source (run_path), and subject_ID (spikeglx run name).
+    
+    Attributes:
+        archiver (Archiver): Instance of the `Archiver` class to manage the backup.
     """
 
     def __init__(self, archiver, title):
@@ -206,6 +243,7 @@ class RecordingInfoUI(QWidget):
         self.resize(1200, 400)
 
     def init_ui(self, title):
+        """Set up the UI layout and widgets."""
         main_layout = QGridLayout()
 
         layout = QVBoxLayout()
@@ -246,6 +284,7 @@ class RecordingInfoUI(QWidget):
         self.setWindowTitle(title)
 
     def browse_subjects_clicked(self):
+        """Open a dialog for the user to select the subjects path."""
         path = QFileDialog.getExistingDirectory(
             self,
             "Select Subjects Path (Archive destination)",
@@ -255,6 +294,7 @@ class RecordingInfoUI(QWidget):
             self.subjects_path_line_edit.setText(path)
 
     def browse_run_clicked(self):
+        """Open a dialog for the user to select the local run path."""
         default_session_path = str(DEFAULT_SESSION_PATH)
         path = QFileDialog.getExistingDirectory(
             self, "Select Run Path (Local recording)", default_session_path
@@ -267,6 +307,7 @@ class RecordingInfoUI(QWidget):
             self.subject_id_line_edit.setText(self.archiver.subject_ID)
 
     def set_clicked(self):
+        """Set the paths and subject ID from the user input."""
         self.subjects_path = Path(self.subjects_path_line_edit.text())
         self.run_path = Path(self.run_path_line_edit.text())
         self.subject_id = Path(self.subject_id_line_edit.text())
@@ -301,6 +342,17 @@ class RecordingInfoUI(QWidget):
     help="If passed does not remove the raw bin file after compression.",
 )
 def main(local_run_path, remote_subjects_path, keep_raw):
+    """
+    Entry point for the backup process.
+
+    If no arguments are provided, the GUI will open. 
+    If both `local_run_path` and `remote_subjects_path` are provided, the process will run without the GUI.
+    
+    Args:
+        local_run_path (str): Path to the local recording session.
+        remote_subjects_path (str): Path to the remote storage location.
+        keep_raw (bool): Flag to indicate whether raw data should be kept after compression.
+    """
     if local_run_path is None and remote_subjects_path is None:
         archive(keep_raw)
     elif local_run_path is not None and remote_subjects_path is not None:
@@ -311,7 +363,10 @@ def main(local_run_path, remote_subjects_path, keep_raw):
 
 def archive(keep_raw):
     """
-    Run with GUI
+    Run the backup process with a GUI.
+    
+    Args:
+        keep_raw (bool): Whether to keep raw data after compression.
     """
     app = QApplication(sys.argv)
 
@@ -333,7 +388,11 @@ def archive(keep_raw):
 
 def no_gui(local_run_path, remote_subjects_path):
     """
-    Run without gui
+    Run the backup process without a GUI, using command line arguments.
+
+    Args:
+        local_run_path (str): Path to the local recording session.
+        remote_subjects_path (str): Path to the remote storage location.
     """
     archiver = Archiver(keep_raw=False)
     archiver.run_path = Path(local_run_path)
