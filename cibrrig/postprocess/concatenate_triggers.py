@@ -1,3 +1,8 @@
+"""
+CLI to concatenate all the triggers in a session.
+Probably should be re-organized with the alfutils maodule
+"""
+
 from cibrrig.utils.alf_utils import Recording
 from pathlib import Path
 import click
