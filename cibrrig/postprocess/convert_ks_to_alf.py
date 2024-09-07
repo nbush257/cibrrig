@@ -1,7 +1,17 @@
 """
-Apply sync and export to alf for all probes given a session path
-"""
+This module applies synchronization and converts spike sorting data to the ALF (Alyx Filenames) standard 
+for all probes within a given session path. The synchronization adjusts spike times from the IMEC clock 
+to the NIDAQ clock. This conversion is crucial for making data compatible with the IBL's ONE framework, 
+which uses ALF to handle data files systematically.
 
+Key Features:
+- Aggregates and saves cluster-level metrics from Kilosort.
+- Applies synchronization to spike times.
+- Converts spike sorting data to the ALF standard format.
+- Saves adjusted and original spike times.
+- Provides a command-line interface for session processing.
+
+"""
 from ibllib.ephys.spikes import apply_sync
 from ibllib.ephys.ephysqc import spike_sorting_metrics
 from pathlib import Path
@@ -21,10 +31,13 @@ _log.setLevel(logging.INFO)
 
 def get_metrics_from_si(ks4_dir):
     """
-    Aggregate all the cluster level metrics from the kilosort directory
+    Aggregates all cluster-level metrics from the Kilosort directory.
 
     Args:
-        ks4_dir (Pathlib Path): Kilosort directory
+        ks4_dir (Path): Directory where Kilosort results are stored (e.g., sorting output).
+
+    Returns:
+        pandas.DataFrame: A dataframe containing cluster metrics from the directory.
     """
     metrics_files = ks4_dir.glob("*.tsv")
     metrics = pd.read_csv(ks4_dir.joinpath("cluster_group.tsv"), sep="\t")
@@ -40,10 +53,11 @@ def get_metrics_from_si(ks4_dir):
 
 def save_metrics(metrics, out_path):
     """
-    Convinience function to save the cluster-level QC metrics
+    Saves the cluster-level QC metrics in ALF format.
+
     Args:
-        metrics (pandas dataframe): cluster level QC metrics
-        out_path (Pathlib Path): where to save the metrics file
+        metrics (pandas.DataFrame): Cluster-level metrics dataframe.
+        out_path (Path): Directory where the metrics file will be saved.
     """
     metrics_fn = alfio.spec.to_alf("clusters", "metrics", "pqt")
     metrics.to_parquet(out_path.joinpath(metrics_fn))
@@ -51,11 +65,17 @@ def save_metrics(metrics, out_path):
 
 def get_ap_breaks_samps(ap_files):
     """
-    Return a numpy array of the cumulative sample length for each recording if there are multiple triggers
-    Example: recording 1 has 110 samples and recording 2 has 24 samples. Returns: [0,110,134]
+    Computes the cumulative sample lengths for multiple recordings. This is useful 
+    for handling recordings across multiple triggers.
+
+    Example: If recording 1 has 110 samples and recording 2 has 24 samples, this 
+    function returns [0, 110, 134].
 
     Args:
-        ap_files (list): list of Paths to  ap.bin files
+        ap_files (list[Path]): List of paths to .ap.bin files.
+
+    Returns:
+        numpy.ndarray: Cumulative sample lengths across recordings.
     """
     breaks = [0]
     for fn in ap_files:
@@ -66,13 +86,17 @@ def get_ap_breaks_samps(ap_files):
 
 
 def sync_spikes(ap_files, spikes):
-    """Finds the computed synchronization files that
-    line up the IMEC clock to the NIDAQ clock and adjusts the spikes to the
-    NIDAQ clock. Spikes that occur at negative timea re set to zero
+    """
+    Synchronizes spike times by adjusting them to match the NIDAQ clock, based on 
+    synchronization files that align the IMEC clock to the NIDAQ clock. Spikes with 
+    negative times are set to zero.
 
     Args:
-        ap_files (list): list of Paths to  ap.bin files
-        spikes (AlfBunch): spikes alf object
+        ap_files (list[Path]): List of paths to .ap.bin files.
+        spikes (AlfBunch): ALF object containing spike data.
+
+    Returns:
+        numpy.ndarray: Adjusted spike times after synchronization.
     """
     breaks_samps = get_ap_breaks_samps(ap_files)
     rec_idx = np.searchsorted(breaks_samps, spikes.samples, side="right") - 1
@@ -92,6 +116,16 @@ def sync_spikes(ap_files, spikes):
 
 
 def convert_model(ks_path, alf_path, sample_rate, ampfactor):
+    """
+    Converts Kilosort output to the ALF format via phylib and performs additional data processing such as 
+    computing shanks, adjusting amplitudes, and generating spike waveforms.
+
+    Args:
+        ks_path (Path): Path to the Kilosort directory.
+        alf_path (Path): Output directory where ALF files will be saved.
+        sample_rate (float): Sampling rate of the recording.
+        ampfactor (float): Conversion factor from samples to voltage.
+    """
     mdl = TemplateModel(dir_path=ks_path, sample_rate=sample_rate)
 
     ac = phylib.io.alf.EphysAlfCreator(mdl)
@@ -113,16 +147,17 @@ def convert_model(ks_path, alf_path, sample_rate, ampfactor):
 
 
 def run_session(session_path, sorting_name="kilosort4"):
-    """Convert all sorting in the session to alf standard.
-    Assumes spikesorting data lives in this structure: <session>/alf/probeXX/<sorting_name>
-    Assumes the processed ephys data live in <session>/alf/probeXX/<sorting_name>/recording.dat
-    Assumes raw ephys data lives in <session>/raw_ephys_data/probeXX
-
-    Applies synchronization to the spike times. Original spike times are kept with the timescale "ephysClock"
+    """
+    Converts all sorting in a session to the ALF standard, applying synchronization and QC metrics.
+    
+    Assumes:
+    - Spike sorting data is in the structure: <session>/alf/probeXX/<sorting_name>
+    - Raw ephys data is located in: <session>/raw_ephys_data/probeXX
+    - Processed ephys data is stored as: <session>/alf/probeXX/<sorting_name>/recording.dat
 
     Args:
-        session_path (pathlib Path): Path to the session
-        sorting_name (str, optional): name of the sorting folder. Defaults to 'kilosort4'.
+        session_path (Path): Path to the session directory.
+        sorting_name (str, optional): Name of the sorting folder. Defaults to 'kilosort4'.
     """
     session_path = Path(session_path)
     ephys_path = session_path.joinpath("raw_ephys_data")
@@ -145,13 +180,13 @@ def run_session(session_path, sorting_name="kilosort4"):
             cluster_shanks_df["channel_group"].values,
         )
 
-        # Convert to ALF
-        # ks2_to_alf(ks4_dir,bin_path,out_path)
+        # Convert Kilosort output to ALF
         sr = spikeglx.Reader(ap_fn)
         sampling_rate = sr.fs
         s2v = sr.sample2volts[0]
         convert_model(ks4_dir, out_path, sampling_rate, s2v)
 
+        # Compute QC metrics
         spikes = alfio.load_object(out_path, "spikes")
         cluster_ids = np.arange(spikes.clusters.max() + 1)
         df_units, drift = spike_sorting_metrics(
@@ -163,7 +198,7 @@ def run_session(session_path, sorting_name="kilosort4"):
         )
         df_units.to_parquet(out_path.joinpath("clusters.metrics.pqt"))
 
-        # Get ap files for synchronizing
+        # Synchronize spikes
         _log.info("Syncronizing to NIDAQ clock")
         raw_probe = list(ephys_path.glob(probe_alf.name))
         assert (
@@ -173,11 +208,11 @@ def run_session(session_path, sorting_name="kilosort4"):
         ap_files = list(raw_probe.rglob("*ap.bin"))
         _log.info(f"Found {len(ap_files)} ap files")
 
-        # Adjust spikes from the IMEC clock to the NIDAQ clock
+        # Adjust spike times to the NIDAQ clock
         spikes = alfio.load_object(out_path, "spikes")
         times_adj = sync_spikes(ap_files, spikes)
 
-        # Output
+        # Save adjusted and original spike times
         _log.info("Saving adjusted and old spike times")
         times_old_fn = alfio.files.spec.to_alf(
             object="spikes", attribute="times", timescale="ephysClock", extension="npy"
