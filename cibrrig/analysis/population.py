@@ -17,11 +17,18 @@ _log.setLevel(logging.INFO)
 
 def rasterize(spike_times, spike_clusters, binsize, FR=False):
     """
-    Turn spike times and cluster ids into a 2D array of spikecounts per time bin
-    Works on subsets of clusters (i.e., does not require the clusters to be continuous 0,1,2,3...)
+    Convert spike times and cluster IDs into a 2D array of spike counts per time bin.
 
     Args:
-        binsize (float): Raster time bin size in seconds
+        spike_times (array-like): Array of spike times.
+        spike_clusters (array-like): Array of cluster IDs corresponding to each spike time.
+        binsize (float): Time bin size in seconds.
+        FR (bool, optional): If True, convert spike counts to firing rates. Defaults to False.
+
+    Returns:
+        - raster (np.ndarray): 2D array of spike counts or firing rates [cells x time].
+        - tbins (np.ndarray): Array of time bin edges.
+        - cbins (np.ndarray): Array of unique cluster IDs.
     """
     raster, tbins, cbins = bincount2D(spike_times, spike_clusters, binsize)
     raster = raster.astype("float")
@@ -33,12 +40,15 @@ def rasterize(spike_times, spike_clusters, binsize, FR=False):
 
 def smooth_raster(raster, binsize, sigma):
     """
-    Smooth a computed raster.
-    Raster should be [cells x time]
+    Apply Gaussian smoothing to a spike raster.
 
     Args:
-        binsize (float):
-        sigma (_type_): _description_
+        raster (np.ndarray): 2D array of spike counts or firing rates [cells x time].
+        binsize (float): Time bin size in seconds.
+        sigma (float): Standard deviation of the Gaussian kernel in seconds.
+
+    Returns:
+        np.ndarray: Smoothed raster with the same shape as the input.
     """
     sigma_scaled = sigma / binsize
     raster_smoothed = gaussian_filter1d(raster, sigma=sigma_scaled, axis=1)
@@ -47,6 +57,17 @@ def smooth_raster(raster, binsize, sigma):
 
 
 def scale_raster(raster, transform="sqrt"):
+    """
+    Apply a scaling transformation to the raster data.
+
+    Args:
+        raster (np.ndarray): 2D array of spike counts or firing rates [cells x time].
+        transform (str, optional): Transformation to apply. Defaults to "sqrt".
+
+    Returns:
+        np.ndarray: Scaled raster with the same shape as the input.
+    """
+
     if transform == "sqrt":
         raster_scaled = np.sqrt(raster)
         raster_scaled[np.isinf(raster_scaled)] = 0
@@ -57,12 +78,22 @@ def scale_raster(raster, transform="sqrt"):
 
 def preprocess_pca(spike_times, spike_clusters, binsize, sigma, transform="sqrt"):
     """
-    wraps the preprocessing steps
+    Preprocess spike data for PCA analysis.
 
     Args:
-        binsize (_type_): _description_
-        sigma (_type_): _description_
-        transform (str, optional): _description_. Defaults to 'sqrt'.
+        spike_times (array-like): Array of spike times.
+        spike_clusters (array-like): Array of cluster IDs corresponding to each spike time.
+        binsize (float): Time bin size in seconds.
+        sigma (float): Standard deviation for Gaussian smoothing in seconds.
+        transform (str, optional): Transformation to apply to the smoothed raster. Defaults to "sqrt".
+
+    Returns:
+        dict: A dictionary containing preprocessed data:
+            - raster: Original rasterized data
+            - raster_smoothed: Smoothed raster
+            - raster_scaled: Scaled and smoothed raster
+            - tbins: Time bin edges
+            - cbins: Unique cluster IDs
     """
     raster, tbins, cbins = rasterize(spike_times, spike_clusters, binsize)
     raster_smoothed = smooth_raster(raster, binsize=binsize, sigma=sigma)
@@ -120,13 +151,19 @@ def compute_path_lengths(X, time_bins, t0, tf, ndims=3):
 
 def project_pca(raster, tbins, ndims=20, t0=None, tf=None):
     """
-    Project the spiking data into the PCA space. Will fit on the interval between
-    (t0,tf), and apply to the entire spiking data
+    Project spiking data into PCA space. Will fit to the interval [t0,tf] and apply PCA to 
+    all times
 
-    Raster should have shape [n_cells x time]. It will be transposed at fitting time
+    Args:
+        raster (np.ndarray): 2D array of preprocessed spike data [cells x time].
+        tbins (np.ndarray): Array of time bin edges.
+        ndims (int, optional): Number of PCA dimensions to compute. Defaults to 20.
+        t0 (float or array-like, optional): Start time(s) for fitting. Defaults to None (use all data).
+        tf (float or array-like, optional): End time(s) for fitting. Defaults to None (use all data).
 
-    If t0,tf is an array, fits on the intervals [t01,tf1],[t02,tf2]...
-    If t0,tf is None, fits on all data
+    Returns:
+        - projected (np.ndarray): PCA projections of the input data [time x ndims].
+        - pca (sklearn.decomposition.PCA): Fitted PCA object.
     """
     raster_train, tbins_train = _subset_raster(raster, tbins, t0, tf)
     pca = PCA(ndims).fit(raster_train.T)
@@ -173,6 +210,27 @@ def get_good_spikes(spikes, clusters):
 
 
 class Population:
+    """
+    A class for analyzing and visualizing population-level neural activity.
+
+    Attributes:
+        spike_times (array-like): Array of spike times.
+        spike_clusters (array-like): Array of cluster IDs corresponding to each spike time.
+        ndims (int): Number of dimensions for PCA projection.
+        binsize (float): Time bin size in seconds.
+        sigma (float): Standard deviation for Gaussian smoothing in seconds.
+        t0 (float): Start time for analysis.
+        tf (float): End time for analysis.
+        raster (np.ndarray): Rasterized spike data.
+        raster_smoothed (np.ndarray): Smoothed raster data.
+        cbins (np.ndarray): Array of unique cluster IDs.
+        tbins (np.ndarray): Array of time bin edges.
+        projection (np.ndarray): PCA projection of the data.
+        pca (sklearn.decomposition.PCA): Fitted PCA object.
+        transform (str): Transformation applied to the raster.
+        projection_speed (np.ndarray): Speed of movement through PCA space.
+        has_ssm (bool): Whether a state-space model has been loaded.
+    """
     def __init__(
         self,
         spike_times,
@@ -183,6 +241,18 @@ class Population:
         t0=None,
         tf=None,
     ):
+        """
+        Initialize the Population object.
+
+        Args:
+            spike_times (array-like): Array of spike times.
+            spike_clusters (array-like): Array of cluster IDs corresponding to each spike time.
+            ndims (int, optional): Number of dimensions for PCA projection. Defaults to None.
+            binsize (float, optional): Time bin size in seconds. Defaults to 0.005.
+            sigma (float, optional): Standard deviation for Gaussian smoothing in seconds. Defaults to 0.01.
+            t0 (float, optional): Start time for analysis. Defaults to None.
+            tf (float, optional): End time for analysis. Defaults to None.
+        """
         self.spike_times = spike_times
         self.spike_clusters = spike_clusters
         self.ndims = ndims
@@ -201,6 +271,12 @@ class Population:
         self.has_ssm = False
 
     def compute_projection(self):
+        """
+        Compute the PCA projection of the population activity.
+
+        This method preprocesses the spike data, computes the raster,
+        and projects it into PCA space.
+        """
         # Preprocess
         if self.projection is not None:
             _log.warning("Overwriting existing projection. May casue crashses")
@@ -224,9 +300,27 @@ class Population:
         )
 
     def compute_projection_speed(self, ndims=3):
+        """
+        Compute the speed of movement through PCA space.
+
+        Args:
+            ndims (int, optional): Number of dimensions to use for speed calculation. Defaults to 3.
+        """
         self.projection_speed = compute_projection_speed(self.projection, ndims=ndims)
 
     def plot_by_speed(self, dims=[0, 1, 2], t0=None, tf=None, **kwargs):
+        """
+        Plot the PCA projection colored by movement speed.
+
+        Args:
+            dims (list, optional): Dimensions to plot. Defaults to [0, 1, 2].
+            t0 (float, optional): Start time for plotting. Defaults to None.
+            tf (float, optional): End time for plotting. Defaults to None.
+            **kwargs: Additional keyword arguments to pass to the plotting function.
+
+        Returns:
+            matplotlib.axes.Axes: The axes object containing the plot.
+        """
         t0 = t0 or self.tbins[0]
         tf = tf or self.tbins[-1]
         if tf > self.spike_times.max():
@@ -239,6 +333,37 @@ class Population:
         return plot_projection(X_slice, dims, cvar=speed_slice, **kwargs)
 
     def plot_projection(self, dims=[0, 1, 2], t0=None, tf=None, cvar=None, **kwargs):
+        """Plot the low dimensional projection as a scatter
+        Uses the known timebins of the projection to pass only a subset of the data to "plot_projection"
+
+        Args:
+            dims (list, optional): Which dimensions of the projection to plot. Can be 2 or 3 elements long. Defaults to [0, 1, 2].
+            t0 (float, optional): start time of the plot in seconds. Defaults to None.
+            tf (float_, optional): end time of the plot in seconds. Defaults to None.
+            cvar (np.ndarray, optional): Variable to map to the color of the points. Defaults to None.
+
+        Keyword Args passed to "plot_projection" from the plotting module.
+            ax (matplotlib.axes.Axes, optional): The axes to plot on. If not provided, a new figure and axes will be created.
+            color (str, optional): The color of the data points or lines. Default is "k" (black) if no color variable (`cvar`) is provided.
+            alpha (float, optional): Transparency level for the points. Should be between 0 (fully transparent) and 1 (fully opaque).
+                - Default is 0.5.
+            lw (float, optional): Line width for plotting. Applies if plotting a line plot. Default is 0.5.
+            vmin (float, optional): Minimum value for the colormap if a color variable (`cvar`) is used. If not specified, it's inferred from `cvar`.
+            vmax (float, optional): Maximum value for the colormap if a color variable (`cvar`) is used. If not specified, it's inferred from `cvar`.
+            colorbar_title (str, optional): Title for the colorbar. Default is an empty string.
+            title (str, optional): Title for the plot. Only used in 3D plots. Default is an empty string.
+            lims (list, optional): Axis limits for the plot. Should be a list of `[min, max]` values.
+                - Default is [-4, 4] for 3D plots.
+            pane_color (str, optional): Background color of the 3D panes in 3D plots. If `None`, default style is used.
+            plot_colorbar (bool, optional): Whether to include a colorbar in the plot. Only applies to 3D plots when `cvar` is used. Default is True.
+            s (float, optional): Size of the markers used in the scatter plot. Default is 1.
+            cmap (str, optional): Colormap to use when plotting with a color variable (`cvar`). Default is "viridis".
+            cvar (array-like, optional): An array of values used to color the data points. If provided, `cmap` is applied.
+            s (float, optional): Size of the markers in the scatter plot. Default is 1.
+
+        Returns:
+            matplotlib.pyplot.axes: axes
+        """        
         t0 = t0 or self.tbins[0]
         tf = tf or self.tbins[-1]
         if tf > self.spike_times.max():
@@ -263,6 +388,32 @@ class Population:
     def plot_projection_line(
         self, dims=[0, 1, 2], t0=None, tf=None, cvar=None, ax=None,**kwargs
     ):
+        """Plot the low dimensional projection as a line
+        Uses the known timebins of the projection to pass only a subset of the data to "plot_projection_line"
+        Args:
+            dims (list, optional): _description_. Defaults to [0, 1, 2].
+            t0 (float, optional): _description_. Defaults to None.
+            tf (float, optional): _description_. Defaults to None.
+            cvar (np.ndarray, optional): _description_. Defaults to None.
+            ax (matplotlib.pyplot.axes, optional): _description_. Defaults to None.
+        
+        Keyword Args:
+            intervals (np.ndarray,optional): Start and end times for each condition.
+            color (str, optional): Color of the line if cvar is not provided. Default is "k" (black).
+            stim_color (str, optional): Color of the line during intervals (if provided)
+            alpha (float, optional): The alpha blending value, between 0 (transparent) and 1 (opaque). Default is 0.5.
+            lw (float, optional): The line width. Default is 0.5.
+            vmin (float, optional): Minimum of the colormap range. If not provided, it's inferred from cvar.
+            vmax (float, optional): Maximum of the colormap range. If not provided, it's inferred from cvar.
+            colorbar_title (str, optional): Title for the colorbar. Default is an empty string.
+            title (str, optional): Title for the plot. Only used in 3D plots. Default is an empty string.
+            lims (list, optional): The x, y, (and z for 3D) limits of the plot as [min, max]. Only used in 3D plots. Default is [-4, 4].
+            pane_color (color, optional): Color of the panes in 3D plots. If None, default matplotlib style is used.
+            plot_colorbar (bool, optional): Whether to plot the colorbar. Only used in 3D plots. Default is True.
+
+        Returns:
+            Axes: The axes object containing the plot.
+        """        
         t0 = t0 or self.tbins[0]
         tf = tf or self.tbins[-1]
         if tf > self.spike_times.max():
@@ -320,17 +471,39 @@ class Population:
         return plot_projection_line(X_slice, dims=dims, cvar=cvar, ax=ax,**kwargs)
 
     def sync_var(self, x, x_t):
+        """Resample an exogenous signal with the projection
+
+        Args:
+            x (np.ndarray): exogenous signal to resample
+            x_t (np.ndarray): sample times for x in seconds
+
+        Returns:
+            np.ndarray: y - resampled signal
+        """        
         return remap_time_basis(x, x_t, self.tbins)
 
     def compute_path_lengths(self, t0, tf, ndims=3):
+        """Compute the euclidean distance traveled between time t0 and tf
+        in the projection space. Computes the distance along ndims
+
+        Args:
+            t0 (list or array): start time of the path
+            tf (list or array): end time of the path
+            ndims (int, optional): number of dimensions to include in computation. Defaults to 3.
+        """  
         return compute_path_lengths(self.projection, self.tbins, t0, tf, ndims)
 
     def compute_raster(
         self, binsize=0.005, t0=None, tf=None, FR=False, cluster_ids=None
     ):
         """
-        Makes compute raster a method of the population
-        De-couples the raster from the projection
+        Convert spike times and cluster IDs into a 2D array of spike counts per time bin.
+
+        Args:
+            t0 (float): start time of raster in seconds
+            tf (float): stop time of raster in seconds
+            binsize (float): Time bin size in seconds.
+            FR (bool, optional): If True, convert spike counts to firing rates. Defaults to False.
         """
         t0 = t0 or 0
         tf = tf or np.max(self.spike_times)
@@ -343,9 +516,14 @@ class Population:
         )
 
     def load_rslds(self, ssm_fn, fit_on_load=False):
-        """
-        Load a precomputed Linderman RSLDS model from a pickle file
-        """
+        """Load a precomputed Linderman RSLDS model from a pickle file
+
+
+        Args:
+            ssm_fn (Path): filename of the computed rslds model
+            fit_on_load (bool, optional): Not yet implemented. Defaults to False.
+        """        
+
         if self.projection is not None:
             _log.warning("Replacing PCA projection with RSLDS Latent")
         with open(ssm_fn, "rb") as fid:
@@ -399,12 +577,15 @@ class Population:
 
         if fit_on_load:
             # Must have a raster and that raster clusterids must match the fitted RSLDS
+            raise NotImplementedError('fit on load no tet implemented')
             self.smooth_rslds()
 
     def sim_rslds(self, duration):
-        """
-        Simulate the latent for a given duration (in s)
+        """Simulate the latent for a given duration (in s)
         Adds a dictionary with keys ['discrete_states','continuous_states','emissions','sim_time'] to the population object
+
+        Args:
+            duration (float): Time duration to simulate in seconds
 
         #TODO: pass initial state
         """
@@ -429,21 +610,24 @@ class Population:
         )
 
     def transform_rslds(self, t0, tf):
-        """
-        Compute the latent for a given interval [t0,tf]
+        """Compute the latent for a given interval [t0,tf]
         First checks if the latent already exists.
-        return:
-            elbos - estimate of fit
-            posterior = slds posterior object
-            latent - continuous states of the posterior
 
+        Args:
+            t0 (float): Start time in seconds
+            tf (float): End time in seconds
+
+        Returns:
+            (np.ndarray): ELBOS estimate of fit quality
+            (slds.posterior): slds posterior object
+            (np.ndarray): latent -- continuous states of the posterior
         """
+
         if not self.has_ssm:
             _log.error("SSM is not computed")
             self.sim_rslds = None
             return None
 
-        # TODO: place posterior data in projection
         sub_raster, sub_tbins = _subset_raster(self.raster, self.tbins, t0=t0, tf=tf)
         elbos, posterior = self.rslds.approximate_posterior(sub_raster.astype("int").T)
         latent = posterior.mean_continuous_states[0]
