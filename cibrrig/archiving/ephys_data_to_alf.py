@@ -1,9 +1,14 @@
 """
-reformat our raw data to match IBL-like ALF standards.
-This renames things in place so amke sure the raw data are backed up.
+This module reformats raw electrophysiological data to match the ALF (ALigned File) standards
+used by the International Brain Laboratory (IBL). It is intended for organizing data generated 
+by SpikeGLX. The script renames and moves files in place, so ensure that the raw data has 
+been backed up before running the script.
 
-Assumes data is created by default out of spikeglx.
-Runs on a 'run_path'
+Key Features:
+- Renames probe folders and moves video and electrophysiological data to standardized locations.
+- Ensures that wiring maps are correctly applied to the electrophysiological data.
+- Handles the renaming of multiple gates and sessions for a given run path.
+- Allows optional skipping of backup checks before renaming files.
 
 """
 # TODO: rename Audio
@@ -43,6 +48,16 @@ DEFAULT_NIDQ = {
 
 
 def rename_probe_folders(session_path):
+    """
+    Renames probe folders under 'raw_ephys_data' to ALF standards (e.g., 'probe00', 'probe01').
+    
+    Args:
+        session_path (Path): The path to the session directory.
+    
+    Returns:
+        list: List of renamed probe paths.
+    """
+
     raw_ephys_folder = session_path.joinpath("raw_ephys_data")
     raw_ephys_folder.mkdir(exist_ok=True)
     probe_paths = []
@@ -63,6 +78,12 @@ def rename_probe_folders(session_path):
 
 
 def rename_and_move_video(session_path):
+    """
+    Moves and renames video files to the 'raw_video_data' directory following ALF standards.
+    
+    Args:
+        session_path (Path): The path to the session directory.
+    """
     video_files = list(session_path.rglob("*.mp4"))
     if len(video_files) == 0:
         _log.warning("No video files found")
@@ -81,6 +102,15 @@ def rename_and_move_video(session_path):
 
 
 def check_backup_flag(session_path):
+    """
+    Checks if the session has been backed up by verifying the existence of a backup flag file.
+    
+    Args:
+        session_path (Path): The path to the session directory.
+    
+    Raises:
+        AssertionError: If the backup flag file does not exist.
+    """
     backup_files = session_path.joinpath("is_backed_up.txt")
     assert (
         backup_files.exists()
@@ -88,6 +118,12 @@ def check_backup_flag(session_path):
 
 
 def remove_backup_flag(session_path):
+    """
+    Removes the backup flag file from the session directory since it is not us.
+    
+    Args:
+        session_path (Path): The path to the session directory.
+    """
     try:
         backup_files = session_path.joinpath("is_backed_up.txt")
         backup_files.unlink()
@@ -96,6 +132,15 @@ def remove_backup_flag(session_path):
 
 
 def get_record_date(gate):
+    """
+    Retrieves the recording date from the metadata of the electrophysiological data.
+    
+    Args:
+        gate (Path): The path to the gate directory.
+    
+    Returns:
+        str: The recording date in YYYY-MM-DD format.
+    """
     ephys_files = spikeglx.glob_ephys_files(gate)
     if len(ephys_files) == 0:
         _log.warning(f"No ephys files found in {gate}")
@@ -108,11 +153,27 @@ def get_record_date(gate):
 
 
 def get_gate_number(gate):
+    """
+    Extracts the gate number from the gate folder name.
+    
+    Args:
+        gate (Path): The path to the gate directory.
+    
+    Returns:
+        int: The gate number.
+    """
     gate_num = int(re.search("(?<=_g)\d", gate.name).group())
     return gate_num
 
 
 def check_wiring(session_path):
+    """
+    Ensures that the appropriate wiring map is applied to the session. If a wiring map is missing,
+    it uses the default map.
+    
+    Args:
+        session_path (Path): The path to the session directory.
+    """
     ephys_files = spikeglx.glob_ephys_files(session_path)
     for efi in ephys_files:
         wiring_fn = list(efi["path"].glob("*wiring.json"))
@@ -131,6 +192,12 @@ def check_wiring(session_path):
 
 
 def move_ni_files(session_path):
+    """
+    Moves .nidq files to the 'raw_ephys_data' directory.
+    
+    Args:
+        session_path (Path): The path to the session directory.
+    """
     raw_ephys_folder = session_path.joinpath("raw_ephys_data")
     raw_ephys_folder.mkdir(exist_ok=True)
     ni_files = list(session_path.glob("*nidq*"))
@@ -139,6 +206,17 @@ def move_ni_files(session_path):
 
 
 def rename_session(session_path):
+    """
+    Renames and organizes a session by:
+    - Renaming probe folders.
+    - Moving .nidq files.
+    - Checking and applying wiring maps.
+    - Renaming and moving electrophysiological and video data.
+    - Removing the backup flag.
+    
+    Args:
+        session_path (Path): The path to the session directory.
+    """
     rename_probe_folders(session_path)
     move_ni_files(session_path)
     check_wiring(session_path)
@@ -151,11 +229,21 @@ def rename_session(session_path):
 
 
 class Run:
+    """
+    Represents a recording run consisting of multiple gates.
+    
+    Attributes:
+        run_path (Path): The path to the run directory.
+        gates (list): List of gate directories within the run.
+    """
     def __init__(self, run_path):
         self.run_path = run_path
         self.get_gates()
 
     def get_gates(self):
+        """
+        Finds all gate directories in the run directory and stores them in sorted order.
+        """
         gates = []
         # guess that we will never have more than 99 gates. This is dirty, but works
         gate_list = list(self.run_path.glob("*_g[0-9]")) + list(
@@ -167,6 +255,9 @@ class Run:
         self.gates = gates
 
     def move_gates(self):
+        """
+        Moves gates into directories named by their recording date and renames log files accordingly.
+        """
         sessions = []
         for gate in self.gates:
             _log.info(f"Working on {gate}")
@@ -188,6 +279,13 @@ class Run:
 
 
 def run(run_path, skip_backup_check=False):
+    """
+    Runs the renaming and reorganization process for a given run.
+    
+    Args:
+        run_path (str): The path to the run directory.
+        skip_backup_check (bool): Flag to skip the backup check before renaming files.
+    """
     run_path = Path(run_path)
     run = Run(run_path)
     if skip_backup_check:
@@ -204,6 +302,13 @@ def run(run_path, skip_backup_check=False):
 @click.argument("run_path")
 @click.option("--skip_backup_check", is_flag=True)
 def cli(run_path, skip_backup_check):
+    """
+    Command-line interface to run the renaming and reorganization process.
+
+    Args:
+        run_path (str): The path to the run directory.
+        skip_backup_check (bool): Option to skip the backup check.
+    """
     run(run_path, skip_backup_check)
 
 
