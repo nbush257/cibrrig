@@ -9,17 +9,23 @@ import pandas as pd
 
 def get_phase_curve(ts, breaths, phi_t=None, phi=None, nbins=100):
     """
-    Computes the firing rate of a neuron for a given respiratory  phase
+    Computes the firing rate of a neuron for a given respiratory phase.
 
-    Computes on a per-breath basis in order to get a distribution
+    The computation is done on a per-breath basis to obtain a distribution.
 
+    Args:
+        ts (array-like): Times of spikes for a single neuron.
+        breaths (array-like): Breath segments.
+        phi_t (array-like): Time basis of the phase variable `phi`.
+        phi (array-like): Respiratory phase at a given time.
+        nbins (int, optional): Number of bins in the phasic PSTH. Defaults to 100.
 
-    :param ts: Times of spikes for a single neuron
-    :param breaths: Breaths bunch
-    :param phi_t: time basis of the phase variable phi
-    :param phi: Repiratory phase at a given time.
-    :param nbins: number of bins in the phasic PSTH (defaults to 100 bins)
-    :return: out_dict with keys-- bins,rate_mean,rate_std,rate_sem
+    Returns:
+        dict: A dictionary with the following keys:
+            - bins (array-like): Bin edges.
+            - rate_mean (array-like): Mean firing rate.
+            - rate_std (array-like): Standard deviation of the firing rate.
+            - rate_sem (array-like): Standard error of the mean firing rate.
     """
 
     # Unpack the breath onsets
@@ -89,19 +95,23 @@ def get_phase_curve(ts, breaths, phi_t=None, phi=None, nbins=100):
 
 def get_all_phase_curves(spike_times, spike_clusters, cluster_ids, breaths, nbins=100):
     """
-    Computes the firing rate of all neurons in "cluster_id for a given respiratory  phase
+    Computes the firing rate of all neurons in `cluster_ids` for a given respiratory phase.
 
-    Computes on a per-breath basis in order to get a distribution
+    The computation is done on a per-breath basis to obtain a distribution.
 
+    Args:
+        spike_times (array-like): Times of spikes for all neurons.
+        spike_clusters (array-like): Cluster assignment of spikes for all neurons.
+        cluster_ids (array-like): IDs of clusters to analyze.
+        breaths (array-like): Breath segments.
+        nbins (int, optional): Number of bins in the phasic PSTH. Defaults to 100.
 
-    :param spike_times: Times of spikes for all neurons
-    :param spike_clusters: Cluster assignment of spikes for all neurons
-    :param cluster_ids: id of clusters to analyse
-    :param breaths: Breaths bunch
-    :param nbins: number of bins in the phasic PSTH (defaults to 100 bins)
-
-    Returns;
-    bins,rate,sem,raster rate and sem are [nbins x n_cluster_ids]
+    Returns:
+        - bins (array-like): Bin edges.
+        - rate (array-like): Firing rate, shape [nbins x n_cluster_ids].
+        - sem (array-like): Standard error of the mean, shape [nbins x n_cluster_ids].
+        - raster (array-like): Raster data.
+        - rate_sem (array-like): SEM of the raster rate, shape [nbins x n_cluster_ids].
     """
     if isinstance(breaths,pd.DataFrame):
         breaths = alfio.AlfBunch.from_df(breaths)
