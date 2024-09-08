@@ -1,8 +1,6 @@
 """
 Extract digital signals from the NI and IMEC Streams
 """
-
-# Deal with IBL overwritting
 import spikeglx
 from pathlib import Path
 import numpy as np
@@ -30,15 +28,30 @@ _log.setLevel(logging.INFO)
 
 
 def run(session_path, debug=False, no_display=False):
+    """
+    Extract synchronization times from the session data.
+
+    Extract times, directions, and channels for all digital signals in the session data.
+
+    Args:
+        session_path (str, Path): Path to the session data.
+        debug (bool, optional): If True, sets logging level to DEBUG. Defaults to False.
+        no_display (bool, optional): If True, disables display of plots. Defaults to False.
+
+    Returns:
+        None
+    """
     display = not no_display
     type = None
     session_path = Path(session_path)
     ephys_path = session_path.joinpath("raw_ephys_data")
 
+    # Find all the triggers recorded in the session (i.e., gate)
     triggers = get_triggers(session_path)
     for trig in triggers:
+        # Extract digital signals from the NI Stream
         ni_fn = list(ephys_path.glob(f"*{trig}.nidq*.bin"))
-        assert (len(ni_fn)) == 1, "Incorrect number of NI files found"
+        assert (len(ni_fn)) == 1, f"More than one NI file found. found {len(ni_fn)} files"
         ni_fn = ni_fn[0]
         label = Path(ni_fn.stem).stem
         _log.info(f"Extracting sync from {ni_fn}")
@@ -49,6 +62,7 @@ def run(session_path, debug=False, no_display=False):
         sync_map = spikeglx.get_sync_map(ni_fn.parent)
         sync_nidq = get_sync_fronts(sync_nidq, sync_map["imec_sync"])
 
+        # Extract sync from the IMEC Stream for all probes
         probe_fns = list(ephys_path.rglob(f"*{trig}.imec*.ap.bin"))
         for probe_fn in probe_fns:
             _log.info(f"Extracting sync from {probe_fn}")
@@ -97,6 +111,17 @@ def run(session_path, debug=False, no_display=False):
 @click.option("--debug", is_flag=bool, help="Sets logging level to DEBUG")
 @click.option("--no_display", is_flag=bool, help="Toggles display")
 def main(session_path, debug, no_display):
+    """
+    Script entry point to extract digital (sync) signals.
+
+    Args:
+        session_path (str): Path to the session data.
+        debug (bool): If True, sets logging level to DEBUG.
+        no_display (bool): If True, disables display of plots.
+
+    Returns:
+        None
+    """
     run(session_path, debug, no_display)
 
 

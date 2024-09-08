@@ -17,6 +17,16 @@ import click
     "--no_delete", is_flag=True, help="Do not delete the original raw uncompressed file"
 )
 def main(fn, skip_lossless, skip_lossy, no_delete):
+    """
+    Compress a video file using ffmpeg and the gpu to both lossless and lossy hevc encoding.
+
+    Args:
+        fn (str): Path to the video file to be compressed
+        skip_lossless (bool): Skip the lossless encoding
+        skip_lossy (bool): Skip the lossy encoding
+        no_delete (bool): Do not delete the original raw uncompressed file
+    """
+    
     if skip_lossy and skip_lossless:
         print(
             "You have chosen to skip both encodings so we are exiting before we accidentally delete raw data."

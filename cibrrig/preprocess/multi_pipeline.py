@@ -1,4 +1,5 @@
 """
+DEPRECATED 
 Run the preprocess pipeline on every session in a Subjects folder
 """
 
@@ -17,7 +18,7 @@ if sys.platform == "linux":
     _log.info("HPC detected - using TkAgg")
     matplotlib.use("TkAgg")
 
-
+raise NotImplementedError("This script is deprecated. Use preproc_pipeline.py instead.")
 @click.command()
 @click.argument("subjects_path")
 def main(subjects_path):

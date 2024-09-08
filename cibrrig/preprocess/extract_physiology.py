@@ -41,16 +41,23 @@ if sys.platform == "linux":
     BM_PATH = "/active/ramirez_j/ramirezlab/nbush/projects/cibrrig/cibrrig/preprocess"
 else:
     BM_PATH = r"Y:/projects/cibrrig/cibrrig/preprocess"
-
+assert Path(BM_PATH).exists(), "BM_PATH does not exist"
 
 def _crop_traces(t, x):
     """
-    Utility to crop both the time trace and an arbitrary vector to the same length(shortest lenght)
-    useful to preven off by one errors
-    :param t:
-    :param x:
-    :return:
+    Utility to crop both the time trace and an arbitrary vector to the same length (shortest length).
+    Useful to prevent off-by-one errors.
+
+    Args:
+        t (np.ndarray): Time stamps for each element in x.
+        x (np.ndarray): Signal vector.
+
+    Returns:
+        tuple: A tuple containing:
+            - np.ndarray: Cropped timestamp array.
+            - np.ndarray: Cropped Signal vector.
     """
+    assert(len(t) == len(x)), "Time and signal vectors must be the same length"
     tlen = np.min([len(x), len(t)])
     return (t[:tlen], x[:tlen])
 
@@ -60,6 +67,8 @@ def _get_trigger_from_SR(SR):
 
     Args:
         SR (spikeglx.Reader):Spikeglx reader object
+    Returns:
+        str: Trigger label extracted from the filename (e.g., 't0', 't1', etc.)
     """
     assert SR.type == "nidq", "Not a nidaq bin file"
     label = SR.file_bin.with_suffix("").with_suffix("").stem
@@ -69,6 +78,15 @@ def _get_trigger_from_SR(SR):
 
 
 def label_sighs(dia_df):
+    """
+    Categorize breaths as sighs or eupnea based on the diaphragm data.
+
+    Args:
+        dia_df (pd.DataFrame): DataFrame containing diaphragm data with columns 'on_sec' and 'auc'.
+
+    Returns:
+        pd.DataFrame: DataFrame with additional columns 'breath_type', 'is_sigh', and 'is_eupnea'.
+    """
     is_sigh = physiology.compute_sighs(dia_df["on_sec"].values, dia_df["auc"].values)
     dia_df["breath_type"] = "eupnea"
     dia_df.loc[is_sigh, "breath_type"] = "sigh"
@@ -78,6 +96,20 @@ def label_sighs(dia_df):
 
 
 def run_one(SR, wiring, v_in, inhale_pos, save_path):
+    """
+    Process physiological data from a single recording.
+    Passes data to functions in the physiology module to process and save the data.
+
+    Args:
+        SR (spikeglx.Reader): SpikeGLX reader object for the recording.
+        wiring (dict): Wiring configuration.
+        v_in (float): Voltage input.
+        inhale_pos (int): Inhale position.
+        save_path (Path): Path to save the processed data.
+
+    Returns:
+        None
+    """
     DS_FACTOR = 10
     # INIT output variables
     pdiff = np.array([])
@@ -117,6 +149,7 @@ def run_one(SR, wiring, v_in, inhale_pos, save_path):
         temp_chan -= analog_offset
         has_temperature = True
 
+    # Make inhales positive deflections in the pdiff signal
     if inhale_pos:
         inhale_dir = 1
     else:
@@ -190,6 +223,7 @@ def run_one(SR, wiring, v_in, inhale_pos, save_path):
         f"{t.shape[0]=}\n{pdiff.shape[0]=}\n{dia_sub.shape[0]=}\n{hr_bpm.shape[0]=}\n{temperature.shape[0]=}\n{flow.shape[0]=}"
     )
 
+    # Save the downsampled data to a parquet file in alf format
     physiol_df = pd.DataFrame()
     if has_pdiff:
         physiol_df["pdiff"] = pdiff
@@ -234,14 +268,17 @@ def run_one(SR, wiring, v_in, inhale_pos, save_path):
         # Save breaths features
         dia_df.to_parquet(save_path.joinpath(fn_breaths), index=False)
 
+        # Save breath onsets
         breath_onsets = dia_df["on_sec"].values
         np.save(save_path.joinpath(fn_breath_onsets), breath_onsets)
 
+        # Save the filtered diaphragm signal
         fn_dia_filt = spec.to_alf(
             "diaphragm", "filtered", "npy", "cibrrig", extra=trigger_label
         )
         np.save(save_path.joinpath(fn_dia_filt), dia_filt)
 
+        # Save the timestamps for the filtered diaphragm signal
         fn_dia_filt_times = spec.to_alf(
             "diaphragm", "times", "npy", "cibrrig", extra=trigger_label
         )
@@ -257,10 +294,19 @@ def run_one(SR, wiring, v_in, inhale_pos, save_path):
 # At this point I don't know how best to incorporate this matlab script into a python workflow without hacking paths
 def run(session_path, v_in=9, inhale_pos=False, save_path=None, debug=False):
     """
-    Set chan to -1 if no data is recorded.
-    """
+    Run the physiology extraction process on a session.
+
+    Args:
+        session_path (Path): Path to the session data.
+        v_in (float, optional): Voltage supply for the flowmeter sensor. Defaults to 9.
+        inhale_pos (bool, optional): Set true if inhale was acquired as a positive signal. Defaults to False.
+        save_path (Path, optional): Path to save data to. If None, save to parent directory of binary file. Defaults to None.
+        debug (bool, optional): If True, enable debug loggin. Defaults to False.
+    """    
+
     _log.setLevel(logging.DEBUG) if debug else None
 
+    # Set paths, create save directory, and find Nidaq files
     session_path = Path(session_path)
     save_path = save_path or session_path.joinpath("alf")
     save_path.mkdir(exist_ok=True)
@@ -270,6 +316,7 @@ def run(session_path, v_in=9, inhale_pos=False, save_path=None, debug=False):
     ni_fn_list.sort()
     _log.debug(f"Found Nidaq data: {ni_fn_list}")
 
+    # Process each Nidaq file
     for ni_fn in ni_fn_list:
         _log.info(f"Processing {ni_fn}")
         SR = spikeglx.Reader(ni_fn)
@@ -279,6 +326,7 @@ def run(session_path, v_in=9, inhale_pos=False, save_path=None, debug=False):
         has_pdiff = "pdiff" in ni_wiring.keys()
         has_flow = "flowmeter" in ni_wiring.keys()
 
+        # If we have a pdiff or flowmeter signal, run breathmetrics (requires matlab)
         if has_pdiff or has_flow:
             _log.info("=" * 50)
             _log.info("Sending to Breathmetrics")
@@ -319,6 +367,16 @@ def run(session_path, v_in=9, inhale_pos=False, save_path=None, debug=False):
 @click.option("-s", "--save_path", "save_path", default=None, show_default=True)
 @click.option("--debug", is_flag=True)
 def main(session_path, v_in, inhale_pos, save_path, debug):
+    """
+    Main entry point for the physiology extraction script.
+
+    Args:
+        session_path (str): Path to the session data.
+        v_in (float, optional): Voltage supply for the flowmeter sensor. Defaults to 9.
+        inhale_pos (bool, optional): Set true if inhale was acquired as a positive signal. Defaults to False.
+        save_path (str, optional): Path to save data to. If None, save to parent directory of binary file. Defaults to None.
+        debug (bool): If True, enable debug mode.
+    """
     run(session_path, v_in, inhale_pos, save_path, debug)
 
 

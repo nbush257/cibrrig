@@ -20,11 +20,12 @@ _log.setLevel(logging.INFO)
 
 
 def _describe_framerate(frame_times):
-    """Compute some QC on the frametimes and print to log.
-    Mostly to make sure that the framerate is not weird
+    """
+    Compute some QC on the frame times and print to log.
+    Mostly to make sure that the frame rate is not weird.
 
     Args:
-        frame_times (_type_): times of each frame in seconds
+        frame_times (np.ndarray): Times of each frame in seconds.
     """
     if len(frame_times) == 0:
         _log.warning("No Frames found")
@@ -45,12 +46,16 @@ def _describe_framerate(frame_times):
 
 
 def process_rec_ni(ni_fn, trig_chan=6, verbose=True):
-    """Extract frame times from the NI data
+    """
+    Extract frame times from the NI data.
 
     Args:
-        ni_fn (_type_): _description_
-        trig_chan (int, optional): _description_. Defaults to 6.
-        verbose (bool, optional): _description_. Defaults to True.
+        ni_fn (Path): Path to the NI data file.
+        trig_chan (int, optional): Digital channel of the frame trigger. Defaults to 6.
+        verbose (bool, optional): If True, print additional information. Defaults to True.
+
+    Returns:
+        np.ndarray: Array of frame times in seconds.
     """
     SR = spikeglx.Reader(ni_fn)
     trig = SR.read_sync_digital(_slice=slice(None, None))[:, trig_chan]
@@ -61,6 +66,16 @@ def process_rec_ni(ni_fn, trig_chan=6, verbose=True):
 
 
 def process_rec_extracted(ni_fn, trig_chan=6):
+    """
+    Process extracted NI data to get frame times.
+
+    Args:
+        ni_fn (Path): Path to the NI data file.
+        trig_chan (int, optional): Digital channel of the frame trigger. Defaults to 6.
+
+    Returns:
+        np.ndarray: Array of frame times in seconds.
+    """
     trig_string = get_trig_string(ni_fn.stem)
     alfname = dict(
         object="sync", namespace="spikeglx", extra=trig_string, short_keys=True
@@ -77,6 +92,17 @@ def process_rec_extracted(ni_fn, trig_chan=6):
 
 
 def get_camera_chans(session_path):
+    """
+    Get the camera channels from the session path.
+
+    Args:
+        session_path (Path): Path to the session data.
+
+    Returns:
+        tuple: A tuple containing:
+            - list: Channels to extract.
+            - list: Labels for the channels.
+    """
     sync_map = spikeglx.get_sync_map(session_path.joinpath("raw_ephys_data"))
     chans_to_extract = []
     labels = []
@@ -88,10 +114,11 @@ def get_camera_chans(session_path):
 
 
 def run_session(session_path):
-    """Run on an entire session and use the wiring json
+    """
+    Run on an entire session and use the wiring JSON.
 
     Args:
-        session_path (_type_): _description_
+        session_path (Path): Path to the session data.
     """
     session_path = Path(session_path)
     dest_path = session_path.joinpath("alf")
@@ -122,11 +149,13 @@ def run_session(session_path):
 
 
 def run_file(ni_fn, chan, label="camera"):
-    """run directly on a file and channel.
+    """
+    Run directly on a ni data file and expected channel for frame triggers.
 
     Args:
-        ni_fn (_type_): nidaq bin file
-        chan (_type_): channel to extract
+        ni_fn (Path): Path to the NI data file.
+        chan (int): Channel to extract.
+        label (str, optional): Label for the channel. Defaults to "camera".
     """
     trig_string = re.search("t\d{1,3}", ni_fn.stem).group()
 
@@ -136,6 +165,14 @@ def run_file(ni_fn, chan, label="camera"):
 
 
 def run(input_path, trig_chan=None, label="camera"):
+    """
+    Run the extraction process on the given input path.
+
+    Args:
+        input_path (str): Path to the input data (file or directory).
+        trig_chan (int, optional): Digital channel of the frame trigger. Defaults to None.
+        label (str, optional): Label for the channel. Defaults to "camera".
+    """
     input_path = Path(input_path)
     if input_path.is_dir():
         run_session(input_path)
@@ -164,6 +201,14 @@ def run(input_path, trig_chan=None, label="camera"):
 )
 @click.option("-l", "--label", default="camera")
 def main(input_path, trig_chan, label):
+    """
+    Main entry point to extract frame times from NI data.
+
+    Args:
+        input_path (str): Path to the input data (file or directory).
+        trig_chan (int, optional): Digital channel of the frame trigger. Defaults to None.
+        label (str, optional): Label for the channel. Defaults to "camera".
+    """
     run(input_path, trig_chan, label)
 
 
