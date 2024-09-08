@@ -14,10 +14,6 @@ logging.basicConfig()
 _log = logging.getLogger("multi_preproc")
 _log.setLevel(logging.DEBUG)
 
-if sys.platform == "linux":
-    _log.info("HPC detected - using TkAgg")
-    matplotlib.use("TkAgg")
-
 raise NotImplementedError("This script is deprecated. Use preproc_pipeline.py instead.")
 
 

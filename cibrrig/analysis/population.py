@@ -339,7 +339,8 @@ class Population:
         return plot_projection(X_slice, dims, cvar=speed_slice, **kwargs)
 
     def plot_projection(self, dims=[0, 1, 2], t0=None, tf=None, cvar=None, **kwargs):
-        """Plot the low dimensional projection as a scatter
+        """
+        Plot the low dimensional projection as a scatter
         Uses the known timebins of the projection to pass only a subset of the data to "plot_projection"
 
         Args:

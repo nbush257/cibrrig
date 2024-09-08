@@ -279,10 +279,10 @@ def apply_preprocessing(
     Apply the IBL preprocessing pipeline to the recording.
 
     This function applies a series of preprocessing steps to the recording, including:
-        highpass filtering,
-        phase shifting
-        bad channel detection and interpolation
-        spatial filtering.
+    highpass filtering,
+    phase shifting
+    bad channel detection and interpolation
+    spatial filtering.
     Optionally, it can also remove optogenetic artifacts and concatenate recording segments.
 
     Args:

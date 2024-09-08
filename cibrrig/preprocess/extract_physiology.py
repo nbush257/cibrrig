@@ -41,7 +41,9 @@ if sys.platform == "linux":
     BM_PATH = "/active/ramirez_j/ramirezlab/nbush/projects/cibrrig/cibrrig/preprocess"
 else:
     BM_PATH = r"Y:/projects/cibrrig/cibrrig/preprocess"
-assert Path(BM_PATH).exists(), "BM_PATH does not exist"
+if not Path(BM_PATH).exists():
+    BM_PATH = Path(__file__).parent
+    _log.warning("Using local path for breathmetrics")
 
 
 def _crop_traces(t, x):
