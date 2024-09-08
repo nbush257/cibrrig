@@ -1,10 +1,9 @@
 CIBRRIG
 ==========
-https://github.com/nbush257/cibrrig
 
-.. toctree::
-   :maxdepth: 1
-   :caption: Getting Started
+`GitHub:  <https://github.com/nbush257/cibrrig>`_
+
+.. mdinclude:: ../readme.md
 
    README ../readme.md
 
