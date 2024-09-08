@@ -7,7 +7,7 @@ cibrrig documentation
 =====================
 Welcome to cibrrig's documentation!
 This is a work in progress.
-Check update 1
+Check update 2
 
 Contents
 --------
@@ -15,3 +15,4 @@ Contents
 .. toctree::
 
    api
+   cibrrig
