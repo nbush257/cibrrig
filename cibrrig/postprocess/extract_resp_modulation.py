@@ -28,22 +28,40 @@ plt.rcParams["axes.autolimit_mode"] = "round_numbers"
 
 
 def get_vector_means(bins, rates):
+    """
+    Calculate the vector sum direction and tuning strength from a histogram of responses in polar space.
+    Computes over all cells in the input rates.
+
+    Args:
+        bins (np.ndarray): Sampled bin locations from a polar histogram. Must be on [-pi, pi]
+                           Assumes number of bins is the same as the number of observed rates.
+                           Bin centers is a better usage.
+        rates (np.ndarray): Observed rate at each bin location. Multiple units are passed in columns
+
+    Returns:
+        tuple: A tuple containing:
+            - theta (np.ndarray): The vector mean direction of the input bin locations and centers.
+            - L_dir (np.ndarray): The strength of the tuning as defined by Mazurek FiNC 2014. Equivalent to 1 - Circular Variance.
+    """
     def _get_vector_mean(bins, rate):
         """
-        Calculate the vector sum direction and tuning strength from a histogram of responses in polar space
+        Calculate the vector sum direction and tuning strength from a histogram of responses in polar space.
 
-        INPUTS: theta_k -- sampled bin locations from a polar histogram.
-                            * Assumes number of bins is the same as the number of observed rates (i.e. if you use bin edges you will probably have to truncate the input to fit)
-                            * Bin centers is a better usage
-                rate -- observed rate at each bin location
-        OUTPUTS:    theta -- the vector mean direction of the input bin locations and centers
-                    L_dir -- the strength of the tuning as defined by Mazurek FiNC 2014. Equivalient to 1- Circular Variance
+        Args:
+            bins (np.ndarray): Sampled bin locations from a polar histogram. Assumes number of bins is the same as the number of observed rates.
+                      Bin centers is a better usage.
+            rate (np.ndarray): Observed rate at each bin location.
+
+        Returns:
+            tuple: A tuple containing:
+            - theta (np.ndarray): The vector mean direction of the input bin locations and centers.
+            - L_dir (np.ndarray): The strength of the tuning as defined by Mazurek FiNC 2014. Equivalent to 1 - Circular Variance.
         """
 
         # Calculate the direction tuning strength
         L_dir = np.abs(np.sum(rate * np.exp(1j * bins)) / np.sum(rate))
 
-        # calculate vector mean
+        # Calculate vector mean
         x = rate * np.cos(bins)
         y = rate * np.sin(bins)
 
@@ -53,11 +71,18 @@ def get_vector_means(bins, rates):
         theta = np.arctan2(Y, X)
 
         return theta, L_dir
-
+    
+    # Check if rates is 2D
+    if rates.ndim != 2:
+        rates = rates.reshape(-1, 1)
+        _log.warning("Reshaping rates to 2D array")
     n_units = rates.shape[1]
+    
+    # Preallocate
     theta = np.full(n_units, np.nan)
     L_dir = np.full(n_units, np.nan)
 
+    # Loop over all units
     for ii in range(n_units):
         t, L = _get_vector_mean(bins, rates[:, ii])
         theta[ii] = t
@@ -67,16 +92,46 @@ def get_vector_means(bins, rates):
 
 def _get_phase_max(bins, rates):
     """
-    Gets the phi value of the peak of the polar curve
+    Computes the phase value of the peak of the polar curve.
+
+    Args:
+        bins (np.ndarray): Sampled bin locations from a polar histogram. Must be on [-pi, pi].
+        rates (np.ndarray): Observed rate at each bin location. Multiple units are passed in columns.
+
+    Returns:
+        np.ndarray: The phase value of the peak of the polar curve.
     """
     return bins[np.argmax(rates, 0)]
 
 
 def _get_phase_modulation(bins, rates):
+    """
+    Compute the phase modulation index as:
+    \Phi = \frac{max(rates) - min(rates)}{mean(rates)}
+
+    Args:
+        bins (np.ndarray): Sampled bin locations from a polar histogram. Must be on [-pi, pi].
+                           Assumes number of bins is the same as the number of observed rates.
+                           Bin centers is a better usage.
+        rates (np.ndarray): Observed rate at each bin location. Multiple units are passed in columns.
+
+    Returns:
+        np.ndarray: The phase modulation index for each unit.
+    """
     return (np.max(rates, axis=0) - np.min(rates, 0)) / np.mean(rates, 0)
 
 
 def _get_eta_squareds(rates):
+    """
+    Compute the eta squared for each unit in the rates matrix.
+    
+    Not currently implemented
+    Args:
+        rates (np.ndarray): Observed rate at each bin location. Multiple units are passed in columns
+        
+    Returns:
+        np.ndarray: The eta squared value for each unit.
+    """
     def _get_eta_squared(rate):
         """
         Orem and Dick 1983
@@ -112,28 +167,26 @@ def compute_resp_mod(
     spike_times, spike_clusters, cluster_ids, breaths, t0=None, tf=None
 ):
     """
-    Compute respiratory modulation a la Mazurek et al.
-    Implicitly performs a computation of Phi (i.e., phase from -pi to pi)
+    Compute respiratory modulation according to Mazurek et al. for all clusters in cluster_ids
+    Implicitly computes phase from breaths.on_sec and breaths.off_sec
+    Optionally, specify a window to compute respiratory modulation
 
-    Returns intermediate products of the firing rate as a function of phase primarily for other
-    functions in this module.
-
-    I think this only works for data with diaphragm currently
+    Times are in seconds
 
     Args:
-        spike_times (array): Times of all spike occurances
-        spike_clusters (array): Cluster ID of all spike occurances
-        cluster_ids (array): Clusters to compute on.
-        breaths (AlfBunch): Breaths structure that contains on_sec and off_sec
-        t0 (float): Defines the start of the window to compute respiratory modulation, defaults to 0
-        tf (float): Defines the end of the window to compute respiratory modulation, defaults to last spike or breath
+        spike_times (np.ndarray): Array of spike times
+        spike_clusters (np.ndarray): Array of cluster IDs for each spike
+        cluster_ids (np.ndarray): Array of cluster IDs to compute on
+        breaths (one.alf.io.AlfBunch): Breaths structure that contains on_sec and off_sec
+        t0 (float): Start of the window to compute respiratory modulation. Defaults to 0.
+        tf (float): End of the window to compute respiratory modulation. Defaults to the last spike or breath.
 
     Returns:
-        bins - phase bins
-        rates - spike rate as a function of phase for each cluster
-        sems - spike rate Standard Error as a function of phase for each cluster
-        theta - Preffered phase for each cluster
-        L_dir - Respiratory modulation strength for each cluster
+        np.ndarray: bins - Phase bins
+        np.ndarray: rates - Spike rate as a function of phase for each cluster
+        np.ndarray: sems - Spike rate standard error as a function of phase for each cluster
+        np.ndarray: theta - Preferred phase for each cluster
+        np.ndarray: L_dir - Respiratory modulation strength for each cluster
     """
     t0 = t0 or 0
     tf = tf or np.min(
@@ -166,6 +219,7 @@ def run_probe(
     plot_tgl=True,
     save_tgl=True,
 ):
+    
     """
     Compute coherence using chronux ALF organized spike data in a probe path
     Wrapper to pass to "compute_resp_mod"
@@ -223,7 +277,15 @@ def run_probe(
 
 def sanity_check_plots(probe_path, bins, rates, sems, theta, L_dir):
     """
-    Make a few plots that show the respiratory modulation of individual units and the population
+    Make a few plots that show the respiratory modulation of individual units and the population.
+
+    Args:
+        probe_path (Path): Path to save the plots.
+        bins (np.ndarray): Phase bins.
+        rates (np.ndarray): Spike rate as a function of phase for each cluster.
+        sems (np.ndarray): Spike rate standard error as a function of phase for each cluster.
+        theta (np.ndarray): Preferred phase for each cluster.
+        L_dir (np.ndarray): Respiratory modulation strength for each cluster.
     """
     f = plt.figure()
     gs = f.add_gridspec(nrows=2, ncols=5)
@@ -315,15 +377,15 @@ def sanity_check_plots(probe_path, bins, rates, sems, theta, L_dir):
 
 
 def run_session(session_path, t0=None, tf=None, use_good=False, plot_tgl=True):
-    """Run respiratory modulation computation on all probes for a sesssion
+    """
+    Run respiratory modulation computation on all probes for a session.
 
     Args:
-        session_path (Path): _description_
-        t0 (float,optional): start of the epoch to comute on
-        tf (float,optional): end of the epoch to compute on
-        var (str, optional): variable to compute phase locking against. Defaults to 'dia'. Must be in "physiology"
-        use_good (bool, optional): If true, only compute for the "good" units. Defaults to False.
-        plot_tgl (bool,optional): Defaults to True
+        session_path (Path): Path to the session data.
+        t0 (float, optional): Start of the epoch to compute on. Defaults to None.
+        tf (float, optional): End of the epoch to compute on. Defaults to None.
+        use_good (bool, optional): If True, only compute for the "good" units. Defaults to False.
+        plot_tgl (bool, optional): If True, generate plots. Defaults to True.
     """
     _log.info(
         f"\nComputing respiratory modulation for {session_path}.\n\t{t0=}\n\t{tf=}\n\t{use_good=}"
