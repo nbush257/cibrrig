@@ -29,7 +29,8 @@ extensions = [
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
-
+autoapi_dirs = ['.../kilosort']
+master_doc = 'index'
 
 
 # -- Options for HTML output -------------------------------------------------

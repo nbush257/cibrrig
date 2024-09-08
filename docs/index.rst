@@ -6,7 +6,8 @@
 cibrrig documentation
 =====================
 Welcome to cibrrig's documentation!
-This is a work in progress 
+This is a work in progress.
+Check update 1
 
 Contents
 --------
