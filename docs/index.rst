@@ -8,7 +8,9 @@ cibrrig documentation
 Welcome to cibrrig's documentation!
 
 
-.. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+Contents
+--------
 
+.. toctree::
+
+   api
