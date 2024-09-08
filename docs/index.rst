@@ -1,8 +1,7 @@
 CIBRRIG
 ==========
 
-`GitHub:  <https://github.com/nbush257/cibrrig>`_
-
+`GitHub <https://github.com/nbush257/cibrrig>`_
 
 .. toctree::
    :maxdepth: 2
