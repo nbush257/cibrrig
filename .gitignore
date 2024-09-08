@@ -1,5 +1,4 @@
 *.pyc
 .vscode
 preprocess/__pycache__
-build
 *.egg*
