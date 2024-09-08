@@ -1,5 +1,8 @@
 """
-Standard utility functions
+utils.py
+
+This module provides a collection of standard utility functions used across the project.
+The functions are designed to be general-purpose with minimal dependencies on other modules.
 """
 
 import numpy as np
@@ -11,10 +14,17 @@ _log = logging.getLogger(__name__)
 _log.setLevel(level=logging.INFO)
 
 
-# May be better in a utils file
 def validate_intervals(starts, stops,overlap_ok=False):
     """
-    Validates that two vectors are indeed intervals (monotonic, causal, and non-overlapping)
+    Validates that two vectors are indeed intervals (monotonic, causal, and non-overlapping).
+
+    Args:
+        starts (np.ndarray): Array of start times.
+        stops (np.ndarray): Array of stop times.
+        overlap_ok (bool, optional): If True, allows overlapping intervals. Defaults to False.
+
+    Raises:
+        AssertionError: If the intervals are not monotonic, causal, or non-overlapping.
     """
     assert np.all(np.diff(starts) > 0), "Starts is not monotonic"
     assert len(starts) == len(
@@ -25,17 +35,23 @@ def validate_intervals(starts, stops,overlap_ok=False):
         assert np.all(starts[1:] >= stops[:-1]), "Intervals are overlapping"
 
 
-# May be better in a utils file
 def remap_time_basis(x, x_t, y_t):
     """
-    Convinience function to map an analog signal x into the time
-    basis for another signal y.
-    ex: x is phase, y is the PCA decomposition. This allows you to get the phase value for
-    each sample in the PCA time
-    :param x: Analog signal to change time basis (1D numpy array)
-    :param x_t: Time basis of original analog signal (1D numpy array)
-    :param y_t: Time basis of target signal (1D numpy array)
-    :return: x_mapped - x in the time basis of y (1D numpy array)
+    Convenience function to map an analog signal x into the time basis for another signal y.
+
+    This function maps the values of an analog signal x, which is sampled at times x_t, into the time basis of another signal y, which is sampled at times y_t.
+    e.g. x is phase, y is the PCA decomposition. This allows you to get the phase value for each sample in the PCA time.
+
+    Args:
+        x (np.ndarray): Analog signal to change time basis (1D numpy array).
+        x_t (np.ndarray): Time basis of the original analog signal (1D numpy array).
+        y_t (np.ndarray): Time basis of the target signal (1D numpy array).
+
+    Returns:
+        np.ndarray: x mapped into the time basis of y (1D numpy array).
+
+    Raises:
+        AssertionError: If the lengths of x and x_t do not match, or if the length of the resulting index array does not match y_t.
     """
     assert len(x) == len(x_t)
     idx = np.searchsorted(x_t, y_t) - 1
@@ -45,21 +61,25 @@ def remap_time_basis(x, x_t, y_t):
 
 def event_counts_per_epochs(event_times, starts, stops, rate=False):
     """
-    Count the number of occurances of an event in a set of intervals
+    Count the number of occurrences of an event in a set of intervals.
 
+    This function counts how many times an event occurs within specified intervals. 
+    Optionally, it can also calculate the rate of events per interval.
 
     Args:
-        event_times (1D numpy array): timestamps of each event in seconds
-        starts (_type_): start time of each epoch in seconds
-        stops (_type_): end time of each epoch in seconds
-        rate (bool, optional): If true, divides the count by the duration to get the event rate. Defaults to False.
+        event_times (np.ndarray): Array of event times.
+        starts (np.ndarray): Array of interval start times.
+        stops (np.ndarray): Array of interval stop times.
+        rate (bool, optional): If True, calculate the rate of events per interval. Defaults to False.
+
+    Returns:
+        np.ndarray: Array of event counts or rates per interval.
     """
     validate_intervals(starts, stops)
     count = np.zeros(len(starts), dtype="int64")
     for ii, (start, stop) in enumerate(zip(starts, stops)):
         idx = np.logical_and(event_times > start, event_times < stop)
         count[ii] = np.sum(idx)
-
     if rate:
         durs = stops - starts
         return count / durs
@@ -176,26 +196,30 @@ def make_pre_post_trial(
     Optionally and flexibly accepts combinatorial condition assignments for each interval
     (e.g. grid search on stimulus frequency and amplitude)
 
+    "Comparison" is the primary output column, which indicates whether the data is from the test or control period
+
     Takes an alf object with a times attribute and finds all the
-    observations of that variable in each interval. Then comptues a
+    observations of that variable in each interval. Then computes a
     "control" period that immediately precedes each test interval.
 
-
     Can output in "wide" form by creating a pandas pivot table where rows are trial number, split into columns for test and control
-
 
     Example use case: getting the average value of a variable before and during an opto stimulus train
 
     If conditions is a pandas dataframe with multiple columns, keeps the column name in the output
 
     Args:
-        alf_object (AlfBunch): Alf data to aggregate
-        intervals (2D numpy array): N x 2 of start and stop times
-        conditions (list,numpy array, or pandas dataframe): Conditions to assign each interval to (e.g., stimulus frequency). Default to None
-        window (float, optional): Size of the control window in seconds. If None, uses the same duration as the test duration. Defaults to None.
-        pad (int, optional): Seconds before the test interval to exclude. Defaults to 0.
-        vars (list,optional): Variables in alf object to aggregate
-        wide (bool,optional): If true, makes the data wideform
+        alf_object (alfio.AlfObject): ALF object containing the data.
+        intervals (np.ndarray): Array of intervals (start and stop times).
+        conditions (list, optional): List of conditions to filter the data. Defaults to None.
+        window (tuple, optional): Time window for pre- and post-trial data. Defaults to None.
+        pad (int, optional): Padding to add to the intervals. Defaults to 0.
+        vars (list, optional): List of variables to include in the output. Defaults to None.
+        wide (bool, optional): If True, return the data in wide format. Defaults to False.
+        agg_func (str, optional): Aggregation function to use. Defaults to "mean". "count" may be useful
+
+    Returns:
+        pd.DataFrame: DataFrame containing the pre- and post-trial data.
     """
     starts = intervals[:, 0]
     stops = intervals[:, 1]
@@ -212,6 +236,7 @@ def make_pre_post_trial(
     assert "times" in alf_object.keys(), 'Input ALF object must have attribute "times"'
     ts = alf_object.times
 
+    # Manipulate conditions to consider
     use_conditions = False
     if conditions is not None:
         assert (
@@ -226,6 +251,7 @@ def make_pre_post_trial(
         )
     conditions = conditions.reset_index(drop=True)
 
+    # Group conditions
     categories = conditions.columns.to_list()
     grouped = conditions.groupby(categories)
 
@@ -237,13 +263,9 @@ def make_pre_post_trial(
     comparison = np.full_like(ts, np.nan, dtype=object)
     trial = np.full_like(ts, np.nan, dtype=float)
 
-    # for category in categories:
-    #     unique_conditions = conditions[category].unique()
-    #     for cond in unique_conditions:
-    #         # Subset
+    # Loop over groups and assign observations to intervals
     for group_keys, group in grouped:
-        # this_condition = conditions[category]==cond
-        # this_condition = this_condition.values
+
         _starts = starts[group.index]
         _stops = stops[group.index]
         _control_starts = control_starts[group.index]
@@ -266,6 +288,7 @@ def make_pre_post_trial(
         condition.loc[np.isfinite(test_trial_num), categories] = group_keys
         condition.loc[np.isfinite(control_trial_num), categories] = group_keys
 
+        # Assign comparison and trial numbers
         comparison[np.isfinite(test_trial_num)] = "test"
         comparison[np.isfinite(control_trial_num)] = "control"
 
@@ -309,14 +332,28 @@ def make_pre_post_trial(
 
 
 def get_pct_diff(df, vars, condition_names=None):
-    """Given a long form output from "make_pre_post_trial" calculate the percent difference
+    """
+    Calculate the percent difference between test and control conditions for specified variables.
+
+    This function takes a long-form DataFrame output from "make_pre_post_trial" and calculates the percent difference
+    and absolute difference between test and control conditions for specified variables. The DataFrame must have columns
+    'trial' and 'comparison', where 'comparison' must be either 'test' or 'control'.
 
     Args:
-        df (pandas dataframe): long form pandas data. Must have columns['trial','comparison'] Comparison must be either ['test','control']
-        condition_names (list): columns to treat as conditions (Categories)
-        vars (list): columns to treat as variables and compute %diff on, must be numeric
+        df (pd.DataFrame): Long-form pandas DataFrame containing the data. Must have columns ['trial', 'comparison'].
+        condition_names (list, optional): List of columns to treat as conditions (categories). Defaults to None.
+        vars (list): List of columns to treat as variables and compute percent difference on. Must be numeric.
+
+    Returns:
+        pd.DataFrame: DataFrame containing the percent difference and absolute difference for the specified variables.
+
+    Raises:
+        KeyError: If the required columns are not present in the DataFrame.
+
     """
     condition_names = condition_names or []
+
+    # Separate the DataFrame into control and test conditions
     control_df = df[df["comparison"] == "control"]
     test_df = df[df["comparison"] == "test"]
     merged_df = pd.merge(
@@ -326,43 +363,68 @@ def get_pct_diff(df, vars, condition_names=None):
         suffixes=("_control", "_test"),
     )
 
-    # Calculate the difference in inst_freq
+    # Calculate the percent difference and absolute difference for each variable
     for vv in vars:
         x = merged_df[f"{vv}_test"]
         y = merged_df[f"{vv}_control"]
         merged_df[f"{vv}_pct_diff"] = 100 * ((x - y) / y)
         merged_df[f"{vv}_diff"] = x - y
 
+    # Define the output columns
     out_columns = (
         condition_names
         + ["trial"]
         + [f"{vv}_pct_diff" for vv in vars]
         + [f"{vv}_diff" for vv in vars]
     )
+
+    # Create the result DataFrame with the specified output columns
     result_df = merged_df[out_columns]
     return result_df
 
 
 def get_eta(x, xt, event, pre_win=0.5, post_win=None):
     """
-    Compute the event triggered average, std, sem of a covariate x
-    :param x: The analog signal to check against
-    :param tvec: the time vector for x
-    :param ts: the timestamps (in seconds) of the event
-    :param pre_win: the window before to average
-    :param post_win: the window after_the spike to average
+    Compute the event-triggered average (ETA), standard deviation (std), and standard error of the mean (sem) of a covariate x.
 
-    :return:
+    This function calculates the event-triggered average, standard deviation, and standard error of the mean for a given analog signal x,
+    based on specified event times. It also computes the time window around each event and returns the results in a dictionary.
+
+    Args:
+        x (np.ndarray): The analog signal to compute eta for.
+        xt (np.ndarray): The time vector for the analog signal x.
+        event (np.ndarray): The timestamps (in seconds) of the events to average around.
+        pre_win (float, optional): The window before each event to average. Defaults to 0.5 seconds.
+        post_win (float, optional): The window after each event to average. Defaults to the value of pre_win.
+
+    Returns:
+        dict: A dictionary containing the following keys:
+            - 'mean': The event-triggered average.
+            - 'sem': The standard error of the mean.
+            - 'std': The standard deviation.
+            - 't': The time vector for the window around each event.
+            - 'lb': The lower bound of the mean minus the sem.
+            - 'ub': The upper bound of the mean plus the sem.
+
+    Raises:
+        AssertionError: If the lengths of xt and x do not match.
     """
     assert len(xt) == len(x)
     if post_win is None:
         post_win = pre_win
 
+    # Infer sampling rate
     dt = xt[1] - xt[0]
+
+    # Identify the samples corresponding to each event
     samps = np.searchsorted(xt, event)
+
+    # Preallocate the event-triggered array where each column is an event
     win_samps_pre = int(pre_win / dt)
     win_samps_post = int(post_win / dt)
     event_triggered = np.zeros([win_samps_pre + win_samps_post, len(samps)])
+
+    # Fill the event-triggered array
     for ii, samp in enumerate(samps):
         if (samp - win_samps_pre) < 0:
             continue
@@ -370,13 +432,16 @@ def get_eta(x, xt, event, pre_win=0.5, post_win=None):
             continue
         event_triggered[:, ii] = x[samp - win_samps_pre : samp + win_samps_post]
 
+    # Compute the event-triggered average, standard deviation, and standard error of the mean
     st_average = np.nanmean(event_triggered, 1)
     st_sem = np.nanstd(event_triggered, 1) / np.sqrt(len(samps))
     st_std = np.nanstd(event_triggered, 1)
     win_t = np.linspace(-pre_win, post_win, (win_samps_pre + win_samps_post))
     lb = st_average - st_sem
     ub = st_average + st_sem
-    sta = {
+
+    # Return the results in a dictionary
+    eta = {
         "mean": st_average,
         "sem": st_sem,
         "std": st_std,
@@ -385,15 +450,32 @@ def get_eta(x, xt, event, pre_win=0.5, post_win=None):
         "ub": ub,
     }
 
-    return sta
+    return eta
 
 
 def get_good_spikes(spikes, clusters):
     """
-    Convinience function to return only good spikes
+    Convenience function to return only good spikes.
+
+    This function filters out spikes that belong to clusters marked as "bad" based on the 'bitwise_fail' metric.
+    It returns only the spikes that belong to clusters passing the quality control.
+
+    Args:
+        spikes (AlfBunch): ALF object containing spike data, with keys such as 'times' and 'clusters'.
+        clusters (AlfBunch): ALF object containing cluster metrics, including a 'bitwise_fail' column.
+
+    Returns:
+        tuple: A tuple containing:
+            - spikes (AlfBunch): Filtered ALF object containing only good spikes.
+            - cluster_ids (np.ndarray): Array of cluster IDs that passed the quality control.
     """
+    # Get the cluster IDs that pass the quality control
     cluster_ids = clusters.metrics.query("bitwise_fail==0")["cluster_id"].values
+    
+    # Create a boolean index for spikes belonging to good clusters
     idx = np.isin(spikes.clusters, cluster_ids)
+    
+    # Filter the spikes to include only those belonging to good clusters
     for k in spikes.keys():
         spikes[k] = spikes[k][idx]
     return (spikes, cluster_ids)
