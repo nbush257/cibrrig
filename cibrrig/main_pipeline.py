@@ -81,7 +81,8 @@ class DirectorySelector(QWidget):
 
     Args:
         QWidget (QWidget): Base class QWidget.
-    """ 
+    """
+
     def __init__(self):
         """
         Set default settings and initialize the UI.
@@ -157,7 +158,7 @@ class DirectorySelector(QWidget):
         self.setWindowTitle("Directory Selector")
 
     def select_local_run_path(self):
-        """ Select the local run path with UI"""
+        """Select the local run path with UI"""
         directory = QFileDialog.getExistingDirectory(
             self, "Select Local Run Path", str(self.local_run_path)
         )
@@ -166,7 +167,7 @@ class DirectorySelector(QWidget):
             self.local_run_line_edit.setText(str(self.local_run_path))
 
     def select_remote_archive_path(self):
-        """ Select the remote archive path with UI"""
+        """Select the remote archive path with UI"""
         directory = QFileDialog.getExistingDirectory(
             self, "Select Remote Subjects Archive Path", str(self.remote_archive_path)
         )
@@ -175,7 +176,7 @@ class DirectorySelector(QWidget):
             self.remote_archive_line_edit.setText(str(self.remote_archive_path))
 
     def select_remote_working_path(self):
-        """ Select the remote working path with UI """
+        """Select the remote working path with UI"""
         directory = QFileDialog.getExistingDirectory(
             self, "Select Remote Subjects Working Path", str(self.remote_working_path)
         )
@@ -184,7 +185,7 @@ class DirectorySelector(QWidget):
             self.remote_working_line_edit.setText(str(self.remote_working_path))
 
     def toggle_remove_opto_artifact(self, state):
-        """ Toggle the remove_opto_artifact checkbox """
+        """Toggle the remove_opto_artifact checkbox"""
         if state == Qt.Checked:
             self.remove_opto_artifact = True
         else:
@@ -194,7 +195,7 @@ class DirectorySelector(QWidget):
         self.close()  # Close the GUI window
 
     def get_paths(self):
-        """ Return the selected paths and options """
+        """Return the selected paths and options"""
         return (
             self.local_run_path,
             self.remote_archive_path,
@@ -205,16 +206,17 @@ class DirectorySelector(QWidget):
 
 
 class OptoFileFinder(QDialog):
-    """ 
+    """
     Dialog box to select the opto_calibration.json file if it is not found
-    
+
     Attributes:
         opto_file (Path): Path to the opto_calibration.json file
     """
+
     opto_file_selected = pyqtSignal(Path)
 
     def __init__(self):
-        """ Initialize the dialog box """
+        """Initialize the dialog box"""
         super().__init__()
         self.setWindowTitle("File Selection")
         self.setGeometry(100, 100, 300, 100)
@@ -237,7 +239,7 @@ class OptoFileFinder(QDialog):
         self.opto_file = None  # Initialize opto_file attribute
 
     def select_file(self):
-        """ Select the opto_calibration.json file with UI """
+        """Select the opto_calibration.json file with UI"""
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Select File", "", "JSON Files (*.json)"
         )
@@ -249,7 +251,7 @@ class OptoFileFinder(QDialog):
             self.close()
 
     def skip_file(self):
-        """ Skip the opto_calibration.json file """
+        """Skip the opto_calibration.json file"""
         self.opto_file = Path("")
         self.opto_file_selected.emit(self.opto_file)  # Emit signal with None (skipped)
         self.close()
@@ -259,21 +261,22 @@ class OptoFileFinder(QDialog):
 
 
 class WiringEditor(QDialog):
-    """ 
-    Dialog box to select the wiring file 
-    
+    """
+    Dialog box to select the wiring file
+
     Attributes:
         output_wiring (dict): Dictionary of the selected wiring
         digital_entries (dict): Dictionary of the digital mapping (channels: signals)
         analog_entries (dict): Dictionary of the analog mapping (channels: signals)
 
     """
+
     def __init__(self):
         super().__init__()
         self.initUI()
 
     def initUI(self):
-        """ Initialize the UI layout """
+        """Initialize the UI layout"""
         self.setWindowTitle("Dictionary Editor")
         self.setGeometry(100, 100, 600, 200)
 
@@ -338,7 +341,7 @@ class WiringEditor(QDialog):
         main_layout.addWidget(save_button)
 
     def on_digital_value_changed(self, combo_box, key):
-        """ Update the digital value """
+        """Update the digital value"""
         if combo_box.currentText() == "Custom":
             text, ok = QInputDialog.getText(
                 self, "Custom Value", f"Enter custom value for {key}:"
@@ -348,7 +351,7 @@ class WiringEditor(QDialog):
                 combo_box.setCurrentText(text)
 
     def on_analog_value_changed(self, combo_box, key):
-        """ Update the analog value """
+        """Update the analog value"""
         if combo_box.currentText() == "Custom":
             text, ok = QInputDialog.getText(
                 self, "Custom Value", f"Enter custom value for {key}:"
@@ -358,13 +361,13 @@ class WiringEditor(QDialog):
                 combo_box.setCurrentText(text)
 
     def save_values(self):
-        """ Save the output wiring attributes """
+        """Save the output wiring attributes"""
         output_dictionary = {
             "SYSTEM": "3B",
             "SYNC_WIRING_ANALOG": {},
             "SYNC_WIRING_DIGITAL": {},
         }
-        
+
         # Digital mappings
         for key, combo_box in self.digital_entries.items():
             value = combo_box.currentText()
@@ -388,12 +391,12 @@ class WiringEditor(QDialog):
 
 # TODO: Move video files around intelligently
 def main():
-    """ Main function to run the pipeline 
-    
+    """Main function to run the pipeline
+
     This function runs the pipeline for a selected run directory. It performs the following steps:
     1) Backup and compress the data to the archive
     2) Rename the data to ALF format
-    3) Extract and preprocess the auxiliary data 
+    3) Extract and preprocess the auxiliary data
     4) Spikesort the data
     5) Move the data to the working directory
     """
@@ -411,7 +414,7 @@ def main():
         run_ephysQC,
     ) = window.get_paths()
 
-    # If the user selected the Subjects folder error out 
+    # If the user selected the Subjects folder error out
     if local_run_path == Path(r"D:/sglx_data/Subjects"):
         raise ValueError(
             "You picked the root Subjects folder. This is a scary thing to do and incorrect."
@@ -446,7 +449,7 @@ def main():
                 json.dump(wiring, fid)
             print("Created wiring file")
 
-    # RUN BACKUP 
+    # RUN BACKUP
     backup.no_gui(local_run_path, remote_archive_path)
 
     # RUN RENAME
@@ -471,6 +474,7 @@ def main():
             subprocess.run(command, cwd=pp.parent)
     # Move all data to RSS
     shutil.move(local_run_path, remote_working_path)
+
 
 if __name__ == "__main__":
     main()

@@ -1,7 +1,7 @@
 """
-This module applies synchronization and converts spike sorting data to the ALF (Alyx Filenames) standard 
-for all probes within a given session path. The synchronization adjusts spike times from the IMEC clock 
-to the NIDAQ clock. This conversion is crucial for making data compatible with the IBL's ONE framework, 
+This module applies synchronization and converts spike sorting data to the ALF (Alyx Filenames) standard
+for all probes within a given session path. The synchronization adjusts spike times from the IMEC clock
+to the NIDAQ clock. This conversion is crucial for making data compatible with the IBL's ONE framework,
 which uses ALF to handle data files systematically.
 
 Key Features:
@@ -12,6 +12,7 @@ Key Features:
 - Provides a command-line interface for session processing.
 
 """
+
 from ibllib.ephys.spikes import apply_sync
 from ibllib.ephys.ephysqc import spike_sorting_metrics
 from pathlib import Path
@@ -65,10 +66,10 @@ def save_metrics(metrics, out_path):
 
 def get_ap_breaks_samps(ap_files):
     """
-    Computes the cumulative sample lengths for multiple recordings. This is useful 
+    Computes the cumulative sample lengths for multiple recordings. This is useful
     for handling recordings across multiple triggers.
 
-    Example: If recording 1 has 110 samples and recording 2 has 24 samples, this 
+    Example: If recording 1 has 110 samples and recording 2 has 24 samples, this
     function returns [0, 110, 134].
 
     Args:
@@ -87,8 +88,8 @@ def get_ap_breaks_samps(ap_files):
 
 def sync_spikes(ap_files, spikes):
     """
-    Synchronizes spike times by adjusting them to match the NIDAQ clock, based on 
-    synchronization files that align the IMEC clock to the NIDAQ clock. Spikes with 
+    Synchronizes spike times by adjusting them to match the NIDAQ clock, based on
+    synchronization files that align the IMEC clock to the NIDAQ clock. Spikes with
     negative times are set to zero.
 
     Args:
@@ -117,7 +118,7 @@ def sync_spikes(ap_files, spikes):
 
 def convert_model(ks_path, alf_path, sample_rate, ampfactor):
     """
-    Converts Kilosort output to the ALF format via phylib and performs additional data processing such as 
+    Converts Kilosort output to the ALF format via phylib and performs additional data processing such as
     computing shanks, adjusting amplitudes, and generating spike waveforms.
 
     Args:
@@ -149,7 +150,7 @@ def convert_model(ks_path, alf_path, sample_rate, ampfactor):
 def run_session(session_path, sorting_name="kilosort4"):
     """
     Converts all sorting in a session to the ALF standard, applying synchronization and QC metrics.
-    
+
     Assumes:
     - Spike sorting data is in the structure: <session>/alf/probeXX/<sorting_name>
     - Raw ephys data is located in: <session>/raw_ephys_data/probeXX

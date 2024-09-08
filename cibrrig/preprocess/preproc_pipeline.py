@@ -1,8 +1,9 @@
 """
-This module runs the preprocessing pipeline for a session. 
+This module runs the preprocessing pipeline for a session.
 It extracts sync, video frame, opto, and physiology information from the session.
 (DEPRECATED runs ephysqc on the session.)
 """
+
 import click
 import logging
 from ibllib.ephys.ephysqc import extract_rmsmap, EphysQC
@@ -91,7 +92,6 @@ def run(session_path, skip_ephysqc=False):
     extract_physiology.run(session_path)
     if not skip_ephysqc:
         run_ephys_qc_session(session_path)
-
 
 
 @click.command()

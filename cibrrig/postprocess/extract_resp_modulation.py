@@ -43,6 +43,7 @@ def get_vector_means(bins, rates):
             - theta (np.ndarray): The vector mean direction of the input bin locations and centers.
             - L_dir (np.ndarray): The strength of the tuning as defined by Mazurek FiNC 2014. Equivalent to 1 - Circular Variance.
     """
+
     def _get_vector_mean(bins, rate):
         """
         Calculate the vector sum direction and tuning strength from a histogram of responses in polar space.
@@ -71,13 +72,13 @@ def get_vector_means(bins, rates):
         theta = np.arctan2(Y, X)
 
         return theta, L_dir
-    
+
     # Check if rates is 2D
     if rates.ndim != 2:
         rates = rates.reshape(-1, 1)
         _log.warning("Reshaping rates to 2D array")
     n_units = rates.shape[1]
-    
+
     # Preallocate
     theta = np.full(n_units, np.nan)
     L_dir = np.full(n_units, np.nan)
@@ -124,14 +125,15 @@ def _get_phase_modulation(bins, rates):
 def _get_eta_squareds(rates):
     """
     Compute the eta squared for each unit in the rates matrix.
-    
+
     Not currently implemented
     Args:
         rates (np.ndarray): Observed rate at each bin location. Multiple units are passed in columns
-        
+
     Returns:
         np.ndarray: The eta squared value for each unit.
     """
+
     def _get_eta_squared(rate):
         """
         Orem and Dick 1983
@@ -219,7 +221,6 @@ def run_probe(
     plot_tgl=True,
     save_tgl=True,
 ):
-    
     """
     Compute coherence using chronux ALF organized spike data in a probe path
     Wrapper to pass to "compute_resp_mod"
@@ -336,7 +337,7 @@ def sanity_check_plots(probe_path, bins, rates, sems, theta, L_dir):
     ax.set_xticklabels(["", "", "", ""])
     cbar = plt.colorbar(scatter, ax=ax)
     cbar.set_ticks([0, 0.5, 1])
-    cbar.set_label('L_dir')
+    cbar.set_label("L_dir")
     ax.set_title("Modulation by phase")
 
     ax = f.add_subplot(gs[1:, 3:])
@@ -359,7 +360,7 @@ def sanity_check_plots(probe_path, bins, rates, sems, theta, L_dir):
     ub = [0.25, 0.5, 0.75, 1]
     f, ax = plt.subplots(ncols=4)
 
-    for ii, (l, u) in enumerate(zip(lb, ub)):#NOQA
+    for ii, (l, u) in enumerate(zip(lb, ub)):  # NOQA
         df = df_full.query("L_dir>@l & L_dir<@u")
         idx = df.sort_values(["theta"]).index.values
         _ax = ax[ii]
@@ -370,7 +371,7 @@ def sanity_check_plots(probe_path, bins, rates, sems, theta, L_dir):
         _ax.set_ylim([0, df.shape[0]])
         _ax.axvline(0, color="w")
         _ax.set_xlabel("Phase ($\phi$)")
-        _ax.set_title(f'Mod = [{l:0.2f},{u:0.2f}]')
+        _ax.set_title(f"Mod = [{l:0.2f},{u:0.2f}]")
     ax[0].set_ylabel("Unit")
     plt.tight_layout()
     plt.savefig(probe_path.joinpath("respMod_heatmap.png"))

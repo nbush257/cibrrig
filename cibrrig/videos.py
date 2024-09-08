@@ -291,7 +291,7 @@ def make_projection(
     t0,
     duration,
     fn_out,
-    stim_color='C1',
+    stim_color="C1",
     intervals=None,
     cvar=None,
     cvar_label="",
@@ -623,7 +623,7 @@ def _trim_axes(ax, pop, t0, tf, dims):
 
     Returns:
         ax (matplotlib.axes): Modifiied axes
-    """    
+    """
     ax.autoscale()
     ax.set_aspect("equal")
     s0, sf = np.searchsorted(pop.tbins, [t0, tf])

@@ -1,5 +1,5 @@
 """
-This module provides functionality to backup raw electrophysiological data to a specified folder. 
+This module provides functionality to backup raw electrophysiological data to a specified folder.
 The backup is a "Frozen copy" that should be identical to the data acquired on the day of recording.
 
 Much of the functionality of the `Archiver` class is deprecated but retained for legacy support.
@@ -56,6 +56,7 @@ class Archiver:
         today_path (Path): Path to the backup directory based on the record date.
         video_files (list): List of video files found in the sessions.
     """
+
     def __init__(self, keep_raw):
         self.subject_ID = None
         self.ephys_files_local = None
@@ -229,7 +230,7 @@ class Archiver:
 class RecordingInfoUI(QWidget):
     """
     GUI to ask the user for the destination (Subjects path), source (run_path), and subject_ID (spikeglx run name).
-    
+
     Attributes:
         archiver (Archiver): Instance of the `Archiver` class to manage the backup.
     """
@@ -345,9 +346,9 @@ def main(local_run_path, remote_subjects_path, keep_raw):
     """
     Entry point for the backup process.
 
-    If no arguments are provided, the GUI will open. 
+    If no arguments are provided, the GUI will open.
     If both `local_run_path` and `remote_subjects_path` are provided, the process will run without the GUI.
-    
+
     Args:
         local_run_path (str): Path to the local recording session.
         remote_subjects_path (str): Path to the remote storage location.
@@ -364,7 +365,7 @@ def main(local_run_path, remote_subjects_path, keep_raw):
 def archive(keep_raw):
     """
     Run the backup process with a GUI.
-    
+
     Args:
         keep_raw (bool): Whether to keep raw data after compression.
     """

@@ -3,7 +3,12 @@ import numpy as np
 from iblutil.numerical import bincount2D
 from scipy.ndimage import gaussian_filter1d
 import logging
-from ..plot import plot_projection, plot_projection_line, plot_most_likely_dynamics,plot_projection_line_multicondition
+from ..plot import (
+    plot_projection,
+    plot_projection_line,
+    plot_most_likely_dynamics,
+    plot_projection_line_multicondition,
+)
 from ..utils.utils import validate_intervals, remap_time_basis
 import pickle
 from matplotlib.colors import ListedColormap
@@ -151,7 +156,7 @@ def compute_path_lengths(X, time_bins, t0, tf, ndims=3):
 
 def project_pca(raster, tbins, ndims=20, t0=None, tf=None):
     """
-    Project spiking data into PCA space. Will fit to the interval [t0,tf] and apply PCA to 
+    Project spiking data into PCA space. Will fit to the interval [t0,tf] and apply PCA to
     all times
 
     Args:
@@ -231,6 +236,7 @@ class Population:
         projection_speed (np.ndarray): Speed of movement through PCA space.
         has_ssm (bool): Whether a state-space model has been loaded.
     """
+
     def __init__(
         self,
         spike_times,
@@ -363,7 +369,7 @@ class Population:
 
         Returns:
             matplotlib.pyplot.axes: axes
-        """        
+        """
         t0 = t0 or self.tbins[0]
         tf = tf or self.tbins[-1]
         if tf > self.spike_times.max():
@@ -386,7 +392,7 @@ class Population:
         return plot_projection(X_slice, dims, cvar=cvar, **kwargs)
 
     def plot_projection_line(
-        self, dims=[0, 1, 2], t0=None, tf=None, cvar=None, ax=None,**kwargs
+        self, dims=[0, 1, 2], t0=None, tf=None, cvar=None, ax=None, **kwargs
     ):
         """Plot the low dimensional projection as a line
         Uses the known timebins of the projection to pass only a subset of the data to "plot_projection_line"
@@ -396,7 +402,7 @@ class Population:
             tf (float, optional): _description_. Defaults to None.
             cvar (np.ndarray, optional): _description_. Defaults to None.
             ax (matplotlib.pyplot.axes, optional): _description_. Defaults to None.
-        
+
         Keyword Args:
             intervals (np.ndarray,optional): Start and end times for each condition.
             color (str, optional): Color of the line if cvar is not provided. Default is "k" (black).
@@ -413,7 +419,7 @@ class Population:
 
         Returns:
             Axes: The axes object containing the plot.
-        """        
+        """
         t0 = t0 or self.tbins[0]
         tf = tf or self.tbins[-1]
         if tf > self.spike_times.max():
@@ -425,50 +431,67 @@ class Population:
                 "Projection has fewer dims than requested. Only plotting first two requested"
             )
             dims = dims[:2]
-        if len(dims)==2:
-            kwargs.pop('lims',None)
+        if len(dims) == 2:
+            kwargs.pop("lims", None)
 
         s0, sf = np.searchsorted(self.tbins, [t0, tf])
         X_slice = self.projection[s0:sf, :]
-        intervals = kwargs.pop('intervals',None) 
-        stim_color = kwargs.pop('stim_color',None) or 'C1'
-        base_color = kwargs.pop('color',None) or 'C0'
+        intervals = kwargs.pop("intervals", None)
+        stim_color = kwargs.pop("stim_color", None) or "C1"
+        base_color = kwargs.pop("color", None) or "C0"
         if intervals is not None:
             intervals_baseline = []
             _temp = t0
-            for _t0,_tf in intervals:
-                intervals_baseline.append([_temp,_t0])
+            for _t0, _tf in intervals:
+                intervals_baseline.append([_temp, _t0])
                 _temp = _tf
-            if tf>_temp:
-                intervals_baseline.append([_temp,tf])
-            if len(dims)==3:
-                lims = kwargs.get('lims',None)
+            if tf > _temp:
+                intervals_baseline.append([_temp, tf])
+            if len(dims) == 3:
+                lims = kwargs.get("lims", None)
                 if lims is None:
-                    lim = np.nanmax(np.abs(X_slice[:,dims]))
-                    lims =[-lim,lim]
-                    kwargs['lims'] = lims
+                    lim = np.nanmax(np.abs(X_slice[:, dims]))
+                    lims = [-lim, lim]
+                    kwargs["lims"] = lims
             intervals_baseline = np.array(intervals_baseline)
 
             stim_colors = [stim_color for _ in range(intervals.shape[0])]
             base_colors = [base_color for _ in range(intervals_baseline.shape[0])]
-            ax = plot_projection_line_multicondition(X_slice,self.tbins[s0:sf],intervals_baseline,colors=base_colors,dims=dims,ax=ax,**kwargs)
-            ax = plot_projection_line_multicondition(X_slice,self.tbins[s0:sf],intervals,colors=stim_colors,dims=dims,ax=ax,**kwargs)
-            ax.legend(['Control','Stim'])
+            ax = plot_projection_line_multicondition(
+                X_slice,
+                self.tbins[s0:sf],
+                intervals_baseline,
+                colors=base_colors,
+                dims=dims,
+                ax=ax,
+                **kwargs,
+            )
+            ax = plot_projection_line_multicondition(
+                X_slice,
+                self.tbins[s0:sf],
+                intervals,
+                colors=stim_colors,
+                dims=dims,
+                ax=ax,
+                **kwargs,
+            )
+            ax.legend(["Control", "Stim"])
             legend_elements = [
-                        Line2D([0], [0], color=stim_color, lw=2, label='Stim'),    # Cyan line
-                        Line2D([0], [0], color=base_color, lw=2, label='Control')  # Black line
-                        ]
-            ax.legend(handles=legend_elements, loc='upper left',bbox_to_anchor=(0.9,0.9))
+                Line2D([0], [0], color=stim_color, lw=2, label="Stim"),  # Cyan line
+                Line2D([0], [0], color=base_color, lw=2, label="Control"),  # Black line
+            ]
+            ax.legend(
+                handles=legend_elements, loc="upper left", bbox_to_anchor=(0.9, 0.9)
+            )
 
             return ax
-
 
         if np.any(np.isnan(X_slice)):
             _log.error("Requested projection has NaNs")
             return
         if cvar is not None:
             cvar = cvar[s0:sf]
-        return plot_projection_line(X_slice, dims=dims, cvar=cvar, ax=ax,**kwargs)
+        return plot_projection_line(X_slice, dims=dims, cvar=cvar, ax=ax, **kwargs)
 
     def sync_var(self, x, x_t):
         """Resample an exogenous signal with the projection
@@ -479,7 +502,7 @@ class Population:
 
         Returns:
             np.ndarray: y - resampled signal
-        """        
+        """
         return remap_time_basis(x, x_t, self.tbins)
 
     def compute_path_lengths(self, t0, tf, ndims=3):
@@ -490,7 +513,7 @@ class Population:
             t0 (list or array): start time of the path
             tf (list or array): end time of the path
             ndims (int, optional): number of dimensions to include in computation. Defaults to 3.
-        """  
+        """
         return compute_path_lengths(self.projection, self.tbins, t0, tf, ndims)
 
     def compute_raster(
@@ -522,7 +545,7 @@ class Population:
         Args:
             ssm_fn (Path): filename of the computed rslds model
             fit_on_load (bool, optional): Not yet implemented. Defaults to False.
-        """        
+        """
 
         if self.projection is not None:
             _log.warning("Replacing PCA projection with RSLDS Latent")
@@ -535,11 +558,11 @@ class Population:
 
         self.pca = None
         self.sigma = None
-        if self.binsize != dat['binsize']:
-            _log.warning('Recomputing time bins')
+        if self.binsize != dat["binsize"]:
+            _log.warning("Recomputing time bins")
             _t0 = self.spike_times.min()
             _tf = self.spike_times.max()
-            self.tbins = np.arange(_t0,_tf,dat['binsize'])
+            self.tbins = np.arange(_t0, _tf, dat["binsize"])
 
         self.rslds = dat["rslds"]
         self.q = dat["q"]
@@ -577,7 +600,7 @@ class Population:
 
         if fit_on_load:
             # Must have a raster and that raster clusterids must match the fitted RSLDS
-            raise NotImplementedError('fit on load no tet implemented')
+            raise NotImplementedError("fit on load no tet implemented")
             self.smooth_rslds()
 
     def sim_rslds(self, duration):
@@ -667,8 +690,8 @@ class Population:
             xlim = ax.get_xlim()
             ylim = ax.get_ylim()
         elif xlim is None:
-            mins = np.nanmin(self.projection,0)
-            maxs = np.nanmax(self.projection,0)
+            mins = np.nanmin(self.projection, 0)
+            maxs = np.nanmax(self.projection, 0)
             xlim = (mins[0], maxs[0])
             ylim = (mins[1], maxs[1])
         ax = plot_most_likely_dynamics(
@@ -685,5 +708,5 @@ class Population:
         )
         ax.set_xlim(xlim)
         ax.set_ylim(ylim)
-        ax.set_aspect('equal')
+        ax.set_aspect("equal")
         return ax

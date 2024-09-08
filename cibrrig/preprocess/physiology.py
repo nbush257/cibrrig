@@ -29,11 +29,11 @@ def burst_stats_dia(
     Returns:
         pd.DataFrame: DataFrame containing burst statistics.
     """
-    
+
     # Standardize the integrated diaphragm trace
     scl = sklearn.preprocessing.StandardScaler(with_mean=0)
     integrated_scl = scl.fit_transform(integrated[:, np.newaxis]).ravel()
-    
+
     # Find peaks in the standardized diaphragm trace
     pks = scipy.signal.find_peaks(
         integrated_scl,
@@ -153,7 +153,7 @@ def _remove_EKG_explicit(x, sr, heartbeats):
     Returns:
         np.ndarray: Signal with EKG artifacts removed.
     """
-    
+
     # Convert heartbeat times to sample indices
     pks = heartbeats * sr
     pks = pks.astype("int")
@@ -161,7 +161,7 @@ def _remove_EKG_explicit(x, sr, heartbeats):
     y = x.copy()
 
     # Initialize array to hold EKG segments
-    ekg = np.zeros([2 * win, len(pks)]) 
+    ekg = np.zeros([2 * win, len(pks)])
 
     # Extract segments around each heartbeat
     for ii, pk in enumerate(pks):
@@ -204,7 +204,7 @@ def _remove_EKG_explicit(x, sr, heartbeats):
             second_examp = min(ii + 5, y.shape[0])
             med_ekg = np.nanmedian(ekg[:, first_examp:second_examp], 1)
             y[pk - win : pk + win] -= med_ekg
-    
+
     # Replace NaN values with the median of the signal
     y[np.isnan(y)] = np.nanmedian(y)
     return y
@@ -237,7 +237,7 @@ def _remove_EKG_inferred(x, sr, thresh):
     pks = scipy.signal.find_peaks(
         xs, prominence=thresh * np.std(xs), distance=0.05 * sr
     )[0]
-    
+
     # Remove the EKG artifacts from the original signal using the detected heartbeats
     x_filt = _remove_EKG_explicit(x, sr, pks / sr)
     return (x_filt, pks)
@@ -258,7 +258,7 @@ def get_hr_from_dia(pks, dia_df, sr):
             - np.ndarray: Heart rate values.
             - np.ndarray: Detected heartbeats.
     """
-    #TODO: refactor to take diaphramg onsets and offsets as input explicitly
+    # TODO: refactor to take diaphramg onsets and offsets as input explicitly
     ons = dia_df["on_samp"]
     offs = dia_df["off_samp"]
 
@@ -393,11 +393,12 @@ def compute_sighs(breath_times, auc, thresh=7, win="20s"):
     Returns:
         np.ndarray: Boolean array indicating which breaths are identified as sighs.
     """
+
     def MAD(x):
         """
         Calculate the Median Absolute Deviation (MAD) of an array.
         """
-        return(np.nanmedian(np.abs(x - np.nanmedian(x))))
+        return np.nanmedian(np.abs(x - np.nanmedian(x)))
 
     # Create a DataFrame to hold the AUC values and set the index to breath times
     df = pd.DataFrame()

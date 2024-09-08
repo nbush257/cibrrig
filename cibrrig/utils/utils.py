@@ -14,7 +14,7 @@ _log = logging.getLogger(__name__)
 _log.setLevel(level=logging.INFO)
 
 
-def validate_intervals(starts, stops,overlap_ok=False):
+def validate_intervals(starts, stops, overlap_ok=False):
     """
     Validates that two vectors are indeed intervals (monotonic, causal, and non-overlapping).
 
@@ -63,7 +63,7 @@ def event_counts_per_epochs(event_times, starts, stops, rate=False):
     """
     Count the number of occurrences of an event in a set of intervals.
 
-    This function counts how many times an event occurs within specified intervals. 
+    This function counts how many times an event occurs within specified intervals.
     Optionally, it can also calculate the rate of events per interval.
 
     Args:
@@ -243,7 +243,7 @@ def make_pre_post_trial(
             len(conditions) == intervals.shape[0]
         ), f"Length of conditions ({len(conditions)}) must match length of intervals ({intervals.shape[0]})"
         use_conditions = True
-        if isinstance(conditions,(list,np.ndarray)):
+        if isinstance(conditions, (list, np.ndarray)):
             conditions = pd.DataFrame(conditions, columns=["condition"])
     else:
         conditions = pd.DataFrame(
@@ -265,7 +265,6 @@ def make_pre_post_trial(
 
     # Loop over groups and assign observations to intervals
     for group_keys, group in grouped:
-
         _starts = starts[group.index]
         _stops = stops[group.index]
         _control_starts = control_starts[group.index]
@@ -300,7 +299,7 @@ def make_pre_post_trial(
     # Pandas manipulations to shape the output data
     out_df = alf_object.to_df()
     if vars:
-        if not isinstance(vars,list):
+        if not isinstance(vars, list):
             vars = [vars]
         out_df = out_df[vars]
     if use_conditions:
@@ -471,10 +470,10 @@ def get_good_spikes(spikes, clusters):
     """
     # Get the cluster IDs that pass the quality control
     cluster_ids = clusters.metrics.query("bitwise_fail==0")["cluster_id"].values
-    
+
     # Create a boolean index for spikes belonging to good clusters
     idx = np.isin(spikes.clusters, cluster_ids)
-    
+
     # Filter the spikes to include only those belonging to good clusters
     for k in spikes.keys():
         spikes[k] = spikes[k][idx]

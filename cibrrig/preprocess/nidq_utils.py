@@ -1,8 +1,8 @@
 """
 I/O functions with NIDAQ data specifically for some of our physiology needs.
 
-This module is primarily focused on loading and manipulating data from 
-the NIDAQ files recorded by spikeglx, and passes most computation to the physiology module, 
+This module is primarily focused on loading and manipulating data from
+the NIDAQ files recorded by spikeglx, and passes most computation to the physiology module,
 which is more general in scope.
 """
 
@@ -27,6 +27,7 @@ import matplotlib.pyplot as plt
 logging.basicConfig()
 _log = logging.getLogger(__name__)
 _log.setLevel(logging.INFO)
+
 
 def get_triggers(session_path):
     """
@@ -358,7 +359,7 @@ def extract_temp(SR, temp_chan=7, ds_factor=10):
 def filt_int_ds_arbitrary(x, sr, ds_factor=10):
     """
     Filter, integrate, and downsample an arbitrary signal.
-    
+
     Applies a second order Butterworth bandpass filter between 300 and 5000 Hz.
 
     Args:

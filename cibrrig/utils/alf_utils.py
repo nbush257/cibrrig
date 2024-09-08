@@ -6,6 +6,7 @@ The primary usage is for concatenating data from multiple recordings within a se
 
 May be useful to expand functionality in the future.
 """
+
 import one.alf.io as alfio
 from pathlib import Path
 import numpy as np
@@ -159,7 +160,9 @@ class Recording:
         except Exception:
             # Doing it this way so that if the files can be loaded, we do not error, but do throw an error if the problem is not the trigger label
             alf_obj_out = alfio.load_object(self.session_path, "log", short_keys=True)
-            _log.info("Triggers not found. Has this already been concatenated? Or is this a one-off run?")
+            _log.info(
+                "Triggers not found. Has this already been concatenated? Or is this a one-off run?"
+            )
             log_df_out = alf_obj_out.to_df()
             # return(alf_obj_out)
 
@@ -227,9 +230,7 @@ class Recording:
         """
         for object_name in self.alf_objects:
             if object_name == "log":
-                _log.debug(
-                    "Do not concatenate log here - it requires special handling"
-                )
+                _log.debug("Do not concatenate log here - it requires special handling")
                 continue
             _log.info(f"Concatenating {object_name}")
             obj_cat = self.concatenate_triggers(object_name)

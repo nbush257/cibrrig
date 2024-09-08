@@ -1,8 +1,8 @@
 """
-This script extracts the optogenetic stimulation times from the NIDAQ file. 
-It is similar to the extract_frame_times.py script, but it extracts optogenetic stimulation times instead of frame times. 
-The script reads the raw data from the NIDAQ file, processes it to find the optogenetic stimulation times, and saves the results in an ALF file. 
-The script can be run from the command line using the main function, which takes the input path to the NIDAQ file as an argument. 
+This script extracts the optogenetic stimulation times from the NIDAQ file.
+It is similar to the extract_frame_times.py script, but it extracts optogenetic stimulation times instead of frame times.
+The script reads the raw data from the NIDAQ file, processes it to find the optogenetic stimulation times, and saves the results in an ALF file.
+The script can be run from the command line using the main function, which takes the input path to the NIDAQ file as an argument.
 The script also provides options to specify the optogenetic channel, voltage threshold, and label for the extracted data.
 """
 
@@ -53,8 +53,8 @@ def get_opto_df(raw_opto, v_thresh, ni_sr, min_dur=0.001, max_dur=20):
     opto_df["off"] = offs
     opto_df["durs"] = durs
 
-    min_samp = ni_sr * min_dur #NOQA
-    max_samp = ni_sr * max_dur #NOQA
+    min_samp = ni_sr * min_dur  # NOQA
+    max_samp = ni_sr * max_dur  # NOQA
     opto_df = opto_df.query("durs<=@max_samp & durs>=@min_samp").reset_index(drop=True)
 
     amps = np.zeros(opto_df.shape[0])
@@ -129,7 +129,7 @@ def _load_opto_calibration_fn(calib_fn):
 
 def get_laser_chans(session_path):
     """
-    Get the laser channels from the session path. 
+    Get the laser channels from the session path.
     Looks for the sync_map and finds the channels that are labeled as laser.
 
     Args:

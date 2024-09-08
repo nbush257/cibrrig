@@ -1,7 +1,7 @@
 """
 This module reformats raw electrophysiological data to match the ALF (ALigned File) standards
-used by the International Brain Laboratory (IBL). It is intended for organizing data generated 
-by SpikeGLX. The script renames and moves files in place, so ensure that the raw data has 
+used by the International Brain Laboratory (IBL). It is intended for organizing data generated
+by SpikeGLX. The script renames and moves files in place, so ensure that the raw data has
 been backed up before running the script.
 
 Key Features:
@@ -50,10 +50,10 @@ DEFAULT_NIDQ = {
 def rename_probe_folders(session_path):
     """
     Renames probe folders under 'raw_ephys_data' to ALF standards (e.g., 'probe00', 'probe01').
-    
+
     Args:
         session_path (Path): The path to the session directory.
-    
+
     Returns:
         list: List of renamed probe paths.
     """
@@ -80,7 +80,7 @@ def rename_probe_folders(session_path):
 def rename_and_move_video(session_path):
     """
     Moves and renames video files to the 'raw_video_data' directory following ALF standards.
-    
+
     Args:
         session_path (Path): The path to the session directory.
     """
@@ -104,10 +104,10 @@ def rename_and_move_video(session_path):
 def check_backup_flag(session_path):
     """
     Checks if the session has been backed up by verifying the existence of a backup flag file.
-    
+
     Args:
         session_path (Path): The path to the session directory.
-    
+
     Raises:
         AssertionError: If the backup flag file does not exist.
     """
@@ -120,7 +120,7 @@ def check_backup_flag(session_path):
 def remove_backup_flag(session_path):
     """
     Removes the backup flag file from the session directory since it is not us.
-    
+
     Args:
         session_path (Path): The path to the session directory.
     """
@@ -134,10 +134,10 @@ def remove_backup_flag(session_path):
 def get_record_date(gate):
     """
     Retrieves the recording date from the metadata of the electrophysiological data.
-    
+
     Args:
         gate (Path): The path to the gate directory.
-    
+
     Returns:
         str: The recording date in YYYY-MM-DD format.
     """
@@ -155,10 +155,10 @@ def get_record_date(gate):
 def get_gate_number(gate):
     """
     Extracts the gate number from the gate folder name.
-    
+
     Args:
         gate (Path): The path to the gate directory.
-    
+
     Returns:
         int: The gate number.
     """
@@ -170,7 +170,7 @@ def check_wiring(session_path):
     """
     Ensures that the appropriate wiring map is applied to the session. If a wiring map is missing,
     it uses the default map.
-    
+
     Args:
         session_path (Path): The path to the session directory.
     """
@@ -194,7 +194,7 @@ def check_wiring(session_path):
 def move_ni_files(session_path):
     """
     Moves .nidq files to the 'raw_ephys_data' directory.
-    
+
     Args:
         session_path (Path): The path to the session directory.
     """
@@ -213,7 +213,7 @@ def rename_session(session_path):
     - Checking and applying wiring maps.
     - Renaming and moving electrophysiological and video data.
     - Removing the backup flag.
-    
+
     Args:
         session_path (Path): The path to the session directory.
     """
@@ -231,11 +231,12 @@ def rename_session(session_path):
 class Run:
     """
     Represents a recording run consisting of multiple gates.
-    
+
     Attributes:
         run_path (Path): The path to the run directory.
         gates (list): List of gate directories within the run.
     """
+
     def __init__(self, run_path):
         self.run_path = run_path
         self.get_gates()
@@ -281,7 +282,7 @@ class Run:
 def run(run_path, skip_backup_check=False):
     """
     Runs the renaming and reorganization process for a given run.
-    
+
     Args:
         run_path (str): The path to the run directory.
         skip_backup_check (bool): Flag to skip the backup check before renaming files.

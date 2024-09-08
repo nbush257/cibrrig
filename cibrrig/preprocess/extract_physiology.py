@@ -43,6 +43,7 @@ else:
     BM_PATH = r"Y:/projects/cibrrig/cibrrig/preprocess"
 assert Path(BM_PATH).exists(), "BM_PATH does not exist"
 
+
 def _crop_traces(t, x):
     """
     Utility to crop both the time trace and an arbitrary vector to the same length (shortest length).
@@ -57,7 +58,7 @@ def _crop_traces(t, x):
             - np.ndarray: Cropped timestamp array.
             - np.ndarray: Cropped Signal vector.
     """
-    assert(len(t) == len(x)), "Time and signal vectors must be the same length"
+    assert len(t) == len(x), "Time and signal vectors must be the same length"
     tlen = np.min([len(x), len(t)])
     return (t[:tlen], x[:tlen])
 
@@ -302,7 +303,7 @@ def run(session_path, v_in=9, inhale_pos=False, save_path=None, debug=False):
         inhale_pos (bool, optional): Set true if inhale was acquired as a positive signal. Defaults to False.
         save_path (Path, optional): Path to save data to. If None, save to parent directory of binary file. Defaults to None.
         debug (bool, optional): If True, enable debug loggin. Defaults to False.
-    """    
+    """
 
     _log.setLevel(logging.DEBUG) if debug else None
 

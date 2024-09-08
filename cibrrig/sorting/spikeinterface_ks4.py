@@ -97,7 +97,7 @@ def remove_opto_artifacts(
         object (str, optional): ALF object. Defaults to 'laser'.
         ms_before (float, optional): Time before laser to blank. Defaults to 0.5.
         ms_after (float, optional): Time after laser to blank. Defaults to 2.0.
-    
+
     Returns:
         spikeinterface.RecordingExtractor: Recording extractor with artifacts removed.
     """
@@ -152,7 +152,7 @@ def concatenate_recording(recording, t0=0, tf=None):
     Returns:
         spikeinterface.RecordingExtractor: Concatenated recording extractor object.
     """
-    
+
     rec_list = []
     for ii in range(recording.get_num_segments()):
         seg = recording.select_segments(ii)
@@ -257,7 +257,7 @@ def split_shanks_and_spatial_filter(rec):
     rec_split = rec.split_by(property="group")
     n_shanks = len(rec_split)
     _log.info(f"Found {n_shanks} channel groups")
-    
+
     preprocessed_recordings = []
     for chan_group_rec in rec_split.values():
         # Apply highpass spatial filter to each channel group
@@ -279,7 +279,7 @@ def apply_preprocessing(
         highpass filtering,
         phase shifting
         bad channel detection and interpolation
-        spatial filtering. 
+        spatial filtering.
     Optionally, it can also remove optogenetic artifacts and concatenate recording segments.
 
     Args:
@@ -296,10 +296,10 @@ def apply_preprocessing(
 
     # Apply highpass filter to the recording
     rec_filtered = spre.highpass_filter(recording)
-    
+
     # Apply phase shift to the filtered recording
     rec_shifted = spre.phase_shift(rec_filtered)
-    
+
     # Detect and interpolate bad channels in the phase-shifted recording
     bad_channel_ids, all_channels = spre.detect_bad_channels(rec_shifted)
     rec_interpolated = spre.interpolate_bad_channels(rec_shifted, bad_channel_ids)
@@ -318,7 +318,7 @@ def apply_preprocessing(
             )
         else:
             rec_processed = rec_destriped
-    
+
     # Set the end time to 60 if testing and concatenate the recording
     tf = 60 if testing else None
     rec_out = concatenate_recording(rec_processed, tf=tf)
@@ -360,7 +360,7 @@ def run_probe(
             f"Local phy destination exists ({PHY_DEST}). Skipping this probe {probe_dir}"
         )
         return
-    
+
     # =========== Preprocessing =================== #
     if not PREPROC_PATH.exists():
         stream = si.get_neo_streams("spikeglx", probe_dir)[0][0]
@@ -492,7 +492,7 @@ def run_probe(
     )
 
     # ============= SAVE METRICS ============= #
-    # 
+    #
     spike_locations = np.vstack([locations["x"], locations["y"]]).T
     np.save(PHY_DEST.joinpath("spike_locations.npy"), spike_locations)
     np.save(PHY_DEST.joinpath("cluster_locations.npy"), unit_locations)
@@ -559,7 +559,7 @@ def run(
     label = SORTER
 
     # Get paths
-    session_path = Path(session_path) # Recorded location
+    session_path = Path(session_path)  # Recorded location
 
     # Local working directory
     session_local = SCRATCH_DIR.joinpath(
@@ -629,7 +629,7 @@ def run(
             else:
                 _log.info(f"Moving sorted data from {phy_local} to {phy_dest}")
                 shutil.move(str(phy_local), str(phy_dest))
-    
+
     # ======= Remove temporary SI folder ========= #
     if move_final and rm_intermediate and n_probes > 0:
         _log.info(f"Removing {session_local}")

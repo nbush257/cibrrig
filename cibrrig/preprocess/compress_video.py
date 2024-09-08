@@ -26,7 +26,7 @@ def main(fn, skip_lossless, skip_lossy, no_delete):
         skip_lossy (bool): Skip the lossy encoding
         no_delete (bool): Do not delete the original raw uncompressed file
     """
-    
+
     if skip_lossy and skip_lossless:
         print(
             "You have chosen to skip both encodings so we are exiting before we accidentally delete raw data."

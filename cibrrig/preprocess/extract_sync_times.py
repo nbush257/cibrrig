@@ -1,6 +1,7 @@
 """
 Extract digital signals from the NI and IMEC Streams
 """
+
 import spikeglx
 from pathlib import Path
 import numpy as np
@@ -51,7 +52,9 @@ def run(session_path, debug=False, no_display=False):
     for trig in triggers:
         # Extract digital signals from the NI Stream
         ni_fn = list(ephys_path.glob(f"*{trig}.nidq*.bin"))
-        assert (len(ni_fn)) == 1, f"More than one NI file found. found {len(ni_fn)} files"
+        assert (
+            len(ni_fn)
+        ) == 1, f"More than one NI file found. found {len(ni_fn)} files"
         ni_fn = ni_fn[0]
         label = Path(ni_fn.stem).stem
         _log.info(f"Extracting sync from {ni_fn}")

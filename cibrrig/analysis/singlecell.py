@@ -113,9 +113,8 @@ def get_all_phase_curves(spike_times, spike_clusters, cluster_ids, breaths, nbin
         - raster (array-like): Raster data.
         - rate_sem (array-like): SEM of the raster rate, shape [nbins x n_cluster_ids].
     """
-    if isinstance(breaths,pd.DataFrame):
+    if isinstance(breaths, pd.DataFrame):
         breaths = alfio.AlfBunch.from_df(breaths)
-
 
     phi_t, phi = compute_dia_phase(breaths.on_sec, breaths.off_sec)
     all_rate = np.zeros([nbins, cluster_ids.shape[0]])
