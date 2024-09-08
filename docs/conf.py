@@ -17,7 +17,7 @@ author = 'Nicholas Bush'
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-extensions = [
+extensions = [  
     'sphinx.ext.autodoc',   # For extracting docstrings
     'sphinx.ext.napoleon',  # To support NumPy and Google-style docstrings
     'sphinx.ext.viewcode',  # Adds links to highlighted source code

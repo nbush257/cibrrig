@@ -11,7 +11,7 @@ This is an overview.
 .. toctree::
    :maxdepth: 1
    :caption: User Guide
-   README <README.md>
+   README <../readme.md>
 
 .. toctree::
    :caption: Reference:
