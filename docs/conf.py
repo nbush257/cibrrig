@@ -29,7 +29,7 @@ extensions = [
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
-autoapi_dirs = ['.../kilosort']
+autoapi_dirs = ['.../cibrrig']
 master_doc = 'index'
 
 
