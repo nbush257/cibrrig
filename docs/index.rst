@@ -1,9 +1,6 @@
 CIBRRIG
 ==========
 
-This is an overview.
-Test2
-
 .. include:: ../readme.md
 
 
