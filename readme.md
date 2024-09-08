@@ -128,15 +128,17 @@ We mirror all but the raw ephys data to sasquatch work nodes at:
 
 ---
 ## Software
+- **hardware**: Control, CAD, and diagrams of the rig hardware
+    - **pyExperimentControl**: Firmware, gui and scripting of arduino control
 - **archiving**: Routines for backing up raw data on the SCRI RSS
 - **preprocess**: Extract physiological data, experimental events  
 - **sorting**: Spikesorting functions and pipelines
-- **hardware**: Control, CAD, and diagrams of the rig hardware
-    - **pyExperimentControl**: Firmware, gui and scripting of arduino control
 - **postprocess**: Compute secondary analyses that rely on spikesorted data 
     -  e.g. optotagging, coherence and respiratory modulation calculations,axon/soma categorization
 - **utils**: General utility functions 
 - **analysis**: Singlecell and population analyses.
+- **plot**: Frequently reused plotting functions, including latent space plotting
+- **videos**: Code to make frequently created videos, including evolution of latent, rasters, and auxiliary data over time.
 ---
 ## Primary preprocessing and sorting pipeline
 This code provides a simple way to process most of the preprocessing steps necesarry to perform after a neuropixel expriment.
