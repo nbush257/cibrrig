@@ -30,7 +30,7 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
     'sphinx.ext.viewcode',
-    'autoapi.extension'
+    'sphinx_autoapi.extension'
     ]
 
 autoapi_dirs = ['../cibrrig']

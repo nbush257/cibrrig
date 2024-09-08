@@ -11,4 +11,4 @@ CIBRRIG
    ../readme.md
    :caption: Reference:
 
-   modules
+   .. autoapi:: 
