@@ -3,16 +3,17 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-cibrrig documentation
-=====================
-Welcome to cibrrig's documentation!
-This is a work in progress.
-Check update 2
+CIBRRIG
+==========
 
-Contents
---------
+This is an overview.
 
 .. toctree::
+   :maxdepth: 1
+   :caption: User Guide
+   README <README.md>
+
+.. toctree::
+   :caption: Reference:
 
    api
-   cibrrig

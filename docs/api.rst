@@ -1,6 +1,5 @@
-API
+api
 ===
 
-.. automodule:: cibrrig.cibrrig
+.. automodule:: cibrrig.analysis
    :members:
-   :undoc-members:
