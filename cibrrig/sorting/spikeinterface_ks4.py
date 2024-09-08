@@ -7,7 +7,10 @@ Data must be reorganized using the preprocess.ephys_data_to_alf.py script first.
 import spikeinterface.extractors as se
 import spikeinterface.preprocessing as spre
 import spikeinterface.sorters as ss
-import spikeinterface.sortingcomponents.motion_interpolation as sim
+try:
+    import spikeinterface.sortingcomponents.motion_interpolation as sim
+except:
+    pass
 import spikeinterface.full as si
 from pathlib import Path
 import numpy as np
