@@ -1,8 +1,5 @@
 CIBRRIG API
 -------------
 
-plot
-~~~~~~~~~~~~~
-
-.. automodule:: cibrrig.plot
+.. automodule:: cibrrig
    :members:
