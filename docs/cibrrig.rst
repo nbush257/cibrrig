@@ -1,6 +1,11 @@
 cibrrig package
 ===============
 
+.. automodule:: cibrrig
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Subpackages
 -----------
 
@@ -17,34 +22,20 @@ Subpackages
 Submodules
 ----------
 
-cibrrig.main\_pipeline module
------------------------------
 
 .. automodule:: cibrrig.main_pipeline
    :members:
    :undoc-members:
    :show-inheritance:
 
-cibrrig.plot module
--------------------
 
 .. automodule:: cibrrig.plot
    :members:
    :undoc-members:
    :show-inheritance:
 
-cibrrig.videos module
----------------------
 
 .. automodule:: cibrrig.videos
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Module contents
----------------
-
-.. automodule:: cibrrig
    :members:
    :undoc-members:
    :show-inheritance:
