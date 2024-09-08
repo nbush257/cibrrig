@@ -29,10 +29,11 @@ extensions = [
     'sphinx_rtd_theme',
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
-    'sphinx.ext.viewcode'
+    'sphinx.ext.viewcode',
+    'autoapi.extension'
     ]
 
-autoapi_dirs = ['.../cibrrig']
+autoapi_dirs = ['../cibrrig']
 master_doc = 'index'
 
 

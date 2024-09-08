@@ -2,3 +2,4 @@
 .vscode
 preprocess/__pycache__
 *.egg*
+docs/_build
