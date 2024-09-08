@@ -2,7 +2,7 @@ CIBRRIG
 ==========
 
 This is an overview.
-Test
+Test2
 
 .. toctree::
    :maxdepth: 1
@@ -12,4 +12,4 @@ Test
 .. toctree::
    :caption: Reference:
 
-   api
+   modules
