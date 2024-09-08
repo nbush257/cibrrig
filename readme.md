@@ -34,7 +34,7 @@ This should install the `iblenv` dependencies as well.
 Helper packages (Primarily matlab packages) should live in `C:/helpers` on the NPX computer so they are available to all users. Some functionality relies on these packages.
 
 These include:
- - Kilosort (versions 2,3)
+ - [Kilosort](https://github.com/MouseLand/Kilosort) (versions 2,3)
  - Chronux http://chronux.org/
  - Breathmetrics https://github.com/zelanolab/breathmetrics
  - SALT ([Kvitsiani et al. 2013](https://www.nature.com/articles/nature12176))
