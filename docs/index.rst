@@ -1,8 +1,12 @@
 CIBRRIG
 ==========
+https://github.com/nbush257/cibrrig
 
-.. include:: ../readme.md
+.. toctree::
+   :maxdepth: 1
+   :caption: Getting Started
 
+   README ../readme.md
 
 .. toctree::
    :maxdepth: 2

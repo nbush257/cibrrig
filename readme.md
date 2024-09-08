@@ -1,6 +1,8 @@
 # CIBRRIG
 **Updated 2024-09-07**
 
+[ReadTheDocs](https://cibrrig.readthedocs.io/)
+
 #TODO: Currently the log file does not get copied in the archiving. Need to:
 
 - [ ] Archive the log file in all future recordings
