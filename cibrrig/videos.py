@@ -51,6 +51,45 @@ def make_aux_raster_projection_with_stims(
     history_kwargs=HISTORY_KWARGS,
     aux_kwargs=AUX_KWARGS,
 ):
+    """
+    Make a video of the projection with a raster and an auxiliary trace.
+
+    This function creates a video of the projection with a raster plot and an auxiliary trace. It allows for various customizations,
+    including the duration, colormap, frame rate, and rotation settings. The video is saved to the specified output file.
+
+    Args:
+        pop (Population): Population object containing the projection data.
+        intervals (np.ndarray): Array of intervals (n x 2) for the stimulus periods.
+        aux (np.ndarray): Auxiliary data to be plotted.
+        aux_t (np.ndarray): Time vector for the auxiliary data.
+        fn_out (str or Path): Output file path for the video.
+        stim_color (str): Color for the stimulus periods.
+        aux_label (str, optional): Label for the auxiliary trace. Defaults to "".
+        frame_step (float, optional): Time step between frames in seconds. Defaults to 0.01.
+        duration (float, optional): Duration of the video in seconds. Defaults to 2.
+        cmap (str, optional): Colormap for the projection. Defaults to "bone".
+        vmax (float, optional): Maximum value for the colormap normalization. Defaults to 0.5.
+        baseline (int, optional): Baseline value for the projection. Defaults to 10.
+        fps (int, optional): Frames per second for the video. Defaults to 30.
+        dpi (int, optional): Dots per inch for the video. Defaults to 300.
+        dims (list, optional): Dimensions of the data to be plotted. Defaults to [0, 1].
+        lead_in (float, optional): Lead-in time before the start of the intervals. Defaults to 1.
+        winsize (float, optional): Window size for the projection. Defaults to 1.
+        trail_length (float, optional): Length of the trail in the projection. Defaults to 0.05.
+        figsize (tuple, optional): Figure size for the video. Defaults to (3, 8).
+        azim_speed (float, optional): Speed of azimuthal rotation. Defaults to 0.1.
+        elev_speed (float, optional): Speed of elevation rotation. Defaults to 0.1.
+        rotation_delay (float, optional): Delay before starting the rotation. Defaults to 1.
+        rotate (bool, optional): Whether to rotate the 3D plot. Defaults to True.
+        style (str, optional): Matplotlib style to use. Defaults to "dark_background".
+        projection_kwargs (dict, optional): Additional keyword arguments for the projection. Defaults to PROJECTION_KWARGS.
+        trail_kwargs (dict, optional): Additional keyword arguments for the trail.Passed to plt.plot. Defaults to TRAIL_KWARGS.
+        history_kwargs (dict, optional): Additional keyword arguments for the history. Passed to LineCollection. Defaults to HISTORY_KWARGS.
+        aux_kwargs (dict, optional): Additional keyword arguments for the auxiliary trace. Passed to plt.plot. Defaults to AUX_KWARGS.
+
+    Returns:
+        None
+    """
     plt.style.use(style)
     assert lead_in < duration, f"{lead_in=} must be shorter than {duration=}"
     assert (
@@ -276,13 +315,41 @@ def make_projection(
     vmin=None,
     vmax=None,
 ):
-    '''
+    """
     Make an animation of just the projection with temporal evolution.
-    Passing intervals will color the time periods within those intervals the value of "stim_color"
 
-    Can rotate with kwargs rotation_delay,elev_speed,azim_speed
+    Args:
+        pop (Population): Population object containing the projection data.
+        t0 (float): Start time of the projection.
+        duration (float): Duration of the projection in seconds.
+        fn_out (str or Path): Output file path for the animation.
+        stim_color (str, optional): Color for the stimulus periods. Defaults to 'C1'.
+        intervals (np.ndarray, optional): Array of intervals (n x 2) for the stimulus periods. Defaults to None.
+        cvar (np.ndarray, optional): Covariate data for coloring the history. Defaults to None.
+        cvar_label (str, optional): Label for the covariate data. Defaults to "".
+        cmap (str, optional): Colormap for the projection. Defaults to "magma".
+        dims (list, optional): Dimensions of the data to be plotted. Defaults to [0, 1].
+        frame_step (float, optional): Time step between frames in seconds. Defaults to 0.01.
+        fps (int, optional): Frames per second for the animation. Defaults to 30.
+        dpi (int, optional): Dots per inch for the animation. Defaults to 300.
+        trail_length (float, optional): Length of the trail in the projection. Defaults to 0.05.
+        figsize (tuple, optional): Figure size for the animation. Defaults to (4, 4).
+        style (str, optional): Matplotlib style to use. Defaults to "dark_background".
+        projection_kwargs (dict, optional): Additional keyword arguments for the projection. Defaults to PROJECTION_KWARGS.
+        history_kwargs (dict, optional): Additional keyword arguments for the history. Passed to LineCollection. Defaults to HISTORY_KWARGS.
+        trail_kwargs (dict, optional): Additional keyword arguments for the trail. Passed to plt.plot. Defaults to TRAIL_KWARGS.
+        baseline (int, optional): Baseline value for the projection. Defaults to 20.
+        mode (str, optional): Mode for the projection. Defaults to "line".
+        rotate (bool, optional): Whether to rotate the 3D plot. Defaults to True.
+        rotation_delay (float, optional): Delay before starting the rotation. Defaults to 1.
+        elev_speed (float, optional): Speed of elevation rotation. Defaults to 0.2.
+        azim_speed (float, optional): Speed of azimuthal rotation. Defaults to 0.2.
+        vmin (float, optional): Minimum value for the colormap normalization. Defaults to None.
+        vmax (float, optional): Maximum value for the colormap normalization. Defaults to None.
 
-    '''
+    Returns:
+        None
+    """
     plt.style.use(style)
     tf = t0 + duration
     f = plt.figure(figsize=figsize)
@@ -450,9 +517,35 @@ def make_rotating_projection(
     n_frames=100,
     projection_kwargs=PROJECTION_KWARGS,
 ):
-    '''
+    """
     Rotate a 3D projection without temporal evolution.
-    '''
+
+    Args:
+        pop (Population): Population object containing the projection data.
+        t0 (float): Start time of the projection.
+        duration (float): Duration of the projection in seconds.
+        fn_out (str or Path): Output file path for the animation.
+        figsize (tuple, optional): Figure size for the animation. Defaults to (4, 4).
+        dims (list, optional): Dimensions of the data to be plotted. Defaults to [0, 1, 2].
+        cvar (np.ndarray, optional): Covariate data for coloring the projection. Defaults to None.
+        rotation_delay (float, optional): Delay before starting the rotation. Defaults to 1.
+        elev_speed (float, optional): Speed of elevation rotation. Defaults to 0.1.
+        azim_speed (float, optional): Speed of azimuthal rotation. Defaults to 0.1.
+        mode (str, optional): Mode for the projection ('line' or 'scatter'). Defaults to "scatter".
+        style (str, optional): Matplotlib style to use. Defaults to "dark_background".
+        cvar_label (str, optional): Label for the covariate data. Defaults to "".
+        cmap (str, optional): Colormap for the projection. Defaults to "magma".
+        vmin (float, optional): Minimum value for the colormap normalization. Defaults to None.
+        vmax (float, optional): Maximum value for the colormap normalization. Defaults to None.
+        frame_step (float, optional): Time step between frames in seconds. Defaults to 0.01.
+        fps (int, optional): Frames per second for the animation. Defaults to 30.
+        dpi (int, optional): Dots per inch for the animation. Defaults to 300.
+        n_frames (int, optional): Number of frames for the animation. Defaults to 100.
+        projection_kwargs (dict, optional): Additional keyword arguments for the projection. Defaults to PROJECTION_KWARGS.
+
+    Returns:
+        None
+    """
     plt.style.use(style)
     tf = t0 + duration
     assert len(dims) == 3, "Rotating projection does not make sense without 3D"
@@ -570,6 +663,19 @@ def _trim_axes(ax, pop, t0, tf, dims):
 
 
 def _plot_xy_plane(ax, **kwargs):
+    """
+    Plot a transparent XY plane on a 3D axes.
+
+    This function plots a transparent XY plane on a 3D axes based on the current x and y limits of the axes.
+    The plane is plotted with the specified keyword arguments.
+
+    Args:
+        ax (Axes3D): The 3D axes on which to plot the XY plane.
+        **kwargs: Additional keyword arguments to pass to the `plot_surface` method.
+
+    Returns:
+        None
+    """
     xlim = ax.get_xlim()
     ylim = ax.get_ylim()
 
@@ -584,10 +690,19 @@ def _plot_xy_plane(ax, **kwargs):
 
 
 def _plot_all_planes(ax, **kwargs):
-    '''
-    Plot transparent XY,YZ,XZ planes on a 3D axes
-    **kwargs passed to plt.plot_surface
-    '''
+    """
+    Plot transparent XY, YZ, and XZ planes on a 3D axes.
+
+    This function plots transparent XY, YZ, and XZ planes on a 3D axes based on the current x, y, and z limits of the axes.
+    The planes are plotted with the specified keyword arguments.
+
+    Args:
+        ax (Axes3D): The 3D axes on which to plot the planes.
+        **kwargs: Additional keyword arguments to pass to the `plot_surface` method.
+
+    Returns:
+        None
+    """
     xlim = ax.get_xlim()
     ylim = ax.get_ylim()
     zlim = ax.get_zlim()
