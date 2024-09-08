@@ -3,7 +3,13 @@ CIBRRIG
 
 `GitHub:  <https://github.com/nbush257/cibrrig>`_
 
-.. mdinclude:: ../readme.md
+README:
+.. include:: ../readme.md
+   :parser: myst_parser.sphinx_
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Getting Started
 
    README ../readme.md
 
