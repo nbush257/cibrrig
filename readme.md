@@ -130,7 +130,7 @@ We mirror all but the raw ephys data to sasquatch work nodes at:
 
 ---
 ## Software
-- **hardware**: Control, CAD, and diagrams of the rig hardware
+- **hardware**: Control, CAD, and diagrams of the rig hardware Currently hosted in its own repository. See https://github.com/nbush257/pyExpControl
     - **pyExperimentControl**: Firmware, gui and scripting of arduino control
 - **archiving**: Routines for backing up raw data on the SCRI RSS
 - **preprocess**: Extract physiological data, experimental events  
