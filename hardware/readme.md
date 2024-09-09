@@ -1,1 +1,2 @@
-TODO: Consolidate my various hardware cad and rig diagrams
+See https://github.com/nbush257/pyExpControl
+
