@@ -165,7 +165,7 @@ def run_session(session_path, sorting_name="kilosort4"):
     probes_alfs = list(session_path.joinpath("alf").glob("probe[0-9][0-9]"))
 
     for probe_alf in probes_alfs:
-        _log.info(f"Converting {probe_alf.name}")
+        _log.info(f"Converting {probe_alf.name} from {sorting_name} to ALF")
         ap_fn = next(ephys_path.joinpath(probe_alf.name).rglob("*ap.bin"))
 
         # Get paths
@@ -227,8 +227,16 @@ def run_session(session_path, sorting_name="kilosort4"):
 
 @click.command()
 @click.argument("session_path")
-def main(session_path):
-    run_session(session_path)
+@click.argument("sorting_name")
+def main(session_path, sorting_name):
+    """
+    Command-line interface for converting spike sorting data to the ALF standard.
+
+    Args:
+        session_path (str): Path to the session directory.
+        sorting_name (str): Name of the sorting.
+    """
+    run_session(session_path,sorting_name)
 
 
 if __name__ == "__main__":

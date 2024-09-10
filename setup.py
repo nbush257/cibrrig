@@ -8,7 +8,7 @@ with open("requirements.txt") as f:
 
 setuptools.setup(
     name="cibrrig",
-    version="0.4.1",
+    version="0.5.1",
     author="Nicholas E. Bush",
     description="Tools for data analysis and organization of Neuropixel data recroded on the CIBR rig at SCRI. Influenced by the IBL",
     long_description=long_description,
@@ -24,6 +24,7 @@ setuptools.setup(
             "npx_run_all = cibrrig.main_pipeline:main",
             "ephys_to_alf = cibrrig.archiving.ephys_data_to_alf:main",
             "spikesort = cibrrig.sorting.spikeinterface_ks4:cli",
+            "convert_ks_to_alf = cibrrig.postprocess.convert_ks_to_alf:main",
         ]
     },
 )

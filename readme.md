@@ -52,8 +52,9 @@ Main entry points can be run from anywhere as long as the package has been pip i
 `npx_run_all` -  Opens a GUI to performs backup, preprocess, and spikesorting\
 `backup` - Just performs backup\
 `npx_preproc <session_path>` - Just performs preprocessing and extraction.\
-`ephys_to_alf <run_path>` - Rename the recorded data to alf format
-`spikesort <session_path>` - run spikesorting
+`ephys_to_alf <run_path>` - Rename the recorded data to alf format\
+`spikesort <session_path>` - run spikesorting\
+`convert_ks_to_alf <session_path>` - convert sorted neural data from kilosort (i.e., phy) to ALF format
 
 In practice, it is easiest to simply run `npx_run_all` after recording. Previously run steps will be skipped or appropriately overwritten. Some users have shortcuts to batch scripts that activate the virtual environment and run this.
 
