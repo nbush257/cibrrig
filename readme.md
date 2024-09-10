@@ -58,6 +58,14 @@ Main entry points can be run from anywhere as long as the package has been pip i
 
 In practice, it is easiest to simply run `npx_run_all` after recording. Previously run steps will be skipped or appropriately overwritten. Some users have shortcuts to batch scripts that activate the virtual environment and run this.
 
+>**Note** 
+This sorts the data, but does not convert the sorted data to `alf` format in case the user needs to do a manual curation in  `phy` first. Once the manual curation is done, the user needs to run: `postprocess.convert_ks_to_alf` on the session. This can be done easily with:
+>```
+>cd </path/to/session>
+>convert_ks_to_alf ./ <sorter>
+>```
+>where `<sorter>` is the name of the sorting folder. Should be `kilosort4`
+
 **Data structure**\
 We save data in a way consistent with the **O**pen **N**europhysiology **E**nvironment ([**ONE**](https://github.com/int-brain-lab/ONE))
 For a detailed description of filenames and structure see:[ONE Naming](https://github.com/int-brain-lab/ONE/blob/main/docs/Open_Neurophysiology_Environment_Filename_Convention.pdf) 
