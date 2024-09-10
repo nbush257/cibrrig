@@ -58,7 +58,7 @@ Main entry points can be run from anywhere as long as the package has been pip i
 
 In practice, it is easiest to simply run `npx_run_all` after recording. Previously run steps will be skipped or appropriately overwritten. Some users have shortcuts to batch scripts that activate the virtual environment and run this.
 
->**Note** 
+> [!NOTE]  
 This sorts the data, but does not convert the sorted data to `alf` format in case the user needs to do a manual curation in  `phy` first. Once the manual curation is done, the user needs to run: `postprocess.convert_ks_to_alf` on the session. This can be done easily with:
 >```
 >cd </path/to/session>
