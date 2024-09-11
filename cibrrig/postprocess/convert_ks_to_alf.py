@@ -34,6 +34,8 @@ def get_metrics_from_si(ks4_dir):
     """
     Aggregates all cluster-level metrics  as computed from Spike interface from the Kilosort directory.
 
+    Expands thedataframe to be the same size as max cluster_id
+
     Args:
         ks4_dir (Path): Directory where Kilosort results are stored (e.g., sorting output).
 
@@ -52,7 +54,12 @@ def get_metrics_from_si(ks4_dir):
         if "cluster_id" not in df.columns:
             continue
         metrics = metrics.merge(df, on="cluster_id", how="left")
-    return metrics
+    metrics.set_index('cluster_id', inplace=True)
+    full_index = pd.Index(range(metrics.index.min(), metrics.index.max() + 1))
+    metrics_full = metrics.reindex(full_index)
+    metrics_full.reset_index(inplace=True)
+    metrics_full.rename(columns={'index': 'cluster_id'}, inplace=True)
+    return metrics_full
 
 
 def save_si_metrics(metrics, out_path):
@@ -63,7 +70,7 @@ def save_si_metrics(metrics, out_path):
         metrics (pandas.DataFrame): Cluster-level metrics dataframe.
         out_path (Path): Directory where the metrics file will be saved.
     """
-    metrics_fn = alfio.spec.to_alf("clusters", "si_metrics", "pqt")
+    metrics_fn = alfio.spec.to_alf("clusters", "siMetrics", "pqt")
     metrics.to_parquet(out_path.joinpath(metrics_fn))
 
 
@@ -150,6 +157,7 @@ def convert_model(ks_path, alf_path, sample_rate, ampfactor):
     # save_si_metrics
     si_metrics = get_metrics_from_si(ks_path)
     save_si_metrics(si_metrics, alf_path)
+    np.save(alf_path.joinpath("clusters.group.npy"),si_metrics['group'].values)
 
     # TODO: Confirm waveforms are properly scaled
 
