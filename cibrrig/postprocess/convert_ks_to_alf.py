@@ -32,7 +32,7 @@ _log.setLevel(logging.INFO)
 
 def get_metrics_from_si(ks4_dir):
     """
-    Aggregates all cluster-level metrics from the Kilosort directory.
+    Aggregates all cluster-level metrics  as computed from Spike interface from the Kilosort directory.
 
     Args:
         ks4_dir (Path): Directory where Kilosort results are stored (e.g., sorting output).
@@ -40,11 +40,14 @@ def get_metrics_from_si(ks4_dir):
     Returns:
         pandas.DataFrame: A dataframe containing cluster metrics from the directory.
     """
-    metrics_files = ks4_dir.glob("*.tsv")
+    metrics_files = ks4_dir.glob("cluster_*.tsv")
     metrics = pd.read_csv(ks4_dir.joinpath("cluster_group.tsv"), sep="\t")
     for fn in metrics_files:
         if fn.name == "cluster_group.tsv":
             continue  # Don't reread group
+        if fn.name == "cluster_info.tsv":
+            continue  # Don't reread group
+        # Skip potential_merges
         df = pd.read_csv(fn, sep="\t")
         if "cluster_id" not in df.columns:
             continue
@@ -52,7 +55,7 @@ def get_metrics_from_si(ks4_dir):
     return metrics
 
 
-def save_metrics(metrics, out_path):
+def save_si_metrics(metrics, out_path):
     """
     Saves the cluster-level QC metrics in ALF format.
 
@@ -60,7 +63,7 @@ def save_metrics(metrics, out_path):
         metrics (pandas.DataFrame): Cluster-level metrics dataframe.
         out_path (Path): Directory where the metrics file will be saved.
     """
-    metrics_fn = alfio.spec.to_alf("clusters", "metrics", "pqt")
+    metrics_fn = alfio.spec.to_alf("clusters", "si_metrics", "pqt")
     metrics.to_parquet(out_path.joinpath(metrics_fn))
 
 
@@ -143,6 +146,10 @@ def convert_model(ks_path, alf_path, sample_rate, ampfactor):
     for ii in mdl.cluster_ids:
         cluster_amps[ii] = np.mean(np.abs(mdl.amplitudes[mdl.spike_clusters == ii]))
     np.save(alf_path.joinpath("clusters.amps.npy"), cluster_amps)
+
+    # save_si_metrics
+    si_metrics = get_metrics_from_si(ks_path)
+    save_si_metrics(si_metrics, alf_path)
 
     # TODO: Confirm waveforms are properly scaled
 
