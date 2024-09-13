@@ -7,8 +7,11 @@ from matplotlib.patches import FancyArrowPatch
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from one.alf.io import AlfBunch
 from matplotlib.collections import LineCollection
+from matplotlib.ticker import FuncFormatter
+from matplotlib.ticker import MaxNLocator
 try:
     from brainbox.plot import driftmap
+    from brainbox.processing import bincount2D
 except ImportError:
     print('No brainbox package')
 
@@ -1180,12 +1183,22 @@ def plot_driftmap_with_trace(spike_times,
                            tf=None,
                            depth_lim=(None,None),
                            trace_ylim=(None,None),
+                           t_bin=0.01,
                            driftmap_kwargs={},
                            trace_kwargs={},
                            figsize=(2,8),
                            use_scalebar=True,
+                           use_colorbar=True,
+                           cmap=None,
+                           raster_ylabel=None,
                            ):
     """
+    #TODO: Update documentation
+    #TODO: UPdate to work more intuitively with clusters 
+
+    Works well as a driftmap, but lass good as a rastermap
+
+
     Plot a drift map with an covariate trace above.
 
  
@@ -1215,7 +1228,7 @@ def plot_driftmap_with_trace(spike_times,
     assert(len(trace_ylim)==2), 'trace_ylim must be of length 2'
 
     # set default trace kwargs and overwrite with user input
-    trace_kwargs_default = {'color':'k','lw':0.5}
+    trace_kwargs_default = {'lw':0.5}
     trace_kwargs_default.update(trace_kwargs)
     trace_kwargs = trace_kwargs_default
 
@@ -1244,31 +1257,72 @@ def plot_driftmap_with_trace(spike_times,
     trace_ylim[0] = trace_ylim[0] or np.min(trace_subset)
     trace_ylim[1] = trace_ylim[1] or np.max(trace_subset)
 
-
-
     # Make plot
     f = plt.figure(figsize=figsize)
-    gs = f.add_gridspec(nrows=2, ncols=1, height_ratios=[1, 4])
+    gs = f.add_gridspec(nrows=2, ncols=1, height_ratios=[1, 5])
     ax_raster = f.add_subplot(gs[1])
     ax_trace = f.add_subplot(gs[0],sharex=ax_raster)
     ax_trace.plot(trace_times_subset, trace_subset, **trace_kwargs)
-    driftmap(spike_times[s0:sf],spike_depths[s0:sf],ax=ax_raster,**driftmap_kwargs)
+    driftmap(spike_times[s0:sf],spike_depths[s0:sf],ax=ax_raster,t_bin=t_bin,**driftmap_kwargs)
     ax_raster.set_ylim(depth_lim)
     ax_trace.set_ylim(trace_ylim)
     ax_trace.set_ylabel(trace_label)
+    print(ax_raster.get_ylim())
     sns.despine()
+    if cmap is not None:
+        ax_raster.images[0].set_cmap(cmap)
+
+    # Add colorbar
+    if use_colorbar:
+        cbar_ax = f.add_axes([0.92, 0.25, 0.05, 0.25])  # [left, bottom, width, height]
+        cbar= f.colorbar(ax_raster.images[0], cax=cbar_ax, orientation='vertical')
+        cbar_ax.set_ylabel('spike rate (sp/s)')
+        cbar.outline.set_linewidth(0)
+        cbar.ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f'{x/t_bin:0.0f}'))
+        cbar.ax.yaxis.set_major_locator(MaxNLocator(nbins=4))
+
     
     # replace x spine with a horizontal bar for for raster. Horizontal bar should be closeste to [1,2,5,10,30,60]
     if use_scalebar:
-        sns.despine(bottom=True)
-        ax_raster.set_xticks([])
-        ax_raster.set_xlabel('')
-        good_tbars = [1,2,5,10,30,60]
-        idx = np.searchsorted(good_tbars,(tf-t0)/5)
-        tbar_max = t0+good_tbars[idx]
-        ax_raster.hlines(depth_lim[0],t0,tbar_max,lw=2,color=plt.rcParams['text.color'])
-        ax_raster.text(t0,depth_lim[0],f'{tbar_max}s',va='top',ha='left',color=plt.rcParams['text.color'])
+        replace_timeaxis_with_scalebar(ax_raster)
+    plt.subplots_adjust(hspace=figsize[1]*0.01)
+
+    if raster_ylabel is not None:
+        ax_raster.set_ylabel(raster_ylabel)
 
 
     return(ax_raster,ax_trace)
 
+
+def replace_timeaxis_with_scalebar(ax,pad=0.025):
+    """
+    Replace the x-axis with a horizontal bar showing the time scale of the plot.
+
+    Args:
+        ax (matplotlib.axes._subplots.AxesSubplot): The axes object to modify.
+        inverted_y (bool, optional): Set true if the plot has 0 at the top
+        pad (float, optional): Padding between the scale bar and the plot. Defaults to 0.01.
+    """
+    t0,tf = ax.get_xlim()
+    good_tbars = [0.001,0.01,0.05,0.1,0.5,1,2,5,10,30,60]
+    idx = np.searchsorted(good_tbars,(tf-t0)/5)
+    tbar_max = t0+good_tbars[idx]
+    tbar_length = tbar_max-t0
+    tbar_label = f'{tbar_length*1000:0.0f}ms' if tbar_length<=1 else f'{tbar_length:.0f}s'
+    ymin,ymax = ax.get_ylim()
+    yrange = (ymax-ymin)
+
+    pad_small = pad*yrange
+    pad_large= pad_small*1.1
+
+    ax.set_ylim([ymin-pad_large,ymax])
+    ax.hlines(ymin-pad_small,t0,tbar_max,lw=2,color=plt.rcParams['text.color'])
+    ax.text(t0,ymin-pad_large,tbar_label,va='top',ha='left',color=plt.rcParams['text.color'])
+    ax.set_xticks([])
+    ax.set_xlabel('')
+    sns.despine(bottom=True)
+
+
+def trim_yscale_to_lims(ax,ymin,ymax):
+    ax.set_yticks([ymin,ymax])
+    sns.despine(bottom=True,trim=True)
