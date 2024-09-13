@@ -7,6 +7,10 @@ from matplotlib.patches import FancyArrowPatch
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from one.alf.io import AlfBunch
 from matplotlib.collections import LineCollection
+try:
+    from brainbox.plot import driftmap
+except ImportError:
+    print('No brainbox package')
 
 from .utils.utils import parse_opto_log, validate_intervals, weighted_histogram
 
@@ -1165,3 +1169,106 @@ def clean_linear_radial_axis(ax):
         ["$-\pi$", "$\\frac{-\pi}{2}$", "0", "$\\frac{\pi}{2}$", "$\pi$"]
     )
     sns.despine(trim=True)
+
+
+def plot_driftmap_with_trace(spike_times,
+                           spike_depths,
+                           trace,
+                           trace_times,
+                           trace_label='',
+                           t0=None,
+                           tf=None,
+                           depth_lim=(None,None),
+                           trace_ylim=(None,None),
+                           driftmap_kwargs={},
+                           trace_kwargs={},
+                           figsize=(2,8),
+                           use_scalebar=True,
+                           ):
+    """
+    Plot a drift map with an covariate trace above.
+
+ 
+    Built off of ibllib.brainbox.plot.driftmap. 
+    This function plots a drift map of spike times and depths, with an overlaid trace such as diaphragm or another continuous signal.
+
+    Args:
+        spike_times (array-like): Array of spike times.
+        spike_depths (array-like): Array of spike depths corresponding to each spike time.
+        trace (array-like): Continuous signal to overlay on the drift map. Can be multiple columns as long as each row is a timepoint 
+        trace_times (array-like): Time points corresponding to the trace signal.
+        trace_label (str, optional): Label for the trace. Defaults to ''.
+        t0 (float, optional): Start time for the plot. Defaults to None, which uses the minimum spike time.
+        tf (float, optional): End time for the plot. Defaults to None, which uses the maximum spike time.
+        depth_lim (tuple, optional): Depth limits for the plot. Defaults to (None, None), which uses the min and max spike depths.
+        trace_ylim (tuple, optional): Y-axis limits for the trace plot. Defaults to (None, None), which uses the min and max trace values.
+        driftmap_kwargs (dict, optional): Additional keyword arguments for the drift map plot. Defaults to {}.
+        trace_kwargs (dict, optional): Additional keyword arguments for the trace plot. Defaults to {}.
+        figsize (tuple, optional): Figure size for the plot. Defaults to (2, 8).
+        use_scalebar (bool, optional): Whether to use a scale bar in the plot. Defaults to True.
+
+    Returns:
+        matplotlib.axes._subplots.AxesSubplot: The axes object containing the drift map.
+        matplotlib.axes._subplots.AxesSubplot: The axes object containing the trace plot.
+    """         
+    assert(len(depth_lim)==2), 'depth_lim must be of length 2'
+    assert(len(trace_ylim)==2), 'trace_ylim must be of length 2'
+
+    # set default trace kwargs and overwrite with user input
+    trace_kwargs_default = {'color':'k','lw':0.5}
+    trace_kwargs_default.update(trace_kwargs)
+    trace_kwargs = trace_kwargs_default
+
+    # set default driftmap kwargs and overwrite with user input
+    driftmap_kwargs_default = {}
+    driftmap_kwargs_default.update(driftmap_kwargs)
+    driftmap_kwargs = driftmap_kwargs_default
+
+    
+    # Set time limits for spikes
+    t0 = t0 or 0
+    tf = tf or np.nanmax(spike_times)
+    s0,sf = np.searchsorted(spike_times,[t0,tf])
+
+    # Set depth limits
+    depth_lim = list(depth_lim)
+    depth_lim[0] = depth_lim[0] or np.min(spike_depths)
+    depth_lim[1] = depth_lim[1] or np.max(spike_depths)
+
+    # Subsample trace
+    trace_samples = np.logical_and(trace_times>=t0,trace_times<=tf)
+    trace_subset = trace[trace_samples]
+    trace_times_subset = trace_times[trace_samples]
+
+    trace_ylim=list(trace_ylim)
+    trace_ylim[0] = trace_ylim[0] or np.min(trace_subset)
+    trace_ylim[1] = trace_ylim[1] or np.max(trace_subset)
+
+
+
+    # Make plot
+    f = plt.figure(figsize=figsize)
+    gs = f.add_gridspec(nrows=2, ncols=1, height_ratios=[1, 4])
+    ax_raster = f.add_subplot(gs[1])
+    ax_trace = f.add_subplot(gs[0],sharex=ax_raster)
+    ax_trace.plot(trace_times_subset, trace_subset, **trace_kwargs)
+    driftmap(spike_times[s0:sf],spike_depths[s0:sf],ax=ax_raster,**driftmap_kwargs)
+    ax_raster.set_ylim(depth_lim)
+    ax_trace.set_ylim(trace_ylim)
+    ax_trace.set_ylabel(trace_label)
+    sns.despine()
+    
+    # replace x spine with a horizontal bar for for raster. Horizontal bar should be closeste to [1,2,5,10,30,60]
+    if use_scalebar:
+        sns.despine(bottom=True)
+        ax_raster.set_xticks([])
+        ax_raster.set_xlabel('')
+        good_tbars = [1,2,5,10,30,60]
+        idx = np.searchsorted(good_tbars,(tf-t0)/5)
+        tbar_max = t0+good_tbars[idx]
+        ax_raster.hlines(depth_lim[0],t0,tbar_max,lw=2,color=plt.rcParams['text.color'])
+        ax_raster.text(t0,depth_lim[0],f'{tbar_max}s',va='top',ha='left',color=plt.rcParams['text.color'])
+
+
+    return(ax_raster,ax_trace)
+

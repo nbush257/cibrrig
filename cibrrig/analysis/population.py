@@ -438,8 +438,14 @@ class Population:
         s0, sf = np.searchsorted(self.tbins, [t0, tf])
         X_slice = self.projection[s0:sf, :]
         intervals = kwargs.pop("intervals", None)
-        stim_color = kwargs.pop("stim_color", None) or "C1"
-        base_color = kwargs.pop("color", None) or "C0"
+        if 'stim_color' in kwargs:
+            stim_color = kwargs.pop("stim_color")
+        else:
+            stim_color = "C1"
+        if 'base_color' in kwargs:
+            base_color = kwargs.pop("base_color")
+        else:
+            base_color = "C0"
         if intervals is not None:
             intervals_baseline = []
             _temp = t0
