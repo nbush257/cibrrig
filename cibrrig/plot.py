@@ -249,7 +249,12 @@ def _setup_colorbar(ax, p, vmin, vmax, colorbar_title):
     """
     cbar = plt.colorbar(p, ax=ax, pad=0.1, orientation="horizontal", location="top")
     cbar.set_label(colorbar_title)
-    cbar.set_ticks([vmin, 0, vmax])
+    if vmin>=0:
+        cbar.set_ticks([vmin, vmax])
+    else:
+        cbar.set_ticks([vmin, 0, vmax])
+    cbar.outline.set_edgecolor('none')
+
     cbar.solids.set_alpha(1)
 
 
@@ -376,13 +381,16 @@ def _plot_projection_line_2D(
 
     lc = LineCollection(segments, alpha=alpha, lw=lw, **kwargs)
     if cvar is not None:
-        vmin = vmin or np.min(cvar)
-        vmax = vmax or np.max(cvar)
+        if vmin is None:
+            vmin = np.min(cvar)
+        if vmax is None:
+            vmax = np.max(cvar)
         norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
         lc.set_array(cvar)
         lc.set_cmap(cmap)
         lc.set_norm(norm)
-        _setup_colorbar(ax, lc, vmin, vmax, colorbar_title)
+        if plot_colorbar:
+            _setup_colorbar(ax, lc, vmin, vmax, colorbar_title)
     else:
         lc.set_color(color)
 
@@ -390,18 +398,20 @@ def _plot_projection_line_2D(
     if use_arrow:
         ax.add_patch(arrow)
 
+    sns.despine()
     ax.autoscale()
     ax.set_aspect("equal")
     ax.set_xlabel(f"Dim {dims[0]+1}")
     ax.set_ylabel(f"Dim {dims[1]+1}")
+    
 
-    if cvar is not None and plot_colorbar:
-        cbar = plt.colorbar(
-            lc, ax=ax, pad=0.1, orientation="horizontal", location="top"
-        )
-        cbar.set_label(colorbar_title)
-        cbar.set_ticks([vmin, 0, vmax])
-        cbar.solids.set_alpha(1)
+    # if cvar is not None and plot_colorbar:
+    #     cbar = plt.colorbar(
+    #         lc, ax=ax, pad=0.1, orientation="horizontal", location="top"
+    #     )
+    #     cbar.set_label(colorbar_title)
+    #     cbar.set_ticks([vmin, 0, vmax])
+    #     cbar.solids.set_alpha(1)
 
     return ax
 
@@ -1305,7 +1315,7 @@ def replace_timeaxis_with_scalebar(ax,pad=0.025):
     """
     t0,tf = ax.get_xlim()
     good_tbars = [0.001,0.01,0.05,0.1,0.5,1,2,5,10,30,60]
-    idx = np.searchsorted(good_tbars,(tf-t0)/5)
+    idx = np.searchsorted(good_tbars,(tf-t0)/5)-1
     tbar_max = t0+good_tbars[idx]
     tbar_length = tbar_max-t0
     tbar_label = f'{tbar_length*1000:0.0f}ms' if tbar_length<=1 else f'{tbar_length:.0f}s'
