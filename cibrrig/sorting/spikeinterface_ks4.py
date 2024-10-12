@@ -636,7 +636,11 @@ def run(
     # ======= Remove temporary SI folder ========= #
     if move_final and rm_intermediate and n_probes > 0:
         _log.info(f"Removing {session_local}")
-        shutil.rmtree(session_local)
+        try:
+            shutil.rmtree(session_local)
+        except FileNotFoundError as e:
+            _log.error(f"Could not delete {session_local}")
+            _log.error(e)
 
 
 if __name__ == "__main__":
