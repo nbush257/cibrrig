@@ -209,8 +209,9 @@ class Recording:
             pd.DataFrame: Enhanced optogenetic stimulation log.
         """
         opto_calib = load_opto_calibration(self.session_path)
-        amps_mw = opto_calib(log["amplitude"].values.astype("f"))
-        log["amplitude_mw"] = amps_mw
+        if opto_calib is not None:
+            amps_mw = opto_calib(log["amplitude"].values.astype("f"))
+            log["amplitude_mw"] = amps_mw
         log.loc[log["label"] == "opto_pulse", "end_time"] = (
             log["start_time"] + log["duration"]
         )
