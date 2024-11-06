@@ -478,3 +478,4 @@ def get_good_spikes(spikes, clusters):
     for k in spikes.keys():
         spikes[k] = spikes[k][idx]
     return (spikes, cluster_ids)
+

@@ -13,7 +13,7 @@ _log = logging.getLogger()
 _log.setLevel(logging.INFO)
 
 # TODO: be able to modify only parts of this
-PROJECTION_KWARGS = dict(lw=0.5, alpha=0.2, color="C0", cmap="RdBu_r")
+PROJECTION_KWARGS = dict(lw=0.5, alpha=0.2, color="C0", cmap="RdBu_r",s=1)
 TRAIL_KWARGS = dict(lw=3, alpha=1, color="C1")
 HISTORY_KWARGS = dict(color="C1", lw=0.75, alpha=0.75)
 AUX_KWARGS = dict(lw=0.5, color="C1")
@@ -559,7 +559,10 @@ def make_rotating_projection(
         vmax = vmax or np.max(cvar[s0 : sf - 1])
 
     if mode == "line":
-        projection_kwargs.pop("s")
+        try:
+            projection_kwargs.pop("s")
+        except KeyError:
+            pass
         ax = pop.plot_projection_line(
             dims=dims,
             t0=t0,
@@ -572,8 +575,11 @@ def make_rotating_projection(
             **projection_kwargs,
         )
     elif mode == "scatter":
-        projection_kwargs.pop("lw")
-        projection_kwargs.pop("color")
+        try:
+            projection_kwargs.pop("lw")
+            projection_kwargs.pop("color")
+        except KeyError:
+            pass
         if cvar is not None:
             ax = pop.plot_projection(
                 dims=dims,

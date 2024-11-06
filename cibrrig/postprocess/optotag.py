@@ -17,11 +17,6 @@ from tqdm import tqdm
 import sys
 import scipy.stats
 
-if sys.platform == "linux":
-    import matplotlib
-
-    matplotlib.use("TkAgg")
-
 WAVELENGTH_COLOR = {
     635: "#ff3900",
     473: "#00b7ff",

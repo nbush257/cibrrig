@@ -195,16 +195,17 @@ def compute_resp_mod(
         [np.max(spike_times), np.max(breaths.on_sec)]
     )  # Default to the last breath or spike, whichever is earlier
 
+    _breaths = breaths.copy()
     idx = np.logical_and(spike_times > t0, spike_times < tf)
     spike_times = spike_times[idx]
     spike_clusters = spike_clusters[idx]
 
     idx = np.logical_and(breaths.on_sec > t0, breaths.on_sec < tf)
-    breaths.on_sec = breaths.on_sec[idx]
-    breaths.off_sec = breaths.off_sec[idx]
+    _breaths.on_sec = breaths.on_sec[idx]
+    _breaths.off_sec = breaths.off_sec[idx]
 
     bins, rates, sems, rates_raw = get_all_phase_curves(
-        spike_times, spike_clusters, cluster_ids, breaths, nbins=50
+        spike_times, spike_clusters, cluster_ids, _breaths, nbins=50
     )
     theta, L_dir = get_vector_means(bins, rates)
 
