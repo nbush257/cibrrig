@@ -378,7 +378,7 @@ def _plot_projection_line_2D(
             a, b, arrowstyle="-|>", color=color, lw=lw, alpha=alpha, mutation_scale=10
         )
         segments = segments[:-1]
-
+    _ = kwargs.pop("s", None)
     lc = LineCollection(segments, alpha=alpha, lw=lw, **kwargs)
     if cvar is not None:
         if vmin is None:
