@@ -223,12 +223,14 @@ def make_pre_post_trial(
     """
     starts = intervals[:, 0]
     stops = intervals[:, 1]
+    
 
     # Create control intervals to preceed the test intervals
     window = window or stops - starts
     control_starts = intervals[:, 0] - window - pad
     control_stops = starts - pad
 
+    # Check for negative control starts
     if np.any(control_starts < 0):
         _log.warning(f"control starts has entries less than 0:\n{control_starts}")
 
@@ -236,7 +238,7 @@ def make_pre_post_trial(
     assert "times" in alf_object.keys(), 'Input ALF object must have attribute "times"'
     ts = alf_object.times
 
-    # Manipulate conditions to consider
+    # Make a dataframe of unique conditions and trial numbers
     use_conditions = False
     if conditions is not None:
         assert (
@@ -253,81 +255,56 @@ def make_pre_post_trial(
 
     # Group conditions
     categories = conditions.columns.to_list()
-    grouped = conditions.groupby(categories)
 
-    # Initialize condition and trial arrays
-    condition = pd.DataFrame(
-        np.full([ts.shape[0], len(categories)], np.nan, dtype=object),
-        columns=conditions.columns,
-    )
-    comparison = np.full_like(ts, np.nan, dtype=object)
-    trial = np.full_like(ts, np.nan, dtype=float)
+    # Assign trial number to each interval
+    conditions['trial'] = conditions.groupby(categories).cumcount() 
+    
+    # Preallocate output
+    control = conditions.copy()
+    test = conditions.copy()
+    test['start_time'] = starts
+    test['stop_time'] = stops
+    control['start_time'] = control_starts
+    control['stop_time'] = control_stops
+    
+    # Map alf object to a dataframe for query operations
+    alf_df = alf_object.to_df()
 
-    # Loop over groups and assign observations to intervals
-    for group_keys, group in grouped:
-        _starts = starts[group.index]
-        _stops = stops[group.index]
-        _control_starts = control_starts[group.index]
-        _control_stops = control_stops[group.index]
+    # Loop over each stimulus and variable to aggregate
+    for ii, rr in test.iterrows():
+        _test_df = alf_df.query('times >= @rr.start_time & times < @rr.stop_time')
+        for var in vars:
+            test.loc[ii,var+'_'+agg_func] = _test_df[var].agg(agg_func)
 
-        # Assign observation indicies to intervals
-        test_trial_num = time_to_interval(ts, _starts, _stops)
-        control_trial_num = time_to_interval(ts, _control_starts, _control_stops)
+    # Loop over each controls time and variable to aggregate
+    for ii, rr in control.iterrows():
+        _control_df = alf_df.query('times >= @rr.start_time & times < @rr.stop_time')
+        for var in vars:
+            control.loc[ii,var+'_'+agg_func] = _control_df[var].agg(agg_func)
 
-        # Make sure observations are not assigned to both test and control
-        overlap = np.logical_and(
-            np.isfinite(test_trial_num), np.isfinite(control_trial_num)
-        )
-        if np.any(overlap):
-            _log.warning(
-                f"Observations{np.where(overlap)} are assigned to both test and control"
-            )
+    # Put control and test together 
+    test['comparison'] = 'test'
+    control['comparison'] = 'control'
+    output = pd.concat([test,control],axis=0).sort_values('start_time').reset_index(drop=True)
 
-        # Assign condition and trial numbers for test and control
-        condition.loc[np.isfinite(test_trial_num), categories] = group_keys
-        condition.loc[np.isfinite(control_trial_num), categories] = group_keys
-
-        # Assign comparison and trial numbers
-        comparison[np.isfinite(test_trial_num)] = "test"
-        comparison[np.isfinite(control_trial_num)] = "control"
-
-        trial[np.isfinite(test_trial_num)] = test_trial_num[np.isfinite(test_trial_num)]
-        trial[np.isfinite(control_trial_num)] = control_trial_num[
-            np.isfinite(control_trial_num)
-        ]
-
-    # Pandas manipulations to shape the output data
-    out_df = alf_object.to_df()
-    if vars:
-        if not isinstance(vars, list):
-            vars = [vars]
-        out_df = out_df[vars]
-    if use_conditions:
-        out_df = out_df.merge(condition, left_index=True, right_index=True)
-    out_df["trial"] = trial
-    out_df["comparison"] = comparison
-    out_df.dropna(axis=0, subset=["trial"], inplace=True)
-    out_df["trial"] = out_df["trial"].astype("int")
-    out_df = out_df.reset_index(drop=True)
-    var_rename = {x: x + "_" + agg_func for x in vars}
-    out_df = out_df.rename(var_rename, axis=1)
+    # Perform 
     if not use_conditions:
         categories.remove("condition")
-    agg_data = (
-        out_df.groupby(categories + ["comparison", "trial"]).agg(agg_func).reset_index()
-    )
+        output.drop('condition',axis=1,inplace=True)
+
 
     if wide:
+        varnames = [f"{var}_{agg_func}" for var in vars]
         if use_conditions:
-            agg_data = pd.pivot_table(
-                out_df, values=vars, columns=categories + ["comparison"], index="trial"
+            output = pd.pivot_table(
+                output, values=varnames, columns=categories + ["comparison"], index="trial"
             )
         else:
-            agg_data = pd.pivot_table(
-                out_df, values=vars, columns=["comparison"], index="trial"
+            output = pd.pivot_table(
+                output, values=varnames, columns=["comparison"], index="trial"
             )
 
-    return agg_data
+    return output
 
 
 def get_pct_diff(df, vars, condition_names=None):
