@@ -1454,6 +1454,7 @@ if has_brainbox:
         ax_raster.set_ylabel(raster_ylabel)
         ax_raster.set_xlabel("Time (s)")
         ax_raster.set_ylim([0, len(starts)])
+        ax_peth.set_xlim([-pre_time, post_time])
 
         ax_raster.axvline(0, **eventline_kwargs)
         ax_peth.axvline(0, **eventline_kwargs)
