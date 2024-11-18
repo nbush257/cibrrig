@@ -60,7 +60,7 @@ class Archiver:
     def __init__(self, keep_raw):
         self.subject_ID = None
         self.ephys_files_local = None
-        self.ephys_files_remote = None
+        self.ephys_files_target = None
         self.has_imec = False
         self.has_nidq = False
         self.has_video = False
@@ -69,43 +69,43 @@ class Archiver:
         self.has_notes = False
         self.has_insertions = False
         self.num_sessions = 1
-        self.subjects_path = DEFAULT_SUBJECTS_PATH
-        self.subject_path = None
-        self.run_path = DEFAULT_SESSION_PATH
+        self.subjects_path_target = DEFAULT_SUBJECTS_PATH
+        self.subject_path_target = None
+        self.run_path_source = DEFAULT_SESSION_PATH
         self.record_date = None
-        self.today_path = None
+        self.today_path_target = None
         self.keep_raw = keep_raw
         self.video_files = None
-        self.video_path_remote = None
-        self.session_list_local = None
+        self.video_path_target = None
+        self.session_list_source = None
 
     def set_subjects_path(self, path):
         """Set the path where the subjects' data will be archived."""
-        self.subjects_path = Path(path)
-        print(f"Subjects path set to: {self.subjects_path}")
+        self.subjects_path_target = Path(path)
+        print(f"Subjects path set to: {self.subjects_path_target}")
 
     def get_sessions_local(self):
         """Find local sessions to back up."""
-        contents = self.run_path.glob("*_g[0-9]*")
-        self.session_list_local = [x for x in contents if x.is_dir()]
-        self.num_sessions = len(self.session_list_local)
+        contents = self.run_path_source.glob("*_g[0-9]*")
+        self.session_list_source = [x for x in contents if x.is_dir()]
+        self.num_sessions = len(self.session_list_source)
 
     def guess_subject_ID(self):
         """Infer the subject ID from the local session path."""
-        self.subject_ID = self.run_path.name
+        self.subject_ID = self.run_path_source.name
         print(f"Subject ID set to: {self.subject_ID}")
 
     def get_ephys_files_remote(self):
         """Retrieve remote electrophysiological files to be backed up."""
-        self.ephys_files_remote = spikeglx.glob_ephys_files(self.today_path)
+        self.ephys_files_target = spikeglx.glob_ephys_files(self.today_path_target)
 
     def get_ephys_files_local(self):
         """Retrieve local electrophysiological files."""
-        self.ephys_files_local = spikeglx.glob_ephys_files(self.run_path)
+        self.ephys_files_local = spikeglx.glob_ephys_files(self.run_path_source)
 
     def compress_ephys_files_remote(self):
         """Compress remote electrophysiological files."""
-        if self.ephys_files_remote is None:
+        if self.ephys_files_target is None:
             self.get_ephys_files_remote()
 
         def _run_compress(bin_file):
@@ -132,7 +132,7 @@ class Archiver:
 
             print(f"Compressing {bin_file.name}")
 
-        for efi in self.ephys_files_remote:
+        for efi in self.ephys_files_target:
             ap_file = efi.get("ap")
             lf_file = efi.get("lf")
             ni_file = efi.get("nidq")
@@ -154,19 +154,19 @@ class Archiver:
         """Create the target directory for the backup, named by the record date."""
         if self.record_date is None:
             self.get_record_date()
-        self.subject_path = self.subjects_path.joinpath(self.subject_ID)
-        self.subject_path.mkdir(exist_ok=True)
+        self.subject_path_target = self.subjects_path_target.joinpath(self.subject_ID)
+        self.subject_path_target.mkdir(exist_ok=True)
 
-        self.today_path = self.subject_path.joinpath(self.record_date)
-        self.today_path.mkdir(exist_ok=True)
+        self.today_path_target = self.subject_path_target.joinpath(self.record_date)
+        self.today_path_target.mkdir(exist_ok=True)
 
     def copy_sessions(self):
         """Copy session data from the local to the target directory."""
-        if self.today_path is None:
+        if self.today_path_target is None:
             self.make_rec_date_target()
 
-        for session in self.session_list_local:
-            dst = self.today_path.joinpath(session.name)
+        for session in self.session_list_source:
+            dst = self.today_path_target.joinpath(session.name)
             print(f"Copying {session} to {dst}")
             try:
                 shutil.copytree(session, dst)
@@ -175,11 +175,11 @@ class Archiver:
 
     def copy_sessions_alf(self):
         """Compress any video files in the sessions."""
-        if self.today_path is None:
+        if self.today_path_target is None:
             self.make_rec_date_target()
 
-        for ii, session in enumerate(self.session_list_local):
-            dst = self.today_path.joinpath(f"{ii+1:03.0f}")
+        for ii, session in enumerate(self.session_list_source):
+            dst = self.today_path_target.joinpath(f"{ii+1:03.0f}")
             print(f"Copying {session} to {dst}")
             try:
                 shutil.copytree(session, dst)
@@ -214,17 +214,36 @@ class Archiver:
 
     def get_videos_in_sessions(self):
         """Find video files in the local session directories."""
-        print(f"{self.run_path=}")
-        self.video_files = list(self.run_path.rglob("*.avi"))
+        print(f"{self.run_path_source=}")
+        self.video_files = list(self.run_path_source.rglob("*.avi"))
         if len(self.video_files) > 0:
             self.has_video = True
 
     def mark_backup(self):
         """Create a flag file in each session directory to indicate the backup date."""
-        for session in self.session_list_local:
+        for session in self.session_list_source:
             backup_flag = session.joinpath("is_backed_up.txt")
             with open(backup_flag, "w") as fid:
                 fid.write(f"Archived on {datetime.datetime.today().isoformat()}")
+
+    def copy_run_level_files(self):
+        """ Copy files in the run folder to the backup location"""
+        run_files = list(self.run_path_source.glob("*"))
+        # Remove directories from the list
+        run_files = [x for x in run_files if x.is_file()]
+        print(f"{run_files=}")
+        for fn in run_files:
+            shutil.copy(fn, self.today_path_target)
+    
+    def full_archive(self):
+        """ Chain all the methods to perform a full archive"""
+        self.get_sessions_local()
+        self.make_rec_date_target()
+        self.copy_run_level_files()
+        self.copy_sessions()
+        self.compress_ephys_files_remote()
+        self.compress_video_in_place()
+        self.mark_backup()
 
 
 class RecordingInfoUI(QWidget):
@@ -379,12 +398,7 @@ def archive(keep_raw):
     set_path_dialog.show()
     app.exec()
 
-    archiver.get_sessions_local()
-    archiver.make_rec_date_target()
-    archiver.copy_sessions()
-    archiver.compress_ephys_files_remote()
-    archiver.compress_video_in_place()
-    archiver.mark_backup()
+    archiver.full_archive()
 
 
 def no_gui(local_run_path, remote_subjects_path):
@@ -396,16 +410,11 @@ def no_gui(local_run_path, remote_subjects_path):
         remote_subjects_path (str): Path to the remote storage location.
     """
     archiver = Archiver(keep_raw=False)
-    archiver.run_path = Path(local_run_path)
-    archiver.subjects_path = Path(remote_subjects_path)
+    archiver.run_path_source = Path(local_run_path)
+    archiver.subjects_path_target = Path(remote_subjects_path)
     archiver.guess_subject_ID()
 
-    archiver.get_sessions_local()
-    archiver.make_rec_date_target()
-    archiver.copy_sessions()
-    archiver.compress_ephys_files_remote()
-    archiver.compress_video_in_place()
-    archiver.mark_backup()
+    archiver.full_archive()
 
 
 if __name__ == "__main__":

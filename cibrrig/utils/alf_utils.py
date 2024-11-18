@@ -160,9 +160,7 @@ class Recording:
         except Exception:
             # Doing it this way so that if the files can be loaded, we do not error, but do throw an error if the problem is not the trigger label
             alf_obj_out = alfio.load_object(self.session_path, "log", short_keys=True)
-            _log.info(
-                "Triggers not found. Has this already been concatenated? Or is this a one-off run?"
-            )
+            _log.info("Triggers not found. Has this already been concatenated?")
             log_df_out = alf_obj_out.to_df()
             # return(alf_obj_out)
 
@@ -185,7 +183,10 @@ class Recording:
             table_fn = alfio.files.spec.to_alf(
                 "log", "table", extension="tsv", namespace="cibrrig"
             )
-            log_df_out.drop("Unnamed: 0", axis=1, inplace=True)
+
+            if 'Unnamed: 0' in log_df_out.columns:
+                log_df_out.drop("Unnamed: 0", axis=1, inplace=True)
+
             log_df_out.to_csv(
                 self.session_path.joinpath(table_fn), sep="\t", index=None
             )
