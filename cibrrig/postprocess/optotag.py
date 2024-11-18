@@ -486,7 +486,6 @@ def run_probe(probe_path, tags, consideration_window, wavelength, plot=False):
     """
     Computes the optotag statistics on data from one probe.
     Loads in from the ALF format.
-    Only computes on the clusters defined as "good" from clusters.metrics.group
     Computes:
         1) SALT statistics
         2) Heuristics for number of stims with spikes, spike rates
@@ -505,12 +504,10 @@ def run_probe(probe_path, tags, consideration_window, wavelength, plot=False):
     """
     spikes = alfio.load_object(probe_path, "spikes")
     clusters = alfio.load_object(probe_path, "clusters")
-    cluster_ids = clusters.metrics["cluster_id"][
-        clusters.metrics.group == "good"
-    ].values
-    idx = np.isin(spikes.clusters, cluster_ids)
-    spike_times = spikes.times[idx]
-    spike_clusters = spikes.clusters[idx]
+    cluster_ids = np.arange(len(clusters))
+
+    spike_times = spikes.times
+    spike_clusters = spikes.clusters
 
     tag_duration = np.mean(np.diff(tags.intervals, 1))
     n_tags = tags.intervals.shape[0]
