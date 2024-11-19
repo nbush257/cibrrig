@@ -504,7 +504,7 @@ def run_probe(probe_path, tags, consideration_window, wavelength, plot=False):
     """
     spikes = alfio.load_object(probe_path, "spikes")
     clusters = alfio.load_object(probe_path, "clusters")
-    cluster_ids = np.arange(len(clusters))
+    cluster_ids = np.arange(len(clusters.amps),dtype='int16')
 
     spike_times = spikes.times
     spike_clusters = spikes.clusters
