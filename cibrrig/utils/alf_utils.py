@@ -157,6 +157,8 @@ class Recording:
                 self.session_path, "log", extra="t0", short_keys=True
             )
             log_df_out = alf_obj_out.to_df()
+            # Remove events from before the start of the experiment
+            log_df_out = log_df_out.query('start_time>-0.01')
         except Exception:
             # Doing it this way so that if the files can be loaded, we do not error, but do throw an error if the problem is not the trigger label
             alf_obj_out = alfio.load_object(self.session_path, "log", short_keys=True)
@@ -170,6 +172,8 @@ class Recording:
                 self.session_path, "log", extra=f"t{ii:0.0f}", short_keys=True
             )
             log_df = alf_obj.to_df()
+            # Remove events from before the start of the experiment
+            log_df = log_df.query('start_time>-0.01')
             for k in log_df.keys():
                 if len(log_df[k]) == 0:
                     continue
