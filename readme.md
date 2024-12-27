@@ -24,14 +24,29 @@ The log file is a `.tsv` file with the name `_cibrrig_<run_name>.g<x>.t<x>.tsv`.
 
 ---
 ## Installation
-(Recommended): Use a virtual environment like conda
+Create a virtual environment using mamba/conda.
+>[!WARNING]
+>If on SCRI networks it is critically important to specify the python version here. This circumvents the SSL issue we have been running into
 
-Change directory to the path with the `setup.py` file
-`cd /path/to/cibrrig`
-Install using pip
-`pip install -e .`
+`mamba create -n cibrrig python=3.12`
 
-This should install the `iblenv` dependencies as well. 
+Then change directory to a place to install cibrrig locally. 
+>[!IMPORTANT]
+>If you are on NPX 971 room computer, this has already been cloned and you should just install into your new venv.
+>```
+>cd C:/helpers/cibrrig
+>git pull
+>pip install -e .
+>```
+>OTHERWISE, clone the repo:
+>```
+>cd </path/to/somewhere/reasonable/>
+>git clone https://github.com/nbush257/cibrrig
+>cd cibrrig
+>pip install -e .
+>```
+> **Once your virtual (mamba/conda) environment has been set up, `git pull` in the cibrrig directory will update `cibrrig` so you do not have to redo the pip install**
+
 
 Helper packages (Primarily matlab packages) should live in `C:/helpers` on the NPX computer so they are available to all users. Some functionality relies on these packages.
 
@@ -44,9 +59,13 @@ These include:
 --- 
 ## Quick start and Data structure 
 
-**Quickstart** - From recording to data
+**Quickstart** - From recording to data in two lines
+```
+mamba activate cibrrig
+npx_run_all
+```
 
-First activate the virtual environment you installed cibrrig on (e.g. `mamba activate iblenv`)
+### Details:
 
 Main entry points can be run from anywhere as long as the package has been pip installed\
 `npx_run_all` -  Opens a GUI to performs backup, preprocess, and spikesorting\
