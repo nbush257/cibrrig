@@ -403,11 +403,21 @@ def run_probe(
         sort_rez = si.load_extractor(SORT_PATH)
     else:
         _log.info(f"Running {SORTER}")
-        sort_rez = ss.run_sorter_by_property(
+        ## Originally we were sorting by channel shank separately - this caused some issues with some data. 
+        ## The upside of sorting seperately is that it allows for drift to be unique on each shank
+        # sort_rez = ss.run_sorter_by_property(
+        #     sorter_name=SORTER,
+        #     recording=recording,
+        #     grouping_property="group",
+        #     working_folder=SORT_PATH.parent.joinpath("ks4_working"),
+        #     verbose=True,
+        #     remove_existing_folder=False,
+        #     **sorter_params,
+        # )
+        sort_rez = ss.run_sorter(
             sorter_name=SORTER,
             recording=recording,
-            grouping_property="group",
-            working_folder=SORT_PATH.parent.joinpath("ks4_working"),
+            output_folder=SORT_PATH.parent.joinpath("ks4_working"),
             verbose=True,
             remove_existing_folder=False,
             **sorter_params,
