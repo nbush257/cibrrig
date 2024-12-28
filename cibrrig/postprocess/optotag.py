@@ -35,7 +35,7 @@ def compute_pre_post_raster(
     spike_clusters,
     cluster_ids,
     stim_times,
-    stim_duration,
+    stim_duration=None,
     window_time=0.5,
     bin_size=0.001,
     mask_dur=0.002,
@@ -81,10 +81,11 @@ def compute_pre_post_raster(
     )
 
     # if stim_duration exists, remove any spikes within - 1 ms and + mask_duration of offset time
-    stim_offsets_samp = np.searchsorted(post_tscale, stim_duration)
-    post_raster[
-        :, :, stim_offsets_samp - 1 : stim_offsets_samp + int(mask_dur / bin_size)
-    ] = 0
+    if stim_duration is not None:  
+        stim_offsets_samp = np.searchsorted(post_tscale, stim_duration)
+        post_raster[
+            :, :, stim_offsets_samp - 1 : stim_offsets_samp + int(mask_dur / bin_size)
+        ] = 0
 
     return (pre_raster, post_raster)
 
@@ -163,7 +164,7 @@ def run_salt(
 
 
 def compute_tagging_summary(
-    spike_times, spike_clusters, cluster_ids, stim_times, window_time=0.01
+    spike_times, spike_clusters, cluster_ids, stim_times, stim_duration=None,window_time=0.01
 ):
     """
     Computes the number of stims that a spike was observed and the pre and post stim spike rate
@@ -186,6 +187,7 @@ def compute_tagging_summary(
         spike_clusters,
         cluster_ids,
         stim_times,
+        stim_duration=stim_duration,
         window_time=window_time,
         bin_size=bin_size,
     )
@@ -482,7 +484,7 @@ def kstest_optotag(
     return p
 
 
-def run_probe(probe_path, tags, consideration_window, wavelength, plot=False):
+def run_probe(probe_path, tags, consideration_window, wavelength, plot=False,no_matlab=False):
     """
     Computes the optotag statistics on data from one probe.
     Loads in from the ALF format.
@@ -504,7 +506,7 @@ def run_probe(probe_path, tags, consideration_window, wavelength, plot=False):
     """
     spikes = alfio.load_object(probe_path, "spikes")
     clusters = alfio.load_object(probe_path, "clusters")
-    cluster_ids = np.arange(len(clusters))
+    cluster_ids = np.arange(len(clusters.amps),dtype='int16')
 
     spike_times = spikes.times
     spike_clusters = spikes.clusters
@@ -513,15 +515,19 @@ def run_probe(probe_path, tags, consideration_window, wavelength, plot=False):
     n_tags = tags.intervals.shape[0]
     tag_onsets = tags.intervals[:, 0]
     # Compute SALT data
-    p_stat, I_stat = run_salt(
-        spike_times,
-        spike_clusters,
-        cluster_ids,
-        tag_onsets,
-        window_time=consideration_window * 50,
-        stim_duration=tag_duration,
-        consideration_window=consideration_window,
-    )
+    if not no_matlab:
+        p_stat, I_stat = run_salt(
+            spike_times,
+            spike_clusters,
+            cluster_ids,
+            tag_onsets,
+            window_time=consideration_window * 50,
+            stim_duration=tag_duration,
+            consideration_window=consideration_window,
+        )
+    else:
+        p_stat = np.ones_like(cluster_ids)*np.nan
+        I_stat = np.ones_like(cluster_ids)*np.nan
 
     # Compute heuristic data
     n_stims_with_spikes, base_rate, stim_rate = compute_tagging_summary(
@@ -529,6 +535,7 @@ def run_probe(probe_path, tags, consideration_window, wavelength, plot=False):
         spike_clusters,
         cluster_ids,
         tag_onsets,
+        stim_duration=tag_duration,
         window_time=consideration_window,
     )
 
@@ -543,35 +550,38 @@ def run_probe(probe_path, tags, consideration_window, wavelength, plot=False):
     )
 
     # Export to a pqt
-    salt_rez = pd.DataFrame()
-    salt_rez["cluster_id"] = clusters.metrics.cluster_id
-    salt_rez.loc[cluster_ids, "salt_p_stat"] = p_stat
-    salt_rez.loc[cluster_ids, "salt_I_stat"] = I_stat
-    salt_rez.loc[cluster_ids, "n_stims_with_spikes"] = n_stims_with_spikes
-    salt_rez.loc[cluster_ids, "pct_stims_with_spikes"] = (
-        n_stims_with_spikes / n_tags * 100
-    )
-    salt_rez.loc[cluster_ids, "base_rate"] = base_rate
-    salt_rez.loc[cluster_ids, "stim_rate"] = stim_rate
-    salt_rez.loc[cluster_ids, "p_ks"] = p_ks
-    salt_rez["is_tagged"] = False
-    if wavelength == 473:
-        salt_rez.loc[cluster_ids, "is_tagged"] = salt_rez.eval(
-            "salt_p_stat<@SALT_P_CUTOFF & pct_stims_with_spikes>@MIN_PCT_TAGS_WITH_SPIKES"
+    if not no_matlab:
+        salt_rez = pd.DataFrame()
+        salt_rez["cluster_id"] = clusters.metrics.cluster_id
+        salt_rez.loc[cluster_ids, "salt_p_stat"] = p_stat
+        salt_rez.loc[cluster_ids, "salt_I_stat"] = I_stat
+        salt_rez.loc[cluster_ids, "n_stims_with_spikes"] = n_stims_with_spikes
+        salt_rez.loc[cluster_ids, "pct_stims_with_spikes"] = (
+            n_stims_with_spikes / n_tags * 100
         )
-    elif wavelength == 635:
-        # salt_rez.loc[cluster_ids,'is_tagged'] = salt_rez.eval('salt_p_stat<@SALT_P_CUTOFF & pct_stims_with_spikes>@MIN_PCT_TAGS_WITH_SPIKES & stim_rate/base_rate>@RATIO')
-        salt_rez.loc[cluster_ids, "is_tagged"] = salt_rez.eval(
-            "p_ks<@SALT_P_CUTOFF & pct_stims_with_spikes>@MIN_PCT_TAGS_WITH_SPIKES & stim_rate/base_rate>@RATIO"
-        )
+        salt_rez.loc[cluster_ids, "base_rate"] = base_rate
+        salt_rez.loc[cluster_ids, "stim_rate"] = stim_rate
+        salt_rez.loc[cluster_ids, "p_ks"] = p_ks
+        salt_rez["is_tagged"] = False
+        if wavelength == 473:
+            salt_rez.loc[cluster_ids, "is_tagged"] = salt_rez.eval(
+                "salt_p_stat<@SALT_P_CUTOFF & pct_stims_with_spikes>@MIN_PCT_TAGS_WITH_SPIKES"
+            )
+        elif wavelength == 635:
+            # salt_rez.loc[cluster_ids,'is_tagged'] = salt_rez.eval('salt_p_stat<@SALT_P_CUTOFF & pct_stims_with_spikes>@MIN_PCT_TAGS_WITH_SPIKES & stim_rate/base_rate>@RATIO')
+            salt_rez.loc[cluster_ids, "is_tagged"] = salt_rez.eval(
+                "p_ks<@SALT_P_CUTOFF & pct_stims_with_spikes>@MIN_PCT_TAGS_WITH_SPIKES & stim_rate/base_rate>@RATIO"
+            )
 
-    save_fn = probe_path.joinpath(
-        alfio.spec.to_alf("clusters", "optotag", namespace="salt", extension="pqt")
-    )
-    salt_rez.to_parquet(save_fn)
-    is_tagged = {"isTagged": salt_rez["is_tagged"].values}
-    alfio.save_object_npy(probe_path, is_tagged, "clusters", namespace="salt")
-    print(f"optotagging info saved to {save_fn}.")
+        save_fn = probe_path.joinpath(
+            alfio.spec.to_alf("clusters", "optotag", namespace="salt", extension="pqt")
+        )
+        salt_rez.to_parquet(save_fn)
+        is_tagged = {"isTagged": salt_rez["is_tagged"].values}
+        alfio.save_object_npy(probe_path, is_tagged, "clusters", namespace="salt")
+        print(f"optotagging info saved to {save_fn}.")
+    else:
+        print("Not saving SALT results as MATLAB was skipped")
 
     if plot:
         make_plots(
@@ -602,7 +612,7 @@ def run_probe(probe_path, tags, consideration_window, wavelength, plot=False):
         json.dump(params, fid)
 
 
-def run_session(session_path, consideration_window, plot, wavelength):
+def run_session(session_path, consideration_window, plot, wavelength,no_matlab=False):
     """
     Run optotagging statistics on each probe in a session.
     Reads in the laser object to get the opto stimulation parameters.
@@ -635,6 +645,7 @@ def run_session(session_path, consideration_window, plot, wavelength):
             consideration_window=consideration_window,
             wavelength=wavelength,
             plot=plot,
+            no_matlab=no_matlab
         )
 
 
@@ -653,7 +664,8 @@ def run_session(session_path, consideration_window, plot, wavelength):
     help="set wavelength of light (changes color of plots.)",
 )
 @click.option("-p", "--plot", is_flag=True, help="Flag to make plots for each cell")
-def main(session_path, consideration_window, plot, wavelength):
+@click.option("--no-matlab", is_flag=True, help="Flag to skip matlab")
+def main(session_path, consideration_window, plot, wavelength, no_matlab):
     """
     CLI entry to run session
 
@@ -663,8 +675,10 @@ def main(session_path, consideration_window, plot, wavelength):
         plot (bool, optional): If true, plots figures for each unit. Defaults to False.
         wavelength (float): Wavelength  of light used for plotting purposes
     """
+    if no_matlab:
+        print('Skipping SALT computation that requires MATLAB')
     session_path = Path(session_path)
-    run_session(session_path, consideration_window, plot, wavelength)
+    run_session(session_path, consideration_window, plot, wavelength,no_matlab=no_matlab)
 
 
 if __name__ == "__main__":

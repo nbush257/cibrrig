@@ -1,4 +1,6 @@
 ibllib>=2.30
+spikeinterface
+ipython
 myst-parser
 sphinx_rtd_theme
 sphinx-autoapi
