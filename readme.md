@@ -26,9 +26,13 @@ The log file is a `.tsv` file with the name `_cibrrig_<run_name>.g<x>.t<x>.tsv`.
 ## Installation
 Create a virtual environment using mamba/conda.
 >[!WARNING]
->If on SCRI networks it is critically important to specify the python version here. This circumvents the SSL issue we have been running into
+>If on SCRI networks it is critically important to specify the python version here. This circumvents the SSL issue we have been running into. BE SURE YOU HAVE MODIFIED YOUR .condarc file (in `C:/Users/<user>`) appropriately 😉
 
-`mamba create -n cibrrig python=3.12`
+```
+mamba create -n cibrrig python=3.12
+mamba activate cibrrig
+```
+
 
 Then change directory to a place to install cibrrig locally. 
 >[!IMPORTANT]
@@ -36,8 +40,9 @@ Then change directory to a place to install cibrrig locally.
 >```
 >cd C:/helpers/cibrrig
 >git pull
->pip install -e .
+>pip install -e . 
 >```
+>(note the period)
 >OTHERWISE, clone the repo:
 >```
 >cd </path/to/somewhere/reasonable/>
@@ -45,6 +50,7 @@ Then change directory to a place to install cibrrig locally.
 >cd cibrrig
 >pip install -e .
 >```
+>(note the period)
 > **Once your virtual (mamba/conda) environment has been set up, `git pull` in the cibrrig directory will update `cibrrig` so you do not have to redo the pip install**
 
 
@@ -60,6 +66,7 @@ These include:
 ## Quick start and Data structure 
 
 **Quickstart** - From recording to data in two lines
+First, make sure helens and baker are mapped on your computer. You can modify the path in the GUI if your mapped drives do not match the defaults
 ```
 mamba activate cibrrig
 npx_run_all
