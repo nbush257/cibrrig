@@ -374,15 +374,32 @@ def _plot_projection_line_2D(
     segments = np.stack([X[:-1, dims], X[1:, dims]], axis=1)
 
     use_arrow = kwargs.pop("use_arrow", None)
+    mutation_scale = kwargs.pop("mutation_scale", 10)
+    # TODO: implement an arrow in the middle of the line
+    multi_arrow = kwargs.pop("multi_arrow", False)
+
     if use_arrow:
-        (
-            a,
-            b,
-        ) = segments[-1]
-        arrow = FancyArrowPatch(
-            a, b, arrowstyle="-|>", color=color, lw=lw, alpha=alpha, mutation_scale=10
-        )
-        segments = segments[:-1]
+        if segments.shape[0] == 0:
+            use_arrow = False
+        elif segments.shape[0] < 2:
+            multi_arrow = False
+        else:
+            (
+                a,
+                b,
+            ) = segments[-1]
+            arrow = FancyArrowPatch(
+                a, b, arrowstyle="-|>", color=color, lw=lw, alpha=alpha, mutation_scale=mutation_scale
+            )
+            segments = segments[:-1]
+        
+        if multi_arrow:
+            
+            (a,b) = segments[1]
+            arrow2 = FancyArrowPatch(
+                a, b, arrowstyle="-|>", color=color, lw=lw, alpha=alpha, mutation_scale=mutation_scale
+            )
+
     _ = kwargs.pop("s", None)
     lc = LineCollection(segments, alpha=alpha, lw=lw, **kwargs)
     if cvar is not None:
@@ -402,6 +419,8 @@ def _plot_projection_line_2D(
     ax.add_collection(lc)
     if use_arrow:
         ax.add_patch(arrow)
+        if multi_arrow:
+            ax.add_patch(arrow2)
 
     sns.despine()
     ax.autoscale()
@@ -1312,7 +1331,7 @@ def plot_driftmap_with_trace(
     return (ax_raster, ax_trace)
 
 
-def replace_timeaxis_with_scalebar(ax, pad=0.025):
+def replace_timeaxis_with_scalebar(ax, pad=0.025,lw=None,color=None,size=None):
     """
     Replace the x-axis with a horizontal bar showing the time scale of the plot.
 
@@ -1320,14 +1339,25 @@ def replace_timeaxis_with_scalebar(ax, pad=0.025):
         ax (matplotlib.axes._subplots.AxesSubplot): The axes object to modify.
         inverted_y (bool, optional): Set true if the plot has 0 at the top
         pad (float, optional): Padding between the scale bar and the plot. Defaults to 0.01.
+        lw (float, optional): Line width for the scale bar. Defaults to None, which uses the default line width.
+        color (str, optional): Color for the scale bar. Defaults to None, which uses the default text color.
+        size (float, optional): Font size for the scale bar. Defaults to None, which uses the default tick size.
     """
+    if lw is None:
+        lw = plt.rcParams['axes.linewidth']
+    if color is None:
+        color = plt.rcParams['text.color']
+    if size is None:
+        size = plt.rcParams['xtick.labelsize']
+
+
     t0, tf = ax.get_xlim()
     good_tbars = [0.001, 0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10, 30, 60]
     idx = np.searchsorted(good_tbars, (tf - t0) / 5) - 1
     tbar_max = t0 + good_tbars[idx]
     tbar_length = tbar_max - t0
     tbar_label = (
-        f"{tbar_length*1000:0.0f}ms" if tbar_length <= 1 else f"{tbar_length:.0f}s"
+        f"{tbar_length*1000:0.0f}ms" if tbar_length < 1 else f"{tbar_length:.0f}s"
     )
     ymin, ymax = ax.get_ylim()
     yrange = ymax - ymin
@@ -1336,14 +1366,15 @@ def replace_timeaxis_with_scalebar(ax, pad=0.025):
     pad_large = pad_small * 1.1
 
     ax.set_ylim([ymin - pad_large, ymax])
-    ax.hlines(ymin - pad_small, t0, tbar_max, lw=2, color=plt.rcParams["text.color"])
+    ax.hlines(ymin - pad_small, t0, tbar_max, lw=lw, color=color)
     ax.text(
         t0,
         ymin - pad_large,
         tbar_label,
         va="top",
         ha="left",
-        color=plt.rcParams["text.color"],
+        color=color,
+        size=size,
     )
     ax.set_xticks([])
     ax.set_xlabel("")

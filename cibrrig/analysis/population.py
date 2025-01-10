@@ -444,35 +444,43 @@ class Population:
             stim_color = "C1"
         if 'base_color' in kwargs:
             base_color = kwargs.pop("base_color")
+            if base_color == "none":
+                skip_control = True
+            else:
+                skip_control = False
         else:
             base_color = "C0"
+        
+        if len(dims) == 3:
+            lims = kwargs.get("lims", None)
+            if lims is None:
+                lim = np.nanmax(np.abs(X_slice[:, dims]))
+                lims = [-lim, lim]
+                kwargs["lims"] = lims
+                
         if intervals is not None:
-            intervals_baseline = []
-            _temp = t0
-            for _t0, _tf in intervals:
-                intervals_baseline.append([_temp, _t0])
-                _temp = _tf
-            if tf > _temp:
-                intervals_baseline.append([_temp, tf])
-            if len(dims) == 3:
-                lims = kwargs.get("lims", None)
-                if lims is None:
-                    lim = np.nanmax(np.abs(X_slice[:, dims]))
-                    lims = [-lim, lim]
-                    kwargs["lims"] = lims
-            intervals_baseline = np.array(intervals_baseline)
+            if not skip_control:
+                intervals_baseline = []
+                _temp = t0
+                for _t0, _tf in intervals:
+                    intervals_baseline.append([_temp, _t0])
+                    _temp = _tf
+                if tf > _temp:
+                    intervals_baseline.append([_temp, tf])
+                intervals_baseline = np.array(intervals_baseline)
 
+                base_colors = [base_color for _ in range(intervals_baseline.shape[0])]
+                ax = plot_projection_line_multicondition(
+                    X_slice,
+                    self.tbins[s0:sf],
+                    intervals_baseline,
+                    colors=base_colors,
+                    dims=dims,
+                    ax=ax,
+                    **kwargs,
+                )
+                
             stim_colors = [stim_color for _ in range(intervals.shape[0])]
-            base_colors = [base_color for _ in range(intervals_baseline.shape[0])]
-            ax = plot_projection_line_multicondition(
-                X_slice,
-                self.tbins[s0:sf],
-                intervals_baseline,
-                colors=base_colors,
-                dims=dims,
-                ax=ax,
-                **kwargs,
-            )
             ax = plot_projection_line_multicondition(
                 X_slice,
                 self.tbins[s0:sf],
