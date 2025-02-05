@@ -274,13 +274,16 @@ def split_shanks_and_spatial_filter(rec):
     combined_preprocessed_recording = si.aggregate_channels(preprocessed_recordings)
     return combined_preprocessed_recording
 
-def remove_and_interpolate(recording,t0=0,tf=120,remove=True,plot=True):
+def remove_and_interpolate(recording,t0=0,tf=120,remove=True,plot=True,save=True):
     ''' Remove channels outside the brain and interpolate bad channels
     
     Args:
         recording (spikeinterface.RecordingExtractor): Recording extractor object.
         t0 (float, optional): Start time in seconds. Defaults to 0.
         tf (float, optional): End time in seconds. Defaults to 120.
+        remove (bool, optional): If True, remove channels outside the brain. Defaults to True.
+        plot (bool, optional): If True, plot the traces before and after removing bad channels. Defaults to True.
+        save (bool, optional): If True, save the channel labels. Defaults to True.
         
     Returns:
         spikeinterface.RecordingExtractor: Recording extractor object with bad channels removed and interpolated.
@@ -296,6 +299,7 @@ def remove_and_interpolate(recording,t0=0,tf=120,remove=True,plot=True):
 
     # Detect bad channels
     recording_sub = recording.frame_slice(s0,sf)
+    probe_dir = Path(recording.neo_reader.dirname)
     _,chan_labels = si.detect_bad_channels(recording_sub,outside_channels_location='both')
     
     out_channels = np.where(chan_labels=='out')[0]
@@ -319,8 +323,14 @@ def remove_and_interpolate(recording,t0=0,tf=120,remove=True,plot=True):
         ax[0].set_title('Original')
         ax[1].set_title('Removed and interpolated')
         ax[0].set_ylim(0,3840)
+        if save:
+            plt.savefig(probe_dir.joinpath('remove_and_interpolate.png'),dpi=300)
+        plt.close('all')
+    if save:
+        np.save(probe_dir.joinpath('_spikeinterface_ephysChannels.siLabels.npy'),chan_labels)
 
     return (recording_good,chan_labels)
+
 
 def apply_preprocessing(
     recording, session_path, probe_dir, testing, skip_remove_opto=False
@@ -354,9 +364,7 @@ def apply_preprocessing(
     rec_shifted = spre.phase_shift(rec_filtered)
 
     # Remove channels outside the brain and interpolate bad channels
-    rec_interpolated,chan_labels = remove_and_interpolate(rec_shifted)
-    np.save(probe_dir.joinpath('_spikeinterface_ephysChannels.siLabels.npy'),chan_labels)
-    plt.savefig(probe_dir.joinpath('remove_and_interpolate.png'),dpi=300)
+    rec_interpolated,chan_labels = remove_and_interpolate(rec_shifted,remove=True,plot=True,save=True)
     plt.close('all')
 
     # Apply spatial filtering and split shanks
