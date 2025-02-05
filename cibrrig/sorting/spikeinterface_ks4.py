@@ -291,15 +291,15 @@ def remove_and_interpolate(recording,t0=0,tf=120,remove=True,plot=True,save=True
     '''
     _log.info('Removing and interpolating bad channels')
 
-    # Set the start and end times
-    s0 = recording.time_to_sample_index(t0)
-    sf  =int(recording.sampling_frequency*tf) # Something strange happening where sf was negative
-    sf = np.min([sf,recording.get_num_frames()-1])
-    s0 = np.max([s0,0])
+    # Deal with multiple segments
+    if recording.get_num_segments()>1:
+        recording_sub = si.select_segment_recording(recording,0)
+        recording_sub = recording_sub.time_slice(t0,tf)
+    else:
+        recording_sub = recording.time_slice(t0,tf)
+    probe_dir = Path(recording.neo_reader.dirname)
 
     # Detect bad channels
-    recording_sub = recording.frame_slice(s0,sf)
-    probe_dir = Path(recording.neo_reader.dirname)
     _,chan_labels = si.detect_bad_channels(recording_sub,outside_channels_location='both')
     
     out_channels = np.where(chan_labels=='out')[0]
@@ -316,8 +316,8 @@ def remove_and_interpolate(recording,t0=0,tf=120,remove=True,plot=True,save=True
 
     if plot:
         f,ax = plt.subplots(ncols=3,sharey=True)
-        si.plot_traces(recording,time_range=(5,9),clim=(-50,50),ax=ax[0])
-        si.plot_traces(recording_good,time_range=(5,9),clim=(-50,50),ax=ax[1])
+        si.plot_traces(recording,time_range=(5,9),clim=(-50,50),ax=ax[0],segment_index=0)
+        si.plot_traces(recording_good,time_range=(5,9),clim=(-50,50),ax=ax[1],segment_index=0)
 
         ax[2].plot(chan_labels,recording.get_channel_locations()[:,1])
         ax[0].set_title('Original')
