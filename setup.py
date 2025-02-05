@@ -25,6 +25,7 @@ setuptools.setup(
             "ephys_to_alf = cibrrig.archiving.ephys_data_to_alf:main",
             "spikesort = cibrrig.sorting.spikeinterface_ks4:cli",
             "convert_ks_to_alf = cibrrig.postprocess.convert_ks_to_alf:main",
+            "ephys_qc = cibrrig.preprocess.preproc_pipeline:runQC",
         ]
     },
 )

@@ -47,11 +47,14 @@ MOTION_PRESET = "kilosort_like"  # 'kilosort_like','nonrigid_accurate'
 SORTER = "kilosort4"
 
 # Set the scratch directory
-try:
-    SCRATCH_DIR = Path(r"D:/si_temp")
-    SCRATCH_DIR.mkdir(exist_ok=True)
-except Exception:
-    _log.warning("D: drive not found. Are you sorting on the correct computer?")
+if sys.platform == "linux":
+    SCRATCH_DIR = Path("si_temp")
+elif sys.platform == "win32":
+    try:
+        SCRATCH_DIR = Path(r"D:/si_temp")
+        SCRATCH_DIR.mkdir(exist_ok=True)
+    except Exception:
+        _log.warning("D: drive not found. Are you sorting on the correct computer?")
 
 
 def print_elapsed_time(start_time):
@@ -271,6 +274,55 @@ def split_shanks_and_spatial_filter(rec):
     combined_preprocessed_recording = si.aggregate_channels(preprocessed_recordings)
     return combined_preprocessed_recording
 
+def remove_and_interpolate(recording,t0=0,tf=120,remove=True,plot=True):
+    ''' Remove channels outside the brain and interpolate bad channels
+    
+    Args:
+        recording (spikeinterface.RecordingExtractor): Recording extractor object.
+        t0 (float, optional): Start time in seconds. Defaults to 0.
+        tf (float, optional): End time in seconds. Defaults to 120.
+        
+    Returns:
+        spikeinterface.RecordingExtractor: Recording extractor object with bad channels removed and interpolated.
+        np.array: Array of channel indices that were removed.
+    '''
+    _log.info('Removing and interpolating bad channels')
+
+    # Set the start and end times
+    s0 = recording.time_to_sample_index(t0)
+    sf = recording.time_to_sample_index(tf)    
+    sf = np.min([sf,recording.get_num_samples()-1])
+    s0 = np.max([s0,0])
+
+    # Detect bad channels
+    recording_sub = recording.frame_slice(s0,sf)
+    _,chan_labels = si.detect_bad_channels(recording_sub,outside_channels_location='both')
+    
+    out_channels = np.where(chan_labels=='out')[0]
+
+    # Set dead or noise channels to bad (i.e., exclude out channels)
+    bad_channels = recording.channel_ids[np.isin(chan_labels,['dead','noise'])]
+    
+    # Remove channels outside the brain
+    if remove:
+        recording_good = recording.remove_channels(recording.channel_ids[out_channels])
+        recording_good = si.interpolate_bad_channels(recording_good,bad_channels)
+    else:
+        recording_good = si.interpolate_bad_channels(recording,bad_channels)
+
+    if plot:
+        f,ax = plt.subplots(ncols=3,sharey=True)
+        si.plot_traces(recording,time_range=(5,9),clim=(-50,50),ax=ax[0])
+        si.plot_traces(recording_good,time_range=(5,9),clim=(-50,50),ax=ax[1])
+
+        ax[2].plot(chan_labels,recording.get_channel_locations()[:,1])
+        ax[0].set_title('Original')
+        ax[1].set_title('Removed and interpolated')
+        ax[0].set_ylim(0,3840)
+
+
+
+    return (recording_good,chan_labels)
 
 def apply_preprocessing(
     recording, session_path, probe_dir, testing, skip_remove_opto=False
@@ -303,9 +355,11 @@ def apply_preprocessing(
     # Apply phase shift to the filtered recording
     rec_shifted = spre.phase_shift(rec_filtered)
 
-    # Detect and interpolate bad channels in the phase-shifted recording
-    bad_channel_ids, all_channels = spre.detect_bad_channels(rec_shifted)
-    rec_interpolated = spre.interpolate_bad_channels(rec_shifted, bad_channel_ids)
+    # Remove channels outside the brain and interpolate bad channels
+    rec_interpolated,chan_labels = remove_and_interpolate(rec_shifted)
+    np.save(probe_dir.joinpath('_spikeinterface_ephysChannels.siLabels.npy'),chan_labels)
+    plt.savefig(probe_dir.joinpath('remove_and_interpolate.png'),dpi=300)
+    plt.close('all')
 
     # Apply spatial filtering and split shanks
     rec_destriped = split_shanks_and_spatial_filter(rec_interpolated)

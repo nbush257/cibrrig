@@ -460,12 +460,14 @@ def main():
     sessions_paths.sort()
     for session in sessions_paths:
         # RUN EXTRACT AND PREPROCESS
-        preproc_pipeline.run(session, ~run_ephysQC)
+        skip_ephysQC = not run_ephysQC
+        preproc_pipeline.run(session, skip_ephysQC)
         rec = Recording(session)
         rec.concatenate_session()
 
         # RUN SPIKESORTING
-        spikeinterface_ks4.run(session, skip_remove_opto=~remove_opto_artifact)
+        skip_remove_opto = not remove_opto_artifact
+        spikeinterface_ks4.run(session, skip_remove_opto=skip_remove_opto)
         params_files = session.rglob("params.py")
 
         # PHY EXTRACT WAVEFORMS
