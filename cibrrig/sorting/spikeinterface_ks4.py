@@ -290,8 +290,8 @@ def remove_and_interpolate(recording,t0=0,tf=120,remove=True,plot=True):
 
     # Set the start and end times
     s0 = recording.time_to_sample_index(t0)
-    sf = recording.time_to_sample_index(tf)    
-    sf = np.min([sf,recording.get_num_samples()-1])
+    sf  =int(recording.sampling_frequency*tf) # Something strange happening where sf was negative
+    sf = np.min([sf,recording.get_num_frames()-1])
     s0 = np.max([s0,0])
 
     # Detect bad channels
@@ -319,8 +319,6 @@ def remove_and_interpolate(recording,t0=0,tf=120,remove=True,plot=True):
         ax[0].set_title('Original')
         ax[1].set_title('Removed and interpolated')
         ax[0].set_ylim(0,3840)
-
-
 
     return (recording_good,chan_labels)
 
