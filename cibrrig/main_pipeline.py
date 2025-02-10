@@ -64,6 +64,9 @@ POSSIBLE_WIRINGS = {
     ],
 }
 
+DEFAULT_SUBJECTS_PATH = Path("D:/sglx_data/Subjects")
+DEFAULT_ARCHIVE_PATH = Path("U:/alf_data_repo/ramirez/Subjects")
+DEFAULT_WORKING_PATH = Path("X:/alf_data_repo/ramirez/Subjects")
 
 class DirectorySelector(QWidget):
     """
@@ -88,9 +91,9 @@ class DirectorySelector(QWidget):
         Set default settings and initialize the UI.
         """
         super().__init__()
-        self.local_run_path = Path("D:/sglx_data/Subjects")
-        self.remote_archive_path = Path("U:/alf_data_repo/ramirez/Subjects")
-        self.remote_working_path = Path("X:/alf_data_repo/ramirez/Subjects")
+        self.local_run_path = DEFAULT_SUBJECTS_PATH
+        self.remote_archive_path = DEFAULT_ARCHIVE_PATH
+        self.remote_working_path = DEFAULT_WORKING_PATH
         self.remove_opto_artifact = True
         self.run_ephys_qc = True
 
@@ -192,7 +195,11 @@ class DirectorySelector(QWidget):
             self.remove_opto_artifact = False
 
     def submit(self):
-        self.close()  # Close the GUI window
+        if self.local_run_path == DEFAULT_SUBJECTS_PATH:
+            print("You picked the root Subjects folder. This is a scary thing to do and incorrect. Please select a run folder.")
+            return None
+        else:
+            self.close()  # Close the GUI window
 
     def get_paths(self):
         """Return the selected paths and options"""
