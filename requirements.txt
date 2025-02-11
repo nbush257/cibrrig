@@ -4,3 +4,4 @@ ipython
 myst-parser
 sphinx_rtd_theme
 sphinx-autoapi
+oursin

@@ -3,6 +3,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import oursin as urchin
+import json
 import pandas as pd
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (
@@ -25,7 +26,10 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
+    QTextEdit
 )
+import numpy as np
+from cibrrig.plot import laser_colors
 
 DV_MISMATCH = 1000
 BREGMA = (5200, 5700, 440)
@@ -191,6 +195,7 @@ class DirectorySelector(QWidget):
         if directory:
             self.local_run_path = Path(directory)
             self.local_run_line_edit.setText(str(self.local_run_path))
+            self.get_session_info()
 
     def select_remote_archive_path(self):
         """Select the remote archive path with UI"""
@@ -217,6 +222,22 @@ class DirectorySelector(QWidget):
         else:
             self.remove_opto_artifact = False
 
+    def get_gates(self):
+        self.gate_paths = list(self.local_run_path.glob("*_g[0-9]*"))
+        self.n_gates = len(self.gate_paths)
+
+    def infer_num_probes(self):
+        self.num_probes = 0
+        for gate in self.gate_paths:
+            probes = list(gate.glob('*imec*'))
+            self.num_probes = max(len(probes),self.num_probes)
+        # Update the spinbox value
+        self.num_probes_spinbox.setValue(self.num_probes)
+    
+    def get_session_info(self):
+        self.get_gates()
+        self.infer_num_probes()
+
     def submit(self):
         self.close()  # Close the GUI window
 
@@ -228,6 +249,7 @@ class DirectorySelector(QWidget):
             self.remote_working_path,
             self.remove_opto_artifact,
             self.run_ephys_qc,
+            self.gate_paths,
             self.num_probes_spinbox.value(),
             self.num_opto_fibers_spinbox.value(),
         )
@@ -243,7 +265,7 @@ class OptoFileFinder(QDialog):
 
     opto_file_selected = pyqtSignal(Path)
 
-    def __init__(self):
+    def __init__(self,title=''):
         """Initialize the dialog box"""
         super().__init__()
         self.setWindowTitle("File Selection")
@@ -251,7 +273,7 @@ class OptoFileFinder(QDialog):
 
         layout = QVBoxLayout()
 
-        label = QLabel("opto_calibration.json not found. Please select a file or skip.")
+        label = QLabel(f"opto_calibration.json not found for {title}. Please select a file or skip.")
         layout.addWidget(label)
 
         self.select_button = QPushButton("Select File")
@@ -299,13 +321,14 @@ class WiringEditor(QDialog):
 
     """
 
-    def __init__(self):
+    def __init__(self,title=''):
         super().__init__()
+        self.title = title
         self.initUI()
 
     def initUI(self):
         """Initialize the UI layout"""
-        self.setWindowTitle("Dictionary Editor")
+        self.setWindowTitle(f"Wiring Editor for {self.title}")
         self.setGeometry(100, 100, 600, 200)
 
         main_layout = QVBoxLayout()
@@ -417,14 +440,15 @@ class WiringEditor(QDialog):
         return self.output_wiring
 
 
-class InsertionTableApp(QDialog):
+class InsertionTableAppBase(QDialog):
     def __init__(self, n_rows=1, n_gates=10, name=""):
         super().__init__()
         self.setWindowTitle(f"Insertion Data Table {name}")
+        self.n_gates = n_gates
 
         # Get screen size and set window size relative to it
         screen = QDesktopWidget().screenGeometry()
-        width, height = int(screen.width() * 0.6), int(screen.height() * 0.5)
+        width, height = int(screen.width() * 0.7), int(screen.height() * 0.5)
         self.setGeometry(100, 100, width, height)
 
         # Create central widget and layout
@@ -432,42 +456,19 @@ class InsertionTableApp(QDialog):
 
         # Add information label
         info_label = QLabel(
-            "ML: LEFT is negative\nAP: ROSTRAL is negative\nDV: DORSAL is negative"
+            f"LOG ALL INSERTIONS FOR {name}, INCLUDING THOSE WITHOUT ASSOCIATED RECORDINGS.\nIF MULTIPLE GATES EXIST FOR THE SAME INSERTION,REPEAT THE INSERTION NUMBER BUT SET THE GATE APPROPRIATELY.\nML: LEFT is negative\nAP: ROSTRAL is negative\nDV: DORSAL is negative"
         )
         info_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(info_label)
 
-        headers = [
-            "Insertion number",
-            "ML (microns)",
-            "AP (microns)",
-            "DV (microns)",
-            "phi (azimuth/yaw)",
-            "theta (pitch/elevation)",
-            "Notes",
-            "Reference",
-            "Gate",
-            "Insertion Type",
-        ]
-        self.gate_column = 8
-        self.reference_column = 7
-        self.insertion_type_column = 9
-        self.phi_column = 4
-        self.theta_column = 5
-        self.numeric_columns = [1, 2, 3, 4, 5]
-        self.numeric_headers = headers[
-            self.numeric_columns[0] : self.numeric_columns[-1] + 1
-        ]
-        self.headers = headers
-        self.n_gates = n_gates
-
+        self.get_headers()
         # Create table
         self.table = QTableWidget()
-        self.table.setColumnCount(len(headers))
+        self.table.setColumnCount(len(self.headers))
         self.table.setRowCount(n_rows)
 
         # Set headers
-        self.table.setHorizontalHeaderLabels(headers)
+        self.table.setHorizontalHeaderLabels(self.headers)
 
         # Fill insertion numbers and setup columns
         for row in range(n_rows):
@@ -485,7 +486,7 @@ class InsertionTableApp(QDialog):
         # Add export button
         export_button = QPushButton("Export to DataFrame")
         export_button.setStyleSheet(
-            "background-color: lightblue; color: black; font-weight: bold;"
+            "background-color: #f5e6ab; color: black; font-weight: bold;"
         )
         export_button.clicked.connect(self.create_dataframe)
         button_layout.addWidget(export_button)
@@ -495,6 +496,11 @@ class InsertionTableApp(QDialog):
         add_row_button.clicked.connect(self.add_new_row)
         button_layout.addWidget(add_row_button)
 
+        # Add button to delete the last row
+        delete_row_button = QPushButton("Delete Last Row")
+        delete_row_button.clicked.connect(self.delete_last_row)
+        button_layout.addWidget(delete_row_button)
+
         # Add button to add another column
         add_column_button = QPushButton("Add Column")
         add_column_button.clicked.connect(self.add_new_column)
@@ -503,10 +509,35 @@ class InsertionTableApp(QDialog):
         # Add the button layout to the main layout
         layout.addLayout(button_layout)
 
+    def get_headers(self):
+        headers = [
+            "Insertion number",
+            "Gate",
+            "Reference",
+            "ML (microns)",
+            "AP (microns)",
+            "DV (microns)",
+            "phi (azimuth/yaw)",
+            "theta (pitch/elevation)",
+            "Insertion Type",
+        ]
+        self.gate_column = 1
+        self.reference_column = 2
+        self.numeric_columns = [3, 4, 5, 6, 7]
+        self.phi_column = 6
+        self.theta_column = 7
+        self.insertion_type_column = 8
+        self.numeric_headers = headers[
+            3:8
+        ]
+        self.headers = headers
+
+        return headers
+
     def add_row(self, row):
-        # Insertion number (read-only)
+        # Insertion number (modifiable)
         insertion_item = QTableWidgetItem(str(row))
-        insertion_item.setFlags(insertion_item.flags() & ~Qt.ItemIsEditable)
+        insertion_item.setTextAlignment(Qt.AlignCenter)
         self.table.setItem(row, 0, insertion_item)
 
         # AP, DV, ML columns (integer input)
@@ -515,15 +546,10 @@ class InsertionTableApp(QDialog):
             item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, col, item)
 
-        # Notes column (text field)
-        notes_item = QTableWidgetItem()
-        self.table.setItem(row, 6, notes_item)
-
         # Reference column (dropdown)
         reference_combo = QComboBox()
         reference_options = ["bregma", "lambda", "occipital apex", "occipital nadir"]
         reference_combo.addItems(reference_options)
-        reference_combo.setCurrentText("occipital apex")
         reference_combo.currentTextChanged.connect(lambda: self.update_angles(row))
         self.table.setCellWidget(row, self.reference_column, reference_combo)
 
@@ -535,11 +561,14 @@ class InsertionTableApp(QDialog):
 
         # Insertion type column (dropdown)
         insertion_type_combo = QComboBox()
-        insertion_type_combo.addItems(INSERTION_TYPES)
+        insertion_type_combo.addItems(self.get_insertion_types())
         self.table.setCellWidget(row, self.insertion_type_column, insertion_type_combo)
 
         # Set default angles for "occipital apex"
         self.update_angles(row)
+
+    def get_insertion_types(self):
+        return INSERTION_TYPES
 
     def update_angles(self, row):
         reference_combo = self.table.cellWidget(row, self.reference_column)
@@ -563,6 +592,35 @@ class InsertionTableApp(QDialog):
         current_row_count = self.table.rowCount()
         self.table.insertRow(current_row_count)
         self.add_row(current_row_count)
+
+        # Copy the previous row's data
+        if current_row_count > 0:
+            self.copy_previous_row(current_row_count)
+
+        # Increment insertion number
+        self.table.item(current_row_count, 0).setText(str(current_row_count))
+
+    def delete_last_row(self):
+        current_row_count = self.table.rowCount()
+        if current_row_count > 0:
+            self.table.removeRow(current_row_count - 1)
+
+    def copy_previous_row(self, current_row_count):
+        for col in range(1, self.table.columnCount()):
+            previous_item = self.table.item(current_row_count - 1, col)
+            if previous_item:
+                new_item = QTableWidgetItem(previous_item.text())
+                new_item.setTextAlignment(Qt.AlignCenter)
+                self.table.setItem(current_row_count, col, new_item)
+            else:
+                previous_widget = self.table.cellWidget(current_row_count - 1, col)
+                if previous_widget:
+                    if isinstance(previous_widget, QComboBox):
+                        new_widget = QComboBox()
+                        for i in range(previous_widget.count()):
+                            new_widget.addItem(previous_widget.itemText(i))
+                        new_widget.setCurrentIndex(previous_widget.currentIndex())
+                        self.table.setCellWidget(current_row_count, col, new_widget)
 
     def add_new_column(self):
         column_name, ok = QInputDialog.getText(
@@ -614,8 +672,13 @@ class InsertionTableApp(QDialog):
         print(df)
 
     def convert2ccf(self):
-        if not hasattr(self, "df"):
-            self.export_to_dataframe()
+        print('converting to ccf')
+        self.df['AP CCF'] = np.nan
+        self.df['ML CCF'] = np.nan
+        self.df['DV CCF'] = np.nan
+        self.df['phi CCF'] = np.nan
+        self.df['theta CCF'] = np.nan
+
         for i, row in self.df.iterrows():
             ap = row["AP (microns)"]
             ml = row["ML (microns)"]
@@ -638,12 +701,11 @@ class InsertionTableApp(QDialog):
 
             theta = theta - PITCH_CORRECTION
 
-            self.df.iloc[i]["AP CCF"] = apccf
-            self.df.iloc[i]["ML CCF"] = mlccf
-            self.df.iloc[i]["DV CCF"] = dvccf
-            self.df.iloc[i]["phi CCF"] = phi
-            self.df.iloc[i]["theta CCF"] = theta
-            self.df.iloc[i]["color"] = COLORS[int(row["Insertion number"])]
+            self.df.loc[i,"AP CCF"] = apccf
+            self.df.loc[i,"ML CCF"] = mlccf
+            self.df.loc[i,"DV CCF"] = dvccf
+            self.df.loc[i,"phi CCF"] = phi
+            self.df.loc[i,"theta CCF"] = theta
 
     def create_dataframe(self):
         self.export_to_dataframe()
@@ -652,6 +714,121 @@ class InsertionTableApp(QDialog):
 
     def get_insertions(self):
         return self.df
+
+
+class NpxInsertionTableApp(InsertionTableAppBase):
+    def __init__(self, n_rows=1, n_gates=10, name=""):
+        super().__init__(n_rows, n_gates, name)
+
+    def get_insertion_types(self):
+        return ["npx1.0", "npx2.0"]
+
+    def add_row(self, row):
+        super().add_row(row)
+        reference_combo = self.table.cellWidget(row, self.reference_column)
+        reference_combo.setCurrentText("occipital apex")
+        insertion_type_combo = self.table.cellWidget(row, self.insertion_type_column)
+        insertion_type_combo.setCurrentText("npx1.0")
+
+
+class OptoInsertionTableApp(InsertionTableAppBase):
+    def __init__(self, n_rows=1, n_gates=10, name=""):
+        super().__init__(n_rows, n_gates, name)
+        self.setStyleSheet("background-color: lightblue;")
+        header = self.table.horizontalHeader()
+        header.setStyleSheet("QHeaderView::section { background-color: lightblue; color: black; }")
+
+    def get_headers(self):
+        headers = super().get_headers()
+        headers.extend(["wavelength", "diameter"])
+        return headers
+
+    def get_insertion_types(self):
+        return ["opto"]
+
+    def add_row(self, row):
+        super().add_row(row)
+        reference_combo = self.table.cellWidget(row, self.reference_column)
+        reference_combo.setCurrentText("bregma")
+        insertion_type_combo = self.table.cellWidget(row, self.insertion_type_column)
+        insertion_type_combo.setCurrentText("opto_200um")
+
+        # Add wavelength and diameter columns with default values
+        wavelength_item = QTableWidgetItem("473")
+        wavelength_item.setTextAlignment(Qt.AlignCenter)
+        self.table.setItem(row, self.table.columnCount() - 2, wavelength_item)
+
+        diameter_item = QTableWidgetItem("200")
+        diameter_item.setTextAlignment(Qt.AlignCenter)
+        self.table.setItem(row, self.table.columnCount() - 1, diameter_item)
+
+    # Modify the inherited convert2ccf method to replace the color with the wavelength
+    def convert2ccf(self):
+        # Call the base class method
+        super().convert2ccf()
+
+        # Replace the color with the wavelength
+        self.df['wavelength'] = self.df['wavelength'].apply(pd.to_numeric, errors='coerce')
+        self.df['color'] = self.df['wavelength'].apply(lambda x: laser_colors.get(x, '#000000'))
+
+class NotesDialog(QDialog):
+    def __init__(self, n_gates=1):
+        super().__init__()
+        self.setWindowTitle("Notes Dialog")
+
+        # initialize the window to be big
+        self.setGeometry(100, 100, 1000, 800)
+
+
+        # Create layout
+        layout = QVBoxLayout(self)
+
+        # Create a vertical layout for the overall notes
+        overall_notes_layout = QHBoxLayout()
+
+        # Add overall notes label and text field
+        overall_notes_label = QLabel("Overall Notes:\nInjections\nProtocol\netc.")
+        overall_notes_layout.addWidget(overall_notes_label)
+        self.overall_notes_text = QTextEdit()  # Use QTextEdit for larger text area
+        overall_notes_layout.addWidget(self.overall_notes_text)
+
+        # Add the overall notes layout to the main layout
+        layout.addLayout(overall_notes_layout)
+
+        # Create a vertical layout for the gate notes
+        gate_notes_layout = QHBoxLayout()
+
+        # Add text fields to the gate notes layout
+        self.text_fields = []
+        for i in range(n_gates):
+            label = QLabel(f"Gate {i} Notes:")
+            text_field = QTextEdit()  # Use QTextEdit for larger text area
+            self.text_fields.append(text_field)
+            gate_notes_layout.addWidget(label)
+            gate_notes_layout.addWidget(text_field)
+
+        # Add the gate notes layout to the main layout
+        layout.addLayout(gate_notes_layout)
+
+        # Add submit button
+        submit_button = QPushButton("Submit")
+        submit_button.clicked.connect(self.submit)
+        layout.addWidget(submit_button)
+
+    def submit(self):
+        self.close()  # Close the dialog box
+
+    def save_notes(self,fn):
+        # Save notes in JSON form
+        notes = {
+            "overall_notes": self.overall_notes_text.toPlainText(),
+            "gate_notes": {f"gate_{i}": text_field.toPlainText() for i, text_field in enumerate(self.text_fields)},
+        }
+        with open(fn, "w") as f:
+            json.dump(notes, f)
+
+
+        return notes
 
 
 def plot_probe_insertion(df):

@@ -20,7 +20,7 @@ import json
 from cibrrig.archiving import backup, ephys_data_to_alf
 from cibrrig.preprocess import preproc_pipeline
 from cibrrig.sorting import spikeinterface_ks4
-from cibrrig.gui import DirectorySelector, OptoFileFinder, WiringEditor,InsertionTableApp, plot_probe_insertion, plot_insertion_layout
+from cibrrig.gui import DirectorySelector, OptoFileFinder, WiringEditor,OptoInsertionTableApp, NpxInsertionTableApp,NotesDialog,plot_probe_insertion, plot_insertion_layout
 import subprocess
 import pandas as pd
 
@@ -47,6 +47,7 @@ def main():
         remote_working_path,
         remove_opto_artifact,
         run_ephysQC,
+        gate_paths,
         num_probes,
         num_opto_fibers
     ) = window.get_paths()
@@ -57,14 +58,17 @@ def main():
             "You picked the root Subjects folder. This is a scary thing to do and incorrect."
         )
 
-    # Get all the gates recorded for this subject
-    gate_paths = list(local_run_path.glob("*_g[0-9]*"))
+    n_gates = len(gate_paths)
+    notes_fn = local_run_path.joinpath("notes.json")
+    notes = NotesDialog(n_gates)
+    notes.save_notes(notes_fn)
 
-    # Get the opto_calibration.json files
+
+    # Get the opto calibrations and wiring files
     for gate in gate_paths:
         opto_fn = list(gate.glob("opto_calibration.json"))
         if not opto_fn:
-            opto_finder = OptoFileFinder()
+            opto_finder = OptoFileFinder(title=f'{gate.stem}')
             opto_finder.exec_()
             opto_fn = opto_finder.get_opto_file()
             print(opto_fn)
@@ -75,40 +79,40 @@ def main():
                 print("Skipping opto file")
 
     # Get the wiring.json files
-    for gate in gate_paths:
         wiring_fn = list(gate.glob("nidq.wiring.json"))
         if not wiring_fn:
             wiring_fn = gate.joinpath("nidq.wiring.json")
-            wiring_editor = WiringEditor()
+            wiring_editor = WiringEditor(title=gate.stem)
             wiring_editor.exec_()
             wiring = wiring_editor.get_output_wiring()
             with open(wiring_fn, "w") as fid:
                 json.dump(wiring, fid)
             print("Created wiring file")
     
-    # Plot insertions and save
+    # Get insertions and save
     insertions = pd.DataFrame()
     for ii in range(num_probes):
         name = f'imec{ii}'
-        insertion_table = InsertionTableApp(name=name)
+        insertion_table = NpxInsertionTableApp(name=name)
         insertion_table.exec_()
         _insertions = insertion_table.get_insertions()
         _insertions['probe'] = f'imec{ii}'
         _insertions.to_csv(local_run_path.joinpath(f'_cibrrig_{name}.insertions.csv'))
 
-        insertions = pd.concat([insertions, _insertions], axis=0)
+        insertions = pd.concat([insertions, _insertions])
 
     for ii in range(num_opto_fibers):
         name = f'opto{ii}'
-        insertion_table = InsertionTableApp(name=name)
+        insertion_table = OptoInsertionTableApp(name=name)
         insertion_table.exec_()
         _insertions = insertion_table.get_insertions()
         _insertions['probe'] = f'opto{ii}'
         _insertions.to_csv(local_run_path.joinpath(f'_cibrrig_{name}.insertions.csv'))
 
-        insertions = pd.concat([insertions, _insertions], axis=0)
+        insertions = pd.concat([insertions, _insertions])
 
     # TODO: Plotting insertions
+    return
 
     # RUN BACKUP
     backup.no_gui(local_run_path, remote_archive_path)
