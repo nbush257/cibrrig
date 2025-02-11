@@ -716,6 +716,7 @@ class InsertionTableAppBase(QDialog):
         return self.df
 
 
+#TODO: Fix colors column for NPX
 class NpxInsertionTableApp(InsertionTableAppBase):
     def __init__(self, n_rows=1, n_gates=10, name=""):
         super().__init__(n_rows, n_gates, name)
@@ -730,6 +731,12 @@ class NpxInsertionTableApp(InsertionTableAppBase):
         insertion_type_combo = self.table.cellWidget(row, self.insertion_type_column)
         insertion_type_combo.setCurrentText("npx1.0")
 
+    def convert2ccf(self):
+        # Call the base class method
+        super().convert2ccf()
+
+        # Replace the color with the insertion number
+        self.df['color'] = self.df['Insertion number'].apply(lambda x: COLORS[int(x) % len(COLORS)])
 
 class OptoInsertionTableApp(InsertionTableAppBase):
     def __init__(self, n_rows=1, n_gates=10, name=""):
