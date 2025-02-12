@@ -30,6 +30,9 @@ from PyQt5.QtWidgets import (
 )
 import numpy as np
 from cibrrig.plot import laser_colors
+import asyncio
+from PIL import Image
+import seaborn as sns
 
 DV_MISMATCH = 1000
 BREGMA = (5200, 5700, 440)
@@ -737,6 +740,7 @@ class NpxInsertionTableApp(InsertionTableAppBase):
 
         # Replace the color with the insertion number
         self.df['color'] = self.df['Insertion number'].apply(lambda x: COLORS[int(x) % len(COLORS)])
+        self.df['diameter'] = np.nan
 
 class OptoInsertionTableApp(InsertionTableAppBase):
     def __init__(self, n_rows=1, n_gates=10, name=""):
@@ -838,28 +842,29 @@ class NotesDialog(QDialog):
         return notes
 
 
-def plot_probe_insertion(df):
+async def plot_probe_insertion(df,save_fn):
     ap = df["AP CCF"].values
     ml = df["ML CCF"].values
     dv = df["DV CCF"].values
     phi = df["phi CCF"].values
     theta = df["theta CCF"].values
     color = df["color"].values
-    npx_scale = [0.07, 3.84, 0.02]
-    opto_scale = lambda x: [x, 5, x]
-    scale_map = {
-        "npx1.0": npx_scale,
-        "npx2.0": npx_scale,
-        "opto_200um": opto_scale(0.2),
-        "opto_400um": opto_scale(0.4),
-        "opto_600um": opto_scale(0.6),
-    }
+    
+    opto_scale = lambda x: [x/2e3, 5, x/2e3]# Convert from diameter in um to raidus in mm
+    scales = []
+    for i,row in df.iterrows():
+        diameter = float(row["diameter"])
+        if np.isnan(diameter):
+            scale = [0.07, 3.84, 0.02]
+        else:
+            scale = opto_scale(diameter)
+        print(scale)
+        scales.append(scale)
 
     n_probes = len(ap)
     positions = [(ap[i], ml[i], dv[i]) for i in range(n_probes)]
     angles = [(phi[i], theta[i], 0) for i in range(n_probes)]
     colors = [color[i] for i in range(n_probes)]
-    scales = [scale_map[df["Insertion Type"].values[i]] for i in range(n_probes)]
 
     delay = 1
     urchin.setup()
@@ -873,6 +878,7 @@ def plot_probe_insertion(df):
     urchin.ccf25.grey.set_color("#000000")
     time.sleep(delay)
     urchin.ccf25.grey.set_alpha(0.1)
+    time.sleep(delay)
     brain_areas = ["NTS", "VII", "AMB", "LRNm"]
     area_list = urchin.ccf25.get_areas(brain_areas)
     urchin.ccf25.set_visibilities(area_list, True)
@@ -892,36 +898,61 @@ def plot_probe_insertion(df):
     urchin.probes.set_colors(probes, colors)
     # time.sleep(delay)
     urchin.probes.set_scales(probes, scales)
+    # time.sleep(delay)
 
     urchin.camera.main.set_rotation((-80, 140, 0))
     time.sleep(delay)
 
+    a_cam = urchin.camera.Camera()
     s_cam = urchin.camera.Camera()
-    h_cam = urchin.camera.Camera()
     c_cam = urchin.camera.Camera()
 
-    s_cam.set_rotation([0, -90, 90])
-    s_cam.set_zoom(7)
+    a_cam.set_rotation('axial')
+    a_cam.set_zoom(7)
 
-    h_cam.set_rotation([0, 0, 90])
-    h_cam.set_zoom(7)
+    s_cam.set_rotation('sagittal')
+    s_cam.set_zoom(5)
 
-    c_cam.set_rotation([-90, 0, 0])
-    c_cam.set_zoom(7)
+    c_cam.set_rotation('coronal')
+    c_cam.set_zoom(5)
+
+    wd = 1800
+    ht = 1200
+
+    angled_png = await urchin.camera.main.screenshot(size=[wd,ht])
+    time.sleep(0.1)
+    axial_png = await a_cam.screenshot(size=[wd,ht])
+    time.sleep(0.1)
+    sagittal_png = await s_cam.screenshot(size=[wd,ht])
+    time.sleep(0.1)
+    coronal_png = await c_cam.screenshot(size=[wd,ht])
+    time.sleep(0.1)
+
+    grid_image = Image.new('RGBA', (wd*2, ht*2))
+
+    grid_image.paste(angled_png, (0, 0))
+    grid_image.paste(sagittal_png, (wd, 0))
+    grid_image.paste(axial_png, (0, ht))
+    grid_image.paste(coronal_png, (wd, ht))
+
+    grid_image.save(save_fn)
 
 
-def plot_insertion_layout(df):
+def plot_insertion_layout(df,save_fn):
+    ref_list =["occipital apex", "occipital nadir"]
+    df = df.query('Reference in @ref_list')
     f = plt.figure()
     ax = f.add_subplot(111)
     for i, row in df.iterrows():
-        if row["Reference"] in ["occipital apex", "occipital nadir"]:
-            insertion_num = int(row["Insertion number"])
-            gate = row["Gate"]
-            ml = row["ML (microns)"]
-            dv = row["DV (microns)"]
-            s = f"Insertion {insertion_num} - {gate}"
-            ax.text(ml, dv, s, color=COLORS[insertion_num], ha="left", va="bottom")
-            ax.plot(ml, dv, "o", color=COLORS[insertion_num])
+        insertion_num = int(row["Insertion number"])
+        gate = row["Gate"]
+        ml = row["ML (microns)"]
+        dv = row["DV (microns)"]
+        color = row["color"]    
+        probe = row["probe"]
+        s = f"{probe} - insertion {insertion_num} - {gate}"
+        ax.text(ml, dv, s, color=color, ha="left", va="bottom")
+        ax.plot(ml, dv, "o", color=color)
     plt.xlabel("ML (microns)")
     plt.ylabel("DV (microns)")
 
@@ -930,5 +961,6 @@ def plot_insertion_layout(df):
 
     plt.title("Caudal Approach Layout Coronal Projection")
     plt.tight_layout()
-    plt.show()
-    time.sleep(0.1)
+    sns.despine(trim=True)
+    plt.savefig(save_fn)
+    plt.close('all')

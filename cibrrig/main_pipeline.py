@@ -23,6 +23,7 @@ from cibrrig.sorting import spikeinterface_ks4
 from cibrrig.gui import DirectorySelector, OptoFileFinder, WiringEditor,OptoInsertionTableApp, NpxInsertionTableApp,NotesDialog,plot_probe_insertion, plot_insertion_layout
 import subprocess
 import pandas as pd
+import asyncio
 
 
 def main():
@@ -97,7 +98,7 @@ def main():
         insertion_table.exec_()
         _insertions = insertion_table.get_insertions()
         _insertions['probe'] = f'imec{ii}'
-        _insertions.to_csv(local_run_path.joinpath(f'_cibrrig_{name}.insertions.csv'))
+        _insertions.to_csv(local_run_path.joinpath(f'_cibrrig_{name}.insertionsManipulator.csv'))
 
         insertions = pd.concat([insertions, _insertions])
 
@@ -107,12 +108,14 @@ def main():
         insertion_table.exec_()
         _insertions = insertion_table.get_insertions()
         _insertions['probe'] = f'opto{ii}'
-        _insertions.to_csv(local_run_path.joinpath(f'_cibrrig_{name}.insertions.csv'))
+        _insertions.to_csv(local_run_path.joinpath(f'_cibrrig_{name}.insertionsManipulator.csv'))
 
         insertions = pd.concat([insertions, _insertions])
 
-    # TODO: Plotting insertions
-    return
+    save_fn = Path(local_run_path).joinpath("caudal_insertion_map.png")
+    plot_insertion_layout(insertions,save_fn)
+    save_fn = Path(local_run_path).joinpath("all_insertions.png")
+    asyncio.run(plot_probe_insertion(insertions,save_fn))
 
     # RUN BACKUP
     backup.no_gui(local_run_path, remote_archive_path)
