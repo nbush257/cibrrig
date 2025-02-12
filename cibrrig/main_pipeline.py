@@ -55,12 +55,6 @@ def main():
         num_opto_fibers
     ) = window.get_paths()
 
-    # If the user selected the Subjects folder error out
-    if local_run_path == Path(r"D:/sglx_data/Subjects"):
-        raise ValueError(
-            "You picked the root Subjects folder. This is a scary thing to do and incorrect."
-        )
-
     n_gates = len(gate_paths)
     notes_fn = local_run_path.joinpath("notes.json")
     notes = NotesDialog(n_gates)
