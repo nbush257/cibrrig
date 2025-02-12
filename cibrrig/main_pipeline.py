@@ -26,6 +26,8 @@ import pandas as pd
 import asyncio
 
 
+#TODO: Solve depth issue with insertions
+
 def main():
     """Main function to run the pipeline
 

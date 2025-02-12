@@ -879,7 +879,6 @@ async def plot_probe_insertion(df, save_fn):
             scale = [0.07, 3.84, 0.02]
         else:
             scale = opto_scale(diameter)
-        print(scale)
         scales.append(scale)
 
     n_probes = len(ap)
