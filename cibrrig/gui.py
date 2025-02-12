@@ -19,18 +19,16 @@ from PyQt5.QtWidgets import (
     QInputDialog,
     QLabel,
     QLineEdit,
-    QMainWindow,
     QPushButton,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
-    QTextEdit
+    QTextEdit,
 )
 import numpy as np
 from cibrrig.plot import laser_colors
-import asyncio
 from PIL import Image
 import seaborn as sns
 
@@ -236,18 +234,20 @@ class DirectorySelector(QWidget):
     def infer_num_probes(self):
         self.num_probes = 0
         for gate in self.gate_paths:
-            probes = list(gate.glob('*imec*'))
-            self.num_probes = max(len(probes),self.num_probes)
+            probes = list(gate.glob("*imec*"))
+            self.num_probes = max(len(probes), self.num_probes)
         # Update the spinbox value
         self.num_probes_spinbox.setValue(self.num_probes)
-    
+
     def get_session_info(self):
         self.get_gates()
         self.infer_num_probes()
 
     def submit(self):
         if self.local_run_path == DEFAULT_SUBJECTS_PATH:
-            print("You picked the root Subjects folder. This is a scary thing to do and incorrect. Please select a run folder.")
+            print(
+                "You picked the root Subjects folder. This is a scary thing to do and incorrect. Please select a run folder."
+            )
             return None
         else:
             self.close()  # Close the GUI window
@@ -276,7 +276,7 @@ class OptoFileFinder(QDialog):
 
     opto_file_selected = pyqtSignal(Path)
 
-    def __init__(self,title=''):
+    def __init__(self, title=""):
         """Initialize the dialog box"""
         super().__init__()
         self.setWindowTitle("File Selection")
@@ -284,7 +284,9 @@ class OptoFileFinder(QDialog):
 
         layout = QVBoxLayout()
 
-        label = QLabel(f"opto_calibration.json not found for {title}. Please select a file or skip.")
+        label = QLabel(
+            f"opto_calibration.json not found for {title}. Please select a file or skip."
+        )
         layout.addWidget(label)
 
         self.select_button = QPushButton("Select File")
@@ -332,7 +334,7 @@ class WiringEditor(QDialog):
 
     """
 
-    def __init__(self,title=''):
+    def __init__(self, title=""):
         super().__init__()
         self.title = title
         self.initUI()
@@ -538,9 +540,7 @@ class InsertionTableAppBase(QDialog):
         self.phi_column = 6
         self.theta_column = 7
         self.insertion_type_column = 8
-        self.numeric_headers = headers[
-            3:8
-        ]
+        self.numeric_headers = headers[3:8]
         self.headers = headers
 
         return headers
@@ -683,12 +683,12 @@ class InsertionTableAppBase(QDialog):
         print(df)
 
     def convert2ccf(self):
-        print('converting to ccf')
-        self.df['AP CCF'] = np.nan
-        self.df['ML CCF'] = np.nan
-        self.df['DV CCF'] = np.nan
-        self.df['phi CCF'] = np.nan
-        self.df['theta CCF'] = np.nan
+        print("converting to ccf")
+        self.df["AP CCF"] = np.nan
+        self.df["ML CCF"] = np.nan
+        self.df["DV CCF"] = np.nan
+        self.df["phi CCF"] = np.nan
+        self.df["theta CCF"] = np.nan
 
         for i, row in self.df.iterrows():
             ap = row["AP (microns)"]
@@ -712,11 +712,11 @@ class InsertionTableAppBase(QDialog):
 
             theta = theta - PITCH_CORRECTION
 
-            self.df.loc[i,"AP CCF"] = apccf
-            self.df.loc[i,"ML CCF"] = mlccf
-            self.df.loc[i,"DV CCF"] = dvccf
-            self.df.loc[i,"phi CCF"] = phi
-            self.df.loc[i,"theta CCF"] = theta
+            self.df.loc[i, "AP CCF"] = apccf
+            self.df.loc[i, "ML CCF"] = mlccf
+            self.df.loc[i, "DV CCF"] = dvccf
+            self.df.loc[i, "phi CCF"] = phi
+            self.df.loc[i, "theta CCF"] = theta
 
     def create_dataframe(self):
         self.export_to_dataframe()
@@ -727,7 +727,7 @@ class InsertionTableAppBase(QDialog):
         return self.df
 
 
-#TODO: Fix colors column for NPX
+# TODO: Fix colors column for NPX
 class NpxInsertionTableApp(InsertionTableAppBase):
     def __init__(self, n_rows=1, n_gates=10, name=""):
         super().__init__(n_rows, n_gates, name)
@@ -747,15 +747,20 @@ class NpxInsertionTableApp(InsertionTableAppBase):
         super().convert2ccf()
 
         # Replace the color with the insertion number
-        self.df['color'] = self.df['Insertion number'].apply(lambda x: COLORS[int(x) % len(COLORS)])
-        self.df['diameter'] = np.nan
+        self.df["color"] = self.df["Insertion number"].apply(
+            lambda x: COLORS[int(x) % len(COLORS)]
+        )
+        self.df["diameter"] = np.nan
+
 
 class OptoInsertionTableApp(InsertionTableAppBase):
     def __init__(self, n_rows=1, n_gates=10, name=""):
         super().__init__(n_rows, n_gates, name)
         self.setStyleSheet("background-color: lightblue;")
         header = self.table.horizontalHeader()
-        header.setStyleSheet("QHeaderView::section { background-color: lightblue; color: black; }")
+        header.setStyleSheet(
+            "QHeaderView::section { background-color: lightblue; color: black; }"
+        )
 
     def get_headers(self):
         headers = super().get_headers()
@@ -787,8 +792,13 @@ class OptoInsertionTableApp(InsertionTableAppBase):
         super().convert2ccf()
 
         # Replace the color with the wavelength
-        self.df['wavelength'] = self.df['wavelength'].apply(pd.to_numeric, errors='coerce')
-        self.df['color'] = self.df['wavelength'].apply(lambda x: laser_colors.get(x, '#000000'))
+        self.df["wavelength"] = self.df["wavelength"].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        self.df["color"] = self.df["wavelength"].apply(
+            lambda x: laser_colors.get(x, "#000000")
+        )
+
 
 class NotesDialog(QDialog):
     def __init__(self, n_gates=1):
@@ -797,7 +807,6 @@ class NotesDialog(QDialog):
 
         # initialize the window to be big
         self.setGeometry(100, 100, 1000, 800)
-
 
         # Create layout
         layout = QVBoxLayout(self)
@@ -837,30 +846,34 @@ class NotesDialog(QDialog):
     def submit(self):
         self.close()  # Close the dialog box
 
-    def save_notes(self,fn):
+    def save_notes(self, fn):
         # Save notes in JSON form
         notes = {
             "overall_notes": self.overall_notes_text.toPlainText(),
-            "gate_notes": {f"gate_{i}": text_field.toPlainText() for i, text_field in enumerate(self.text_fields)},
+            "gate_notes": {
+                f"gate_{i}": text_field.toPlainText()
+                for i, text_field in enumerate(self.text_fields)
+            },
         }
         with open(fn, "w") as f:
             json.dump(notes, f)
 
-
         return notes
 
 
-async def plot_probe_insertion(df,save_fn):
+async def plot_probe_insertion(df, save_fn):
     ap = df["AP CCF"].values
     ml = df["ML CCF"].values
     dv = df["DV CCF"].values
     phi = df["phi CCF"].values
     theta = df["theta CCF"].values
     color = df["color"].values
-    
-    opto_scale = lambda x: [x/2e3, 5, x/2e3]# Convert from diameter in um to raidus in mm
+
+    def opto_scale(x):
+        return x / 2e3, 5, x / 2e3  # Convert from diameter in um to raidus in mm
+
     scales = []
-    for i,row in df.iterrows():
+    for i, row in df.iterrows():
         diameter = float(row["diameter"])
         if np.isnan(diameter):
             scale = [0.07, 3.84, 0.02]
@@ -915,28 +928,28 @@ async def plot_probe_insertion(df,save_fn):
     s_cam = urchin.camera.Camera()
     c_cam = urchin.camera.Camera()
 
-    a_cam.set_rotation('axial')
+    a_cam.set_rotation("axial")
     a_cam.set_zoom(7)
 
-    s_cam.set_rotation('sagittal')
+    s_cam.set_rotation("sagittal")
     s_cam.set_zoom(5)
 
-    c_cam.set_rotation('coronal')
+    c_cam.set_rotation("coronal")
     c_cam.set_zoom(5)
 
     wd = 1800
     ht = 1200
 
-    angled_png = await urchin.camera.main.screenshot(size=[wd,ht])
+    angled_png = await urchin.camera.main.screenshot(size=[wd, ht])
     time.sleep(0.1)
-    axial_png = await a_cam.screenshot(size=[wd,ht])
+    axial_png = await a_cam.screenshot(size=[wd, ht])
     time.sleep(0.1)
-    sagittal_png = await s_cam.screenshot(size=[wd,ht])
+    sagittal_png = await s_cam.screenshot(size=[wd, ht])
     time.sleep(0.1)
-    coronal_png = await c_cam.screenshot(size=[wd,ht])
+    coronal_png = await c_cam.screenshot(size=[wd, ht])
     time.sleep(0.1)
 
-    grid_image = Image.new('RGBA', (wd*2, ht*2))
+    grid_image = Image.new("RGBA", (wd * 2, ht * 2))
 
     grid_image.paste(angled_png, (0, 0))
     grid_image.paste(sagittal_png, (wd, 0))
@@ -946,9 +959,9 @@ async def plot_probe_insertion(df,save_fn):
     grid_image.save(save_fn)
 
 
-def plot_insertion_layout(df,save_fn):
-    ref_list =["occipital apex", "occipital nadir"]
-    df = df.query('Reference in @ref_list')
+def plot_insertion_layout(df, save_fn):
+    ref_list = ["occipital apex", "occipital nadir"]
+    df = df.query("Reference in @ref_list")
     f = plt.figure()
     ax = f.add_subplot(111)
     for i, row in df.iterrows():
@@ -956,7 +969,7 @@ def plot_insertion_layout(df,save_fn):
         gate = row["Gate"]
         ml = row["ML (microns)"]
         dv = row["DV (microns)"]
-        color = row["color"]    
+        color = row["color"]
         probe = row["probe"]
         s = f"{probe} - insertion {insertion_num} - {gate}"
         ax.text(ml, dv, s, color=color, ha="left", va="bottom")
@@ -971,4 +984,4 @@ def plot_insertion_layout(df,save_fn):
     plt.tight_layout()
     sns.despine(trim=True)
     plt.savefig(save_fn)
-    plt.close('all')
+    plt.close("all")
