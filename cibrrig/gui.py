@@ -27,20 +27,32 @@ from PyQt5.QtWidgets import (
     QWidget,
     QTextEdit,
 )
+from PyQt5.QtGui import QPixmap
 import numpy as np
 from cibrrig.plot import laser_colors
 from PIL import Image
 import seaborn as sns
+from iblatlas.atlas import sph2cart, AllenAtlas
+
+# Get absolute path of the file "brain_xyz.png"
+brain_xyz_path = Path(__file__).parent / "brain_xyz.png"
+
+ba = AllenAtlas()
+
+# TODO: create probe.descriptions.json files
+# TODO: convert insertions to IBL coordinates
+# TODO: convert IBL to CCF
+# TODO: Fix ptich correctin for CCF
+
 
 DEFAULT_SUBJECTS_PATH = Path("D:/sglx_data/Subjects")
 DEFAULT_ARCHIVE_PATH = Path("U:/alf_data_repo/ramirez/Subjects")
 DEFAULT_WORKING_PATH = Path("X:/alf_data_repo/ramirez/Subjects")
 
-DV_MISMATCH = 1000
-BREGMA = (5200, 5700, 440)
-OCCIPITAL_APEX = (8000, 0, 600 + DV_MISMATCH)
-OCCIPITAL_NADIR = (8500, 0, 3535 + DV_MISMATCH)
-PITCH_CORRECTION = -5
+OCCIPITAL_APEX = (0, -5000, -600)  # Relative to bregma in microns in IBL coords (x,y,z)(ML,AP,DV)
+OCCIPITAL_NADIR = (0, -5000, -3535) # Relative to bregma in microns in IBL coords (x,y,z)(ML,AP,DV)
+LAMBDA_IBL = (0, -4000, 0) # Relative to bregma in microns in IBL coords (x,y,z)(ML,AP,DV)
+PITCH_CORRECTION = 0
 COLORS = [
     "#ff0000",
     "#00ff00",
@@ -83,6 +95,239 @@ POSSIBLE_WIRINGS = {
     ],
 }
 
+
+def get_tip(x, y, z, d, phi, theta):
+    """
+    Ripped from iblatlas because we don't want to use the
+    the atlas nor assume that the probe insertion point should be at the brain
+    """
+    return sph2cart(-d, theta, phi) + np.array((x, y, z))
+
+
+
+def insertion2IBL(df):
+    """
+    Convert insertion coordinates to IBL coordinates
+    dataframe must have the following columns:
+    - Insertion ML (microns)
+    - Insertion AP (microns)
+    - Insertion DV (microns)
+    - Reference ("occipital apex", "occipital nadir", "lambda", "bregma")
+    
+    Args:
+        df (pd.DataFrame): DataFrame with insertion coordinates
+
+    Returns:
+        pd.DataFrame: DataFrame with IBL coordinates
+
+    """
+    print("converting to IBL")
+    df["x"] = np.nan
+    df["y"] = np.nan
+    df["z"] = np.nan
+
+    for i, row in df.iterrows():
+        x = row["Insertion ML (microns)"]
+        y = row["Insertion AP (microns)"]
+        z = row["Insertion DV (microns)"]
+
+        # Map x,y,z, to reference bregma
+        if row["Reference"] == "occipital apex":
+            x += OCCIPITAL_APEX[0]
+            y += OCCIPITAL_APEX[1]
+            z += OCCIPITAL_APEX[2]
+        elif row["Reference"] == "occipital nadir":
+            x += OCCIPITAL_NADIR[0]
+            y += OCCIPITAL_NADIR[1]
+            z += OCCIPITAL_NADIR[2]
+        elif row["Reference"] == "lambda":
+            x += LAMBDA_IBL[0]
+            y += LAMBDA_IBL[1]
+            z += LAMBDA_IBL[2]
+        elif row["Reference"] == "bregma":
+            pass
+        else:
+            raise ValueError("Reference must be one of 'occipital apex', 'occipital nadir', 'lambda', 'bregma'")
+
+        df.loc[i, "x"] = x
+        df.loc[i, "y"] = y
+        df.loc[i, "z"] = z
+    return df
+
+
+def convert2ccf(df):
+    """
+    Convert IBL coordinates to CCF coordinates
+
+    In IBL frame, bregma is at (0,0,0) and right is positive x, rostral is positive y, dorsal is positive z
+    x,y,z -> ML, AP, DV
+
+    In CCF frame, bregma is at (5400, 5739, 332) (AP,ML,DV) and right is positive x, caudal is positive y, ventral is positive z
+
+    dataframe must have the following columns:
+    - x 
+    - y 
+    - z 
+    - phi (azimuth/yaw)
+    - theta (pitch/elevation)
+    - Depth (microns)
+    
+    Args:
+        df (pd.DataFrame): DataFrame with IBL coordinates
+        
+    Returns:
+        pd.DataFrame: DataFrame with CCF coordinates
+    """
+    print("converting to ccf")
+    df["AP tip CCF"] = np.nan
+    df["ML tip CCF"] = np.nan
+    df["DV tip CCF"] = np.nan
+    df["phi CCF"] = np.nan
+    df["theta CCF"] = np.nan
+
+    for i, row in df.iterrows():
+        x = row["x"]
+        y = row["y"]
+        z = row["z"]
+
+        phi = row["phi (azimuth/yaw)"]
+        theta = row["theta (pitch/elevation)"]
+        depth = row["Depth (microns)"]
+
+        theta += PITCH_CORRECTION
+        tip = get_tip(x, y, z, depth, phi, theta)
+        mlapdv = ba.xyz2ccf(tip/1e6)
+        df.loc[i, "ML tip CCF"] = mlapdv[0]
+        df.loc[i, "AP tip CCF"] = mlapdv[1]
+        df.loc[i, "DV tip CCF"] = mlapdv[2]
+        df.loc[i, "phi CCF"] = 270-phi
+        df.loc[i, "theta CCF"] = 90-theta
+    return df
+
+
+async def plot_probe_insertion(df, save_fn):
+    ap = df["AP tip CCF"].values
+    ml = df["ML tip CCF"].values
+    dv = df["DV tip CCF"].values
+    phi = df["phi CCF"].values
+    theta = df["theta CCF"].values
+    color = df["color"].values
+
+    def opto_scale(x):
+        return x / 2e3, 5, x / 2e3  # Convert from diameter in um to raidus in mm
+
+    scales = []
+    for i, row in df.iterrows():
+        diameter = float(row["diameter"])
+        if np.isnan(diameter):
+            scale = [0.07, 3.84, 0.02]
+        else:
+            scale = opto_scale(diameter)
+        scales.append(scale)
+
+    n_probes = len(ap)
+    positions = [(ap[i], ml[i], dv[i]) for i in range(n_probes)]
+    angles = [(phi[i], theta[i], 0) for i in range(n_probes)]
+    colors = [color[i] for i in range(n_probes)]
+
+    delay = 1
+    urchin.setup()
+    time.sleep(1)
+    urchin.ccf25.load()
+    time.sleep(1)
+    urchin.ccf25.grey.set_visibility(True)
+    time.sleep(delay)
+    urchin.ccf25.grey.set_material("transparent-unlit")
+    time.sleep(delay)
+    urchin.ccf25.grey.set_color("#000000")
+    time.sleep(delay)
+    urchin.ccf25.grey.set_alpha(0.1)
+    time.sleep(delay)
+    brain_areas = ["NTS", "VII", "AMB", "LRNm"]
+    area_list = urchin.ccf25.get_areas(brain_areas)
+    urchin.ccf25.set_visibilities(area_list, True)
+    urchin.ccf25.set_materials(area_list, "transparent-unlit")
+    urchin.ccf25.set_colors(area_list, ["#000000"] * len(area_list))
+    urchin.ccf25.set_alphas(area_list, 0.4)
+
+    time.sleep(delay)
+    urchin.camera.main.set_zoom(7)
+    time.sleep(delay)
+    probes = urchin.probes.create(n_probes)
+    # time.sleep(delay)
+    urchin.probes.set_positions(probes, positions)
+    # time.sleep(delay)
+    urchin.probes.set_angles(probes, angles)
+    # time.sleep(delay)
+    urchin.probes.set_colors(probes, colors)
+    # time.sleep(delay)
+    urchin.probes.set_scales(probes, scales)
+    # time.sleep(delay)
+
+    urchin.camera.main.set_rotation((-80, 140, 0))
+    time.sleep(delay)
+
+    a_cam = urchin.camera.Camera()
+    s_cam = urchin.camera.Camera()
+    c_cam = urchin.camera.Camera()
+
+    a_cam.set_rotation("axial")
+    a_cam.set_zoom(7)
+
+    s_cam.set_rotation("sagittal")
+    s_cam.set_zoom(5)
+
+    c_cam.set_rotation("coronal")
+    c_cam.set_zoom(5)
+
+    wd = 1800
+    ht = 1200
+
+    angled_png = await urchin.camera.main.screenshot(size=[wd, ht])
+    time.sleep(0.1)
+    axial_png = await a_cam.screenshot(size=[wd, ht])
+    time.sleep(0.1)
+    sagittal_png = await s_cam.screenshot(size=[wd, ht])
+    time.sleep(0.1)
+    coronal_png = await c_cam.screenshot(size=[wd, ht])
+    time.sleep(0.1)
+
+    grid_image = Image.new("RGBA", (wd * 2, ht * 2))
+
+    grid_image.paste(angled_png, (0, 0))
+    grid_image.paste(sagittal_png, (wd, 0))
+    grid_image.paste(axial_png, (0, ht))
+    grid_image.paste(coronal_png, (wd, ht))
+
+    grid_image.save(save_fn)
+
+
+def plot_insertion_layout(df, save_fn):
+    ref_list = ["occipital apex", "occipital nadir"]
+    df = df.query("Reference in @ref_list")
+    f = plt.figure()
+    ax = f.add_subplot(111)
+    for i, row in df.iterrows():
+        insertion_num = int(row["Insertion number"])
+        gate = row["Gate"]
+        ml = row["Insertion ML (microns)"]
+        dv = row["Insertion DV (microns)"]
+        color = row["color"]
+        probe = row["probe"]
+        s = f"{probe} - insertion {insertion_num} - {gate}"
+        ax.text(ml, dv, s, color=color, ha="left", va="bottom")
+        ax.plot(ml, dv, "o", color=color)
+    plt.xlabel("Insertion ML (microns)")
+    plt.ylabel("Insertion DV (microns)")
+
+    ax.invert_yaxis()
+    ax.axis("equal")
+
+    plt.title("Caudal Approach Layout Coronal Projection")
+    plt.tight_layout()
+    sns.despine(trim=True)
+    plt.savefig(save_fn)
+    plt.close("all")
 
 class DirectorySelector(QWidget):
     """
@@ -461,18 +706,30 @@ class InsertionTableAppBase(QDialog):
 
         # Get screen size and set window size relative to it
         screen = QDesktopWidget().screenGeometry()
-        width, height = int(screen.width() * 0.7), int(screen.height() * 0.5)
+        width, height = int(screen.width() * 0.9), int(screen.height() * 0.5)
         self.setGeometry(100, 100, width, height)
 
         # Create central widget and layout
-        layout = QVBoxLayout(self)
+        main_layout = QHBoxLayout(self)
+
+        # Create a vertical layout for the table and buttons
+        table_layout = QVBoxLayout()
 
         # Add information label
-        info_label = QLabel(
-            f"LOG ALL INSERTIONS FOR {name}, INCLUDING THOSE WITHOUT ASSOCIATED RECORDINGS.\nIF MULTIPLE GATES EXIST FOR THE SAME INSERTION,REPEAT THE INSERTION NUMBER BUT SET THE GATE APPROPRIATELY.\nML: LEFT is negative\nAP: ROSTRAL is negative\nDV: DORSAL is negative"
+        info = f"""
+            LOG ALL INSERTIONS FOR {name}, 
+            INCLUDING THOSE WITHOUT ASSOCIATED RECORDINGS.\n
+            Record insertion position relative to the chosen reference point\n
+            IF MULTIPLE GATES EXIST FOR THE SAME INSERTION,REPEAT THE INSERTION NUMBER BUT SET THE GATE APPROPRIATELY.\n
+            ML: LEFT is negative\n
+            AP: ROSTRAL is positive\n
+            DV: DORSAL is positive\n
+            DEPTH SHOULD BE POSITIVE (i.e., distance into the brain)"
+        """
+        info_label = QLabel(info
         )
         info_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(info_label)
+        table_layout.addWidget(info_label)
 
         self.get_headers()
         # Create table
@@ -491,7 +748,7 @@ class InsertionTableAppBase(QDialog):
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.Stretch)
 
-        layout.addWidget(self.table)
+        table_layout.addWidget(self.table)
 
         # Create a horizontal layout for the buttons
         button_layout = QHBoxLayout()
@@ -519,28 +776,38 @@ class InsertionTableAppBase(QDialog):
         add_column_button.clicked.connect(self.add_new_column)
         button_layout.addWidget(add_column_button)
 
-        # Add the button layout to the main layout
-        layout.addLayout(button_layout)
+        # Add the button layout to the table layout
+        table_layout.addLayout(button_layout)
+
+        # Add the table layout to the main layout
+        main_layout.addLayout(table_layout)
+
+        # Add image to the right of the table
+        image_label = QLabel()
+        pixmap = QPixmap(str(brain_xyz_path))
+        image_label.setPixmap(pixmap)
+        main_layout.addWidget(image_label)
 
     def get_headers(self):
         headers = [
             "Insertion number",
             "Gate",
             "Reference",
-            "ML (microns)",
-            "AP (microns)",
-            "DV (microns)",
+            "Insertion ML (microns)",
+            "Insertion AP (microns)",
+            "Insertion DV (microns)",
+            "Depth (microns)",
             "phi (azimuth/yaw)",
             "theta (pitch/elevation)",
             "Insertion Type",
         ]
         self.gate_column = 1
         self.reference_column = 2
-        self.numeric_columns = [3, 4, 5, 6, 7]
-        self.phi_column = 6
-        self.theta_column = 7
-        self.insertion_type_column = 8
-        self.numeric_headers = headers[3:8]
+        self.numeric_columns = [3, 4, 5, 6, 7, 8]
+        self.phi_column = 7
+        self.theta_column = 8
+        self.insertion_type_column = 9
+        self.numeric_headers = headers[3:9]
         self.headers = headers
 
         return headers
@@ -585,17 +852,17 @@ class InsertionTableAppBase(QDialog):
         reference_combo = self.table.cellWidget(row, self.reference_column)
         reference = reference_combo.currentText()
         if reference in ["occipital apex", "occipital nadir"]:
+            phi_item = QTableWidgetItem("270")
+            phi_item.setTextAlignment(Qt.AlignCenter)
+            self.table.setItem(row, self.phi_column, phi_item)
+            theta_item = QTableWidgetItem("90")
+            theta_item.setTextAlignment(Qt.AlignCenter)
+            self.table.setItem(row, self.theta_column, theta_item)
+        elif reference in ["bregma", "lambda"]:
             phi_item = QTableWidgetItem("0")
             phi_item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, self.phi_column, phi_item)
             theta_item = QTableWidgetItem("0")
-            theta_item.setTextAlignment(Qt.AlignCenter)
-            self.table.setItem(row, self.theta_column, theta_item)
-        elif reference in ["bregma", "lambda"]:
-            phi_item = QTableWidgetItem("90")
-            phi_item.setTextAlignment(Qt.AlignCenter)
-            self.table.setItem(row, self.phi_column, phi_item)
-            theta_item = QTableWidgetItem("90")
             theta_item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, self.theta_column, theta_item)
 
@@ -682,45 +949,14 @@ class InsertionTableAppBase(QDialog):
         self.df = df
         print(df)
 
-    def convert2ccf(self):
-        print("converting to ccf")
-        self.df["AP CCF"] = np.nan
-        self.df["ML CCF"] = np.nan
-        self.df["DV CCF"] = np.nan
-        self.df["phi CCF"] = np.nan
-        self.df["theta CCF"] = np.nan
+    def convert_and_export(self):
+        self.df = insertion2IBL(self.df)
+        self.df = convert2ccf(self.df)
 
-        for i, row in self.df.iterrows():
-            ap = row["AP (microns)"]
-            ml = row["ML (microns)"]
-            dv = row["DV (microns)"]
-            phi = row["phi (azimuth/yaw)"]
-            theta = row["theta (pitch/elevation)"]
-
-            apccf = ap + BREGMA[0]
-            mlccf = ml + BREGMA[1]
-            dvccf = dv + BREGMA[2]
-
-            if row["Reference"] == "occipital apex":
-                apccf += OCCIPITAL_APEX[0]
-                mlccf += OCCIPITAL_APEX[1]
-                dvccf += OCCIPITAL_APEX[2]
-            elif row["Reference"] == "occipital nadir":
-                apccf += OCCIPITAL_NADIR[0]
-                mlccf += OCCIPITAL_NADIR[1]
-                dvccf += OCCIPITAL_NADIR[2]
-
-            theta = theta - PITCH_CORRECTION
-
-            self.df.loc[i, "AP CCF"] = apccf
-            self.df.loc[i, "ML CCF"] = mlccf
-            self.df.loc[i, "DV CCF"] = dvccf
-            self.df.loc[i, "phi CCF"] = phi
-            self.df.loc[i, "theta CCF"] = theta
 
     def create_dataframe(self):
         self.export_to_dataframe()
-        self.convert2ccf()
+        self.convert_and_export()
         self.close()
 
     def get_insertions(self):
@@ -742,9 +978,9 @@ class NpxInsertionTableApp(InsertionTableAppBase):
         insertion_type_combo = self.table.cellWidget(row, self.insertion_type_column)
         insertion_type_combo.setCurrentText("npx1.0")
 
-    def convert2ccf(self):
+    def convert_and_export(self):
         # Call the base class method
-        super().convert2ccf()
+        super().convert_and_export()
 
         # Replace the color with the insertion number
         self.df["color"] = self.df["Insertion number"].apply(
@@ -787,9 +1023,9 @@ class OptoInsertionTableApp(InsertionTableAppBase):
         self.table.setItem(row, self.table.columnCount() - 1, diameter_item)
 
     # Modify the inherited convert2ccf method to replace the color with the wavelength
-    def convert2ccf(self):
+    def convert_and_export(self):
         # Call the base class method
-        super().convert2ccf()
+        super().convert_and_export()
 
         # Replace the color with the wavelength
         self.df["wavelength"] = self.df["wavelength"].apply(
@@ -859,128 +1095,3 @@ class NotesDialog(QDialog):
             json.dump(notes, f)
 
         return notes
-
-
-async def plot_probe_insertion(df, save_fn):
-    ap = df["AP CCF"].values
-    ml = df["ML CCF"].values
-    dv = df["DV CCF"].values
-    phi = df["phi CCF"].values
-    theta = df["theta CCF"].values
-    color = df["color"].values
-
-    def opto_scale(x):
-        return x / 2e3, 5, x / 2e3  # Convert from diameter in um to raidus in mm
-
-    scales = []
-    for i, row in df.iterrows():
-        diameter = float(row["diameter"])
-        if np.isnan(diameter):
-            scale = [0.07, 3.84, 0.02]
-        else:
-            scale = opto_scale(diameter)
-        scales.append(scale)
-
-    n_probes = len(ap)
-    positions = [(ap[i], ml[i], dv[i]) for i in range(n_probes)]
-    angles = [(phi[i], theta[i], 0) for i in range(n_probes)]
-    colors = [color[i] for i in range(n_probes)]
-
-    delay = 1
-    urchin.setup()
-    time.sleep(1)
-    urchin.ccf25.load()
-    time.sleep(1)
-    urchin.ccf25.grey.set_visibility(True)
-    time.sleep(delay)
-    urchin.ccf25.grey.set_material("transparent-unlit")
-    time.sleep(delay)
-    urchin.ccf25.grey.set_color("#000000")
-    time.sleep(delay)
-    urchin.ccf25.grey.set_alpha(0.1)
-    time.sleep(delay)
-    brain_areas = ["NTS", "VII", "AMB", "LRNm"]
-    area_list = urchin.ccf25.get_areas(brain_areas)
-    urchin.ccf25.set_visibilities(area_list, True)
-    urchin.ccf25.set_materials(area_list, "transparent-unlit")
-    urchin.ccf25.set_colors(area_list, ["#000000"] * len(area_list))
-    urchin.ccf25.set_alphas(area_list, 0.4)
-
-    time.sleep(delay)
-    urchin.camera.main.set_zoom(7)
-    time.sleep(delay)
-    probes = urchin.probes.create(n_probes)
-    # time.sleep(delay)
-    urchin.probes.set_positions(probes, positions)
-    # time.sleep(delay)
-    urchin.probes.set_angles(probes, angles)
-    # time.sleep(delay)
-    urchin.probes.set_colors(probes, colors)
-    # time.sleep(delay)
-    urchin.probes.set_scales(probes, scales)
-    # time.sleep(delay)
-
-    urchin.camera.main.set_rotation((-80, 140, 0))
-    time.sleep(delay)
-
-    a_cam = urchin.camera.Camera()
-    s_cam = urchin.camera.Camera()
-    c_cam = urchin.camera.Camera()
-
-    a_cam.set_rotation("axial")
-    a_cam.set_zoom(7)
-
-    s_cam.set_rotation("sagittal")
-    s_cam.set_zoom(5)
-
-    c_cam.set_rotation("coronal")
-    c_cam.set_zoom(5)
-
-    wd = 1800
-    ht = 1200
-
-    angled_png = await urchin.camera.main.screenshot(size=[wd, ht])
-    time.sleep(0.1)
-    axial_png = await a_cam.screenshot(size=[wd, ht])
-    time.sleep(0.1)
-    sagittal_png = await s_cam.screenshot(size=[wd, ht])
-    time.sleep(0.1)
-    coronal_png = await c_cam.screenshot(size=[wd, ht])
-    time.sleep(0.1)
-
-    grid_image = Image.new("RGBA", (wd * 2, ht * 2))
-
-    grid_image.paste(angled_png, (0, 0))
-    grid_image.paste(sagittal_png, (wd, 0))
-    grid_image.paste(axial_png, (0, ht))
-    grid_image.paste(coronal_png, (wd, ht))
-
-    grid_image.save(save_fn)
-
-
-def plot_insertion_layout(df, save_fn):
-    ref_list = ["occipital apex", "occipital nadir"]
-    df = df.query("Reference in @ref_list")
-    f = plt.figure()
-    ax = f.add_subplot(111)
-    for i, row in df.iterrows():
-        insertion_num = int(row["Insertion number"])
-        gate = row["Gate"]
-        ml = row["ML (microns)"]
-        dv = row["DV (microns)"]
-        color = row["color"]
-        probe = row["probe"]
-        s = f"{probe} - insertion {insertion_num} - {gate}"
-        ax.text(ml, dv, s, color=color, ha="left", va="bottom")
-        ax.plot(ml, dv, "o", color=color)
-    plt.xlabel("ML (microns)")
-    plt.ylabel("DV (microns)")
-
-    ax.invert_yaxis()
-    ax.axis("equal")
-
-    plt.title("Caudal Approach Layout Coronal Projection")
-    plt.tight_layout()
-    sns.despine(trim=True)
-    plt.savefig(save_fn)
-    plt.close("all")

@@ -111,7 +111,11 @@ def main():
     save_fn = Path(local_run_path).joinpath("caudal_insertion_map.png")
     plot_insertion_layout(insertions,save_fn)
     save_fn = Path(local_run_path).joinpath("all_insertions.png")
-    asyncio.run(plot_probe_insertion(insertions,save_fn))
+    try:
+        asyncio.run(plot_probe_insertion(insertions,save_fn))
+    except Exception as e:
+        print('URCHIN error - likely an ssl problem')
+
 
     # RUN BACKUP
     backup.no_gui(local_run_path, remote_archive_path)
