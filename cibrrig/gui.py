@@ -49,9 +49,9 @@ DEFAULT_SUBJECTS_PATH = Path("D:/sglx_data/Subjects")
 DEFAULT_ARCHIVE_PATH = Path("U:/alf_data_repo/ramirez/Subjects")
 DEFAULT_WORKING_PATH = Path("X:/alf_data_repo/ramirez/Subjects")
 
-OCCIPITAL_APEX = (0, -5000, -600)  # Relative to bregma in microns in IBL coords (x,y,z)(ML,AP,DV)
-OCCIPITAL_NADIR = (0, -5000, -3535) # Relative to bregma in microns in IBL coords (x,y,z)(ML,AP,DV)
-LAMBDA_IBL = (0, -4000, 0) # Relative to bregma in microns in IBL coords (x,y,z)(ML,AP,DV)
+OCCIPITAL_APEX = (0, -6900, -600)  # Relative to bregma in microns in IBL coords (x,y,z)(ML,AP,DV)
+OCCIPITAL_NADIR = (0, -6900, -3535) # Relative to bregma in microns in IBL coords (x,y,z)(ML,AP,DV)
+LAMBDA_IBL = (0, -4200, 0) # Relative to bregma in microns in IBL coords (x,y,z)(ML,AP,DV)
 PITCH_CORRECTION = 0
 COLORS = [
     "#ff0000",
