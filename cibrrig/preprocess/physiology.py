@@ -31,7 +31,7 @@ def burst_stats_dia(
     """
 
     # Standardize the integrated diaphragm trace
-    scl = sklearn.preprocessing.StandardScaler(with_mean=0)
+    scl = sklearn.preprocessing.StandardScaler(with_mean=False)
     integrated_scl = scl.fit_transform(integrated[:, np.newaxis]).ravel()
 
     # Find peaks in the standardized diaphragm trace

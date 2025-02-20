@@ -63,7 +63,7 @@ def rename_probe_folders(session_path):
     probe_paths = []
 
     def _get_probe_number(probe_path):
-        probe_num = int(re.search("(?<=imec)\d", probe_path.name).group())
+        probe_num = int(re.search(r"(?<=imec)\d", probe_path.name).group())
         out_str = f"probe{probe_num:02.0f}"
         return out_str
 
@@ -162,7 +162,7 @@ def get_gate_number(gate):
     Returns:
         int: The gate number.
     """
-    gate_num = int(re.search("(?<=_g)\d", gate.name).group())
+    gate_num = int(re.search(r"(?<=_g)\d{1,2}", gate.name).group())
     return gate_num
 
 
@@ -222,7 +222,6 @@ def rename_session(session_path):
     check_wiring(session_path)
     misc.rename_ephys_files(session_path)
     misc.move_ephys_files(session_path)
-    misc.multi_parts_flags_creation(session_path)
     misc.delete_empty_folders(session_path, dry=False)
     rename_and_move_video(session_path)
     remove_backup_flag(session_path)

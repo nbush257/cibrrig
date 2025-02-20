@@ -89,7 +89,7 @@ def main():
     insertions = pd.DataFrame()
     for ii in range(num_probes):
         name = f'imec{ii}'
-        insertion_table = NpxInsertionTableApp(name=name)
+        insertion_table = NpxInsertionTableApp(name=name,n_gates=n_gates)
         insertion_table.exec_()
         _insertions = insertion_table.get_insertions()
         _insertions['probe'] = f'imec{ii}'
@@ -99,7 +99,7 @@ def main():
 
     for ii in range(num_opto_fibers):
         name = f'opto{ii}'
-        insertion_table = OptoInsertionTableApp(name=name)
+        insertion_table = OptoInsertionTableApp(name=name,n_gates=n_gates)
         insertion_table.exec_()
         _insertions = insertion_table.get_insertions()
         _insertions['probe'] = f'opto{ii}'

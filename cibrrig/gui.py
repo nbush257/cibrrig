@@ -327,14 +327,14 @@ def plot_probe_insertion_ibl(df,save_fn):
         ax[1,0].plot(y,z,color=colors[ii],marker='.')
         ax[0,1].plot(x,y,color=colors[ii],marker='.')
 
-    ax[0,0].set_xlabel('ML $\mu$m')
-    ax[0,0].set_ylabel('DV $\mu$m')
+    ax[0,0].set_xlabel(r'ML $\mu$m')
+    ax[0,0].set_ylabel(r'DV $\mu$m')
 
-    ax[1,0].set_xlabel('AP $\mu$m')
-    ax[1,0].set_ylabel('DV $\mu$m')
+    ax[1,0].set_xlabel(r'AP $\mu$m')
+    ax[1,0].set_ylabel(r'DV $\mu$m')
 
-    ax[0,1].set_xlabel('ML $\mu$m')
-    ax[0,1].set_ylabel('AP $\mu$m')
+    ax[0,1].set_xlabel(r'ML $\mu$m')
+    ax[0,1].set_ylabel(r'AP $\mu$m')
 
     ax[0,0].set_title('Coronal projection')
     ax[1,0].set_title('Sagittal projection')
@@ -520,7 +520,10 @@ class DirectorySelector(QWidget):
             self.remove_opto_artifact = False
 
     def get_gates(self):
-        self.gate_paths = list(self.local_run_path.glob("*_g[0-9]*"))
+        gate_paths= list(self.local_run_path.glob("*_g[0-9]*"))
+        # order by gate number
+        gate_nums = [int(str(gate).split("_g")[-1]) for gate in gate_paths]
+        self.gate_paths = [x for _, x in sorted(zip(gate_nums, gate_paths))]
         self.n_gates = len(self.gate_paths)
 
     def infer_num_probes(self):
@@ -880,7 +883,7 @@ class InsertionTableAppBase(QDialog):
 
         # Gate column (dropdown)
         gate_combo = QComboBox()
-        gate_options = ["dnr"] + [f"g{i}" for i in range(0, self.n_gates)]
+        gate_options = ["dnr"] + [f"g{i}" for i in range(0, self.n_gates+1)]
         gate_combo.addItems(gate_options)
         self.table.setCellWidget(row, self.gate_column, gate_combo)
 
@@ -1132,7 +1135,7 @@ class NotesDialog(QDialog):
     def submit(self):
         self.close()  # Close the dialog box
 
-    def save_notes(self, fn):
+    def save_notes(self):
         # Save notes in JSON form
         notes = {
             "overall_notes": self.overall_notes_text.toPlainText(),
@@ -1141,7 +1144,7 @@ class NotesDialog(QDialog):
                 for i, text_field in enumerate(self.text_fields)
             },
         }
-        with open(fn, "w") as f:
+        with open(self.notes_fn, "w") as f:
             json.dump(notes, f)
 
         return notes
