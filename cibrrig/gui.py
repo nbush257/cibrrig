@@ -47,9 +47,21 @@ DEFAULT_SUBJECTS_PATH = Path("D:/sglx_data/Subjects")
 DEFAULT_ARCHIVE_PATH = Path("U:/alf_data_repo/ramirez/Subjects")
 DEFAULT_WORKING_PATH = Path("X:/alf_data_repo/ramirez/Subjects")
 
-OCCIPITAL_APEX = (0, -6900, -600)  # Relative to bregma in microns in IBL coords (x,y,z)(ML,AP,DV)
-OCCIPITAL_NADIR = (0, -6900, -3535) # Relative to bregma in microns in IBL coords (x,y,z)(ML,AP,DV)
-LAMBDA_IBL = (0, -4200, 0) # Relative to bregma in microns in IBL coords (x,y,z)(ML,AP,DV)
+OCCIPITAL_APEX = (
+    0,
+    -6900,
+    -600,
+)  # Relative to bregma in microns in IBL coords (x,y,z)(ML,AP,DV)
+OCCIPITAL_NADIR = (
+    0,
+    -6900,
+    -3535,
+)  # Relative to bregma in microns in IBL coords (x,y,z)(ML,AP,DV)
+LAMBDA_IBL = (
+    0,
+    -4200,
+    0,
+)  # Relative to bregma in microns in IBL coords (x,y,z)(ML,AP,DV)
 PITCH_CORRECTION = 0
 COLORS = [
     "#ff0000",
@@ -102,7 +114,6 @@ def get_tip(x, y, z, d, phi, theta):
     return sph2cart(-d, theta, phi) + np.array((x, y, z))
 
 
-
 def insertion2IBL(df):
     """
     Convert insertion coordinates to IBL coordinates
@@ -111,7 +122,7 @@ def insertion2IBL(df):
     - Insertion AP (microns)
     - Insertion DV (microns)
     - Reference ("occipital apex", "occipital nadir", "lambda", "bregma")
-    
+
     Args:
         df (pd.DataFrame): DataFrame with insertion coordinates
 
@@ -145,7 +156,9 @@ def insertion2IBL(df):
         elif row["Reference"] == "bregma":
             pass
         else:
-            raise ValueError("Reference must be one of 'occipital apex', 'occipital nadir', 'lambda', 'bregma'")
+            raise ValueError(
+                "Reference must be one of 'occipital apex', 'occipital nadir', 'lambda', 'bregma'"
+            )
 
         df.loc[i, "x"] = x
         df.loc[i, "y"] = y
@@ -163,16 +176,16 @@ def convert2ccf(df):
     In CCF frame, bregma is at (5400, 5739, 332) (AP,ML,DV) and right is positive x, caudal is positive y, ventral is positive z
 
     dataframe must have the following columns:
-    - x 
-    - y 
-    - z 
+    - x
+    - y
+    - z
     - phi (azimuth/yaw)
     - theta (pitch/elevation)
     - Depth (microns)
-    
+
     Args:
         df (pd.DataFrame): DataFrame with IBL coordinates
-        
+
     Returns:
         pd.DataFrame: DataFrame with CCF coordinates
     """
@@ -194,20 +207,22 @@ def convert2ccf(df):
 
         theta += PITCH_CORRECTION
         tip = get_tip(x, y, z, depth, phi, theta)
-        mlapdv = ba.xyz2ccf(tip/1e6)
+        mlapdv = ba.xyz2ccf(tip / 1e6, mode="wrap")
         df.loc[i, "ML tip CCF"] = mlapdv[0]
         df.loc[i, "AP tip CCF"] = mlapdv[1]
         df.loc[i, "DV tip CCF"] = mlapdv[2]
-        df.loc[i, "phi CCF"] = 270-phi
-        df.loc[i, "theta CCF"] = 90-theta
+        df.loc[i, "phi CCF"] = 270 - phi
+        df.loc[i, "theta CCF"] = 90 - theta
     return df
 
-def plot_probe_insertion(df,save_fn):
+
+def plot_probe_insertion(df, save_fn):
     try:
-        asyncio.run(plot_probe_insertion_urchin(df,save_fn))
+        asyncio.run(plot_probe_insertion_urchin(df, save_fn))
     except Exception:
-        print('Error plotting with urchin, falling back to ibl/matplotlib')
-        plot_probe_insertion_ibl(df,save_fn)
+        print("Error plotting with urchin, falling back to ibl/matplotlib")
+        plot_probe_insertion_ibl(df, save_fn)
+
 
 async def plot_probe_insertion_urchin(df, save_fn):
     ap = df["AP tip CCF"].values
@@ -305,48 +320,68 @@ async def plot_probe_insertion_urchin(df, save_fn):
 
     grid_image.save(save_fn)
 
-def plot_probe_insertion_ibl(df,save_fn):
 
-    xyz = df[['x','y','z']].values
-    tip = get_tip(df['x'],df['y'],df['z'],df['Depth (microns)'],df['phi (azimuth/yaw)'],df['theta (pitch/elevation)'])
+def plot_probe_insertion_ibl(df, save_fn):
+    xyz = df[["x", "y", "z"]].values
+    tip = get_tip(
+        df["x"],
+        df["y"],
+        df["z"],
+        df["Depth (microns)"],
+        df["phi (azimuth/yaw)"],
+        df["theta (pitch/elevation)"],
+    )
     tip = tip.T
-    colors = df['color'].values
+    colors = df["color"].values
     n_lines = xyz.shape[0]
 
     # Make a line from xyz to tip for each row
-    f,ax = plt.subplots(2,2)
-    ba.plot_cslice(0,volume='boundary',ax=ax[0,0],mapping="Cosmos",alpha=0.3)
-    ba.plot_sslice(0,volume='boundary',ax=ax[1,0],mapping="Cosmos",alpha=0.3)
-    ba.plot_hslice(-5000/1e6,volume='boundary',ax=ax[0,1],mapping="Cosmos",alpha=0.3)
-    ax[1,1].axis('off')
+    f, ax = plt.subplots(2, 2)
+    ba.plot_cslice(0, volume="boundary", ax=ax[0, 0], mapping="Cosmos", alpha=0.3)
+    ba.plot_sslice(0, volume="boundary", ax=ax[1, 0], mapping="Cosmos", alpha=0.3)
+    ba.plot_hslice(
+        -5000 / 1e6, volume="boundary", ax=ax[0, 1], mapping="Cosmos", alpha=0.3
+    )
+    ax[1, 1].axis("off")
     for ii in range(n_lines):
-        x = [xyz[ii,0],tip[ii,0]]
-        y = [xyz[ii,1],tip[ii,1]]
-        z = [xyz[ii,2],tip[ii,2]]
-        ax[0,0].plot(x,z,color=colors[ii],marker='.')
-        ax[1,0].plot(y,z,color=colors[ii],marker='.')
-        ax[0,1].plot(x,y,color=colors[ii],marker='.')
+        x = [xyz[ii, 0], tip[ii, 0]]
+        y = [xyz[ii, 1], tip[ii, 1]]
+        z = [xyz[ii, 2], tip[ii, 2]]
+        ax[0, 0].plot(x, z, color=colors[ii], marker=".")
+        ax[1, 0].plot(y, z, color=colors[ii], marker=".")
+        ax[0, 1].plot(x, y, color=colors[ii], marker=".")
 
-    ax[0,0].set_xlabel(r'ML $\mu$m')
-    ax[0,0].set_ylabel(r'DV $\mu$m')
+    ax[0, 0].set_xlabel(r"ML $\mu$m")
+    ax[0, 0].set_ylabel(r"DV $\mu$m")
 
-    ax[1,0].set_xlabel(r'AP $\mu$m')
-    ax[1,0].set_ylabel(r'DV $\mu$m')
+    ax[1, 0].set_xlabel(r"AP $\mu$m")
+    ax[1, 0].set_ylabel(r"DV $\mu$m")
 
-    ax[0,1].set_xlabel(r'ML $\mu$m')
-    ax[0,1].set_ylabel(r'AP $\mu$m')
+    ax[0, 1].set_xlabel(r"ML $\mu$m")
+    ax[0, 1].set_ylabel(r"AP $\mu$m")
 
-    ax[0,0].set_title('Coronal projection')
-    ax[1,0].set_title('Sagittal projection')
-    ax[0,1].set_title('Axial projection' )
+    ax[0, 0].set_title("Coronal projection")
+    ax[1, 0].set_title("Sagittal projection")
+    ax[0, 1].set_title("Axial projection")
 
-    ax[0,0].text(1,1,'AP=0',color='red',transform=ax[0,0].transAxes,ha='right',va='top')
-    ax[1,0].text(1,1,'ML=0',color='red',transform=ax[1,0].transAxes,ha='right',va='top')
-    ax[0,1].text(1,1,'DV=-500um',color='red',transform=ax[0,1].transAxes,ha='right',va='top')
+    ax[0, 0].text(
+        1, 1, "AP=0", color="red", transform=ax[0, 0].transAxes, ha="right", va="top"
+    )
+    ax[1, 0].text(
+        1, 1, "ML=0", color="red", transform=ax[1, 0].transAxes, ha="right", va="top"
+    )
+    ax[0, 1].text(
+        1,
+        1,
+        "DV=-500um",
+        color="red",
+        transform=ax[0, 1].transAxes,
+        ha="right",
+        va="top",
+    )
 
-    plt.savefig(save_fn,dpi=300)
-    plt.close('all')
-    
+    plt.savefig(save_fn, dpi=300)
+    plt.close("all")
 
 
 def plot_insertion_layout(df, save_fn):
@@ -373,8 +408,9 @@ def plot_insertion_layout(df, save_fn):
     plt.title("Caudal Approach Layout Coronal Projection")
     plt.tight_layout()
     sns.despine(trim=True)
-    plt.savefig(save_fn,dpi=300)
+    plt.savefig(save_fn, dpi=300)
     plt.close("all")
+
 
 class DirectorySelector(QWidget):
     """
@@ -520,7 +556,7 @@ class DirectorySelector(QWidget):
             self.remove_opto_artifact = False
 
     def get_gates(self):
-        gate_paths= list(self.local_run_path.glob("*_g[0-9]*"))
+        gate_paths = list(self.local_run_path.glob("*_g[0-9]*"))
         # order by gate number
         gate_nums = [int(str(gate).split("_g")[-1]) for gate in gate_paths]
         self.gate_paths = [x for _, x in sorted(zip(gate_nums, gate_paths))]
@@ -749,10 +785,20 @@ class WiringEditor(QDialog):
 
 
 class InsertionTableAppBase(QDialog):
-    def __init__(self, n_rows=1, n_gates=20, name=""):
+    def __init__(self, n_rows=1, n_gates=20, name="", save_fn=None):
         super().__init__()
         self.setWindowTitle(f"Insertion Data Table {name}")
         self.n_gates = n_gates
+        self.save_fn = save_fn
+        self.name = name
+        self.df = None
+
+        # Load data if it exists
+        if (self.save_fn is not None) and (self.save_fn.exists()):
+            self.load_csv()
+            self.n_rows = len(self.df)
+        else:
+            self.n_rows = n_rows
 
         # Get screen size and set window size relative to it
         screen = QDesktopWidget().screenGeometry()
@@ -776,8 +822,7 @@ class InsertionTableAppBase(QDialog):
             DV: DORSAL is positive\n
             DEPTH SHOULD BE POSITIVE (i.e., distance into the brain)"
         """
-        info_label = QLabel(info
-        )
+        info_label = QLabel(info)
         info_label.setAlignment(Qt.AlignCenter)
         table_layout.addWidget(info_label)
 
@@ -785,13 +830,13 @@ class InsertionTableAppBase(QDialog):
         # Create table
         self.table = QTableWidget()
         self.table.setColumnCount(len(self.headers))
-        self.table.setRowCount(n_rows)
+        self.table.setRowCount(self.n_rows)
 
         # Set headers
         self.table.setHorizontalHeaderLabels(self.headers)
 
         # Fill insertion numbers and setup columns
-        for row in range(n_rows):
+        for row in range(self.n_rows):
             self.add_row(row)
 
         # Adjust column widths to fit the window
@@ -838,6 +883,10 @@ class InsertionTableAppBase(QDialog):
         image_label.setPixmap(pixmap)
         main_layout.addWidget(image_label)
 
+        if self.df is not None:
+            self.populate_table()
+
+
     def get_headers(self):
         headers = [
             "Insertion number",
@@ -883,7 +932,7 @@ class InsertionTableAppBase(QDialog):
 
         # Gate column (dropdown)
         gate_combo = QComboBox()
-        gate_options = ["dnr"] + [f"g{i}" for i in range(0, self.n_gates+1)]
+        gate_options = ["dnr"] + [f"g{i}" for i in range(0, self.n_gates)]
         gate_combo.addItems(gate_options)
         self.table.setCellWidget(row, self.gate_column, gate_combo)
 
@@ -996,13 +1045,13 @@ class InsertionTableAppBase(QDialog):
         )
         # Drop rows where all numeric columns are NaN
         df = df.dropna(subset=self.numeric_headers, how="any")
+        df["probe"] = self.name
         self.df = df
         print(df)
 
     def convert_and_export(self):
         self.df = insertion2IBL(self.df)
         self.df = convert2ccf(self.df)
-
 
     def create_dataframe(self):
         self.export_to_dataframe()
@@ -1012,10 +1061,39 @@ class InsertionTableAppBase(QDialog):
     def get_insertions(self):
         return self.df
 
+    def to_csv(self):
+        self.df.to_csv(self.save_fn, index=False)
+
+    # Make a method to load from a csv if it exists
+    def load_csv(self):
+        """
+        Load a csv and populate the table if it exists
+        """
+        df = pd.read_csv(self.save_fn)
+        self.df = df
+
+    def populate_table(self):
+        """
+        Populate the table with data from a dataframe
+        """
+        df = self.df
+        self.table.setRowCount(len(df))
+        for i, row in df.iterrows():
+            for j, value in enumerate(row):
+                if j in [self.gate_column, self.reference_column, self.insertion_type_column]:
+                    # Set the current text for the QComboBox widgets
+                    widget = self.table.cellWidget(i, j)
+                    if widget is not None and isinstance(widget, QComboBox):
+                        widget.setCurrentText(str(value))
+                else:
+                    item = QTableWidgetItem(str(value))
+                    item.setTextAlignment(Qt.AlignCenter)
+                    self.table.setItem(i, j, item)
+
 
 class NpxInsertionTableApp(InsertionTableAppBase):
-    def __init__(self, n_rows=1, n_gates=10, name=""):
-        super().__init__(n_rows, n_gates, name)
+    def __init__(self, n_rows=1, n_gates=10, name="", save_fn=None):
+        super().__init__(n_rows, n_gates, name, save_fn)
 
     def get_insertion_types(self):
         return ["npx1.0", "npx2.0"]
@@ -1039,8 +1117,8 @@ class NpxInsertionTableApp(InsertionTableAppBase):
 
 
 class OptoInsertionTableApp(InsertionTableAppBase):
-    def __init__(self, n_rows=1, n_gates=10, name=""):
-        super().__init__(n_rows, n_gates, name)
+    def __init__(self, n_rows=1, n_gates=10, name="", save_fn=None):
+        super().__init__(n_rows, n_gates, name, save_fn)
         self.setStyleSheet("background-color: lightblue;")
         header = self.table.horizontalHeader()
         header.setStyleSheet(

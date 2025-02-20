@@ -25,6 +25,7 @@ import subprocess
 import pandas as pd
 
 
+
 #TODO: Solve depth issue with insertions
 
 def main():
@@ -87,26 +88,25 @@ def main():
             print("Created wiring file")
     
     # Get insertions and save
-    insertions = pd.DataFrame()
     for ii in range(num_probes):
         name = f'imec{ii}'
-        insertion_table = NpxInsertionTableApp(name=name,n_gates=n_gates)
+        fn = local_run_path.joinpath(f'_cibrrig_{name}.insertionsManipulator.csv')
+        insertion_table = NpxInsertionTableApp(name=name,n_gates=n_gates,save_fn=fn)
         insertion_table.exec_()
-        _insertions = insertion_table.get_insertions()
-        _insertions['probe'] = f'imec{ii}'
-        _insertions.to_csv(local_run_path.joinpath(f'_cibrrig_{name}.insertionsManipulator.csv'))
-
-        insertions = pd.concat([insertions, _insertions])
+        insertion_table.to_csv()
 
     for ii in range(num_opto_fibers):
         name = f'opto{ii}'
-        insertion_table = OptoInsertionTableApp(name=name,n_gates=n_gates)
+        fn = local_run_path.joinpath(f'_cibrrig_{name}.insertionsManipulator.csv')
+        insertion_table = OptoInsertionTableApp(name=name,n_gates=n_gates,save_fn = fn)
         insertion_table.exec_()
-        _insertions = insertion_table.get_insertions()
-        _insertions['probe'] = f'opto{ii}'
-        _insertions.to_csv(local_run_path.joinpath(f'_cibrrig_{name}.insertionsManipulator.csv'))
-
-        insertions = pd.concat([insertions, _insertions])
+        insertion_table.to_csv()
+    
+    # Load all insertions
+    insertions = pd.DataFrame()
+    insertions_fns =list(local_run_path.rglob("*.insertionsManipulator.csv"))
+    for fn in insertions_fns:
+        insertions = pd.concat([insertions,pd.read_csv(fn)])
 
     save_fn = Path(local_run_path).joinpath("caudal_insertion_map.png")
     plot_insertion_layout(insertions,save_fn)
