@@ -34,7 +34,7 @@ TEMPORAL_FEATURES = [
     "exhale_onsets",
     "inhale_offsets",
     "exhale_offsets",
-    "inhale_pause_onsetes",
+    "inhale_pause_onsets",
     "exhale_pause_onsets",
     "start_time",
     "end_time",

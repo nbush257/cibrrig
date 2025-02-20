@@ -131,7 +131,7 @@ def run_session(session_path):
     #  Allow user to run as a regular command line
     chans, cams = get_camera_chans(session_path)
     if len(chans) == 0:
-        _log.warning("No camera found in wiring. Skipping frame extraction")
+        _log.info("No camera found in wiring. Skipping frame extraction")
         return
 
     for ni_fn in ni_list:

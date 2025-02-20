@@ -246,12 +246,13 @@ class Run:
         """
         gates = []
         # guess that we will never have more than 99 gates. This is dirty, but works
-        gate_list = list(self.run_path.glob("*_g[0-9]")) + list(
-            self.run_path.glob("*_g[0-9][0=9]")
-        )
+        gate_list_1 = list(self.run_path.glob("*_g[0-9]"))
+        gate_list_2 = list(self.run_path.glob("*_g[0-9][0-9]"))
+        gate_list_1.sort()
+        gate_list_2.sort()
+        gate_list = gate_list_1 + gate_list_2
         for gate in gate_list:
             gates.append(gate) if gate.is_dir() else None
-        gates.sort()
         self.gates = gates
 
     def move_gates(self):
@@ -277,6 +278,14 @@ class Run:
                 shutil.move(_gate_log, session_dir)
         self.sessions = sessions
 
+    def move_run_files(self,dest):
+        """
+        Move files specific for a given  day's run into the date folder
+        """
+        run_level_files = list(self.run_path.glob("*"))
+        run_level_files = [x for x in run_level_files if x.is_file()]
+        for fn in run_level_files:
+            shutil.move(fn, dest)
 
 def run(run_path, skip_backup_check=False):
     """
@@ -287,15 +296,18 @@ def run(run_path, skip_backup_check=False):
         skip_backup_check (bool): Flag to skip the backup check before renaming files.
     """
     run_path = Path(run_path)
-    run = Run(run_path)
+    runner = Run(run_path)
     if skip_backup_check:
         _log.warning("Skipping backup check!")
     else:
-        for gate in run.gates:
+        for gate in runner.gates:
             check_backup_flag(gate)
-    run.move_gates()
-    for session in run.sessions:
+    runner.move_gates()
+    for session in runner.sessions:
         rename_session(session)
+    
+    date_dir = session.parent
+    runner.move_run_files(date_dir)
 
 
 @click.command()

@@ -57,6 +57,7 @@ def main():
     n_gates = len(gate_paths)
     notes_fn = local_run_path.joinpath("notes.json")
     notes = NotesDialog(n_gates,notes_fn)
+    notes.exec_()
     notes.save_notes()
 
 
@@ -122,15 +123,15 @@ def main():
     # Get all sessions
     sessions_paths = list(alfio.iter_sessions(local_run_path))
     sessions_paths.sort()
+    skip_ephysQC = not run_ephysQC
+    skip_remove_opto = not remove_opto_artifact
     for session in sessions_paths:
         # RUN EXTRACT AND PREPROCESS
-        skip_ephysQC = not run_ephysQC
         preproc_pipeline.run(session, skip_ephysQC)
         rec = Recording(session)
         rec.concatenate_session()
 
         # RUN SPIKESORTING
-        skip_remove_opto = not remove_opto_artifact
         spikeinterface_ks4.run(session, skip_remove_opto=skip_remove_opto)
         params_files = session.rglob("params.py")
 
