@@ -33,15 +33,13 @@ from cibrrig.plot import laser_colors
 from PIL import Image
 import seaborn as sns
 from iblatlas.atlas import sph2cart, AllenAtlas
+import asyncio
 
 # Get absolute path of the file "brain_xyz.png"
 brain_xyz_path = Path(__file__).parent / "brain_xyz.png"
 
 ba = AllenAtlas()
 
-# TODO: create probe.descriptions.json files
-# TODO: convert insertions to IBL coordinates
-# TODO: convert IBL to CCF
 # TODO: Fix ptich correctin for CCF
 
 
@@ -204,8 +202,14 @@ def convert2ccf(df):
         df.loc[i, "theta CCF"] = 90-theta
     return df
 
+def plot_probe_insertion(df,save_fn):
+    try:
+        asyncio.run(plot_probe_insertion_urchin(df,save_fn))
+    except Exception:
+        print('Error plotting with urchin, falling back to ibl/matplotlib')
+        plot_probe_insertion_ibl(df,save_fn)
 
-async def plot_probe_insertion(df, save_fn):
+async def plot_probe_insertion_urchin(df, save_fn):
     ap = df["AP tip CCF"].values
     ml = df["ML tip CCF"].values
     dv = df["DV tip CCF"].values
@@ -301,6 +305,49 @@ async def plot_probe_insertion(df, save_fn):
 
     grid_image.save(save_fn)
 
+def plot_probe_insertion_ibl(df,save_fn):
+
+    xyz = df[['x','y','z']].values
+    tip = get_tip(df['x'],df['y'],df['z'],df['Depth (microns)'],df['phi (azimuth/yaw)'],df['theta (pitch/elevation)'])
+    tip = tip.T
+    colors = df['color'].values
+    n_lines = xyz.shape[0]
+
+    # Make a line from xyz to tip for each row
+    f,ax = plt.subplots(2,2)
+    ba.plot_cslice(0,volume='boundary',ax=ax[0,0],mapping="Cosmos",alpha=0.3)
+    ba.plot_sslice(0,volume='boundary',ax=ax[1,0],mapping="Cosmos",alpha=0.3)
+    ba.plot_hslice(-5000/1e6,volume='boundary',ax=ax[0,1],mapping="Cosmos",alpha=0.3)
+    ax[1,1].axis('off')
+    for ii in range(n_lines):
+        x = [xyz[ii,0],tip[ii,0]]
+        y = [xyz[ii,1],tip[ii,1]]
+        z = [xyz[ii,2],tip[ii,2]]
+        ax[0,0].plot(x,z,color=colors[ii],marker='.')
+        ax[1,0].plot(y,z,color=colors[ii],marker='.')
+        ax[0,1].plot(x,y,color=colors[ii],marker='.')
+
+    ax[0,0].set_xlabel('ML $\mu$m')
+    ax[0,0].set_ylabel('DV $\mu$m')
+
+    ax[1,0].set_xlabel('AP $\mu$m')
+    ax[1,0].set_ylabel('DV $\mu$m')
+
+    ax[0,1].set_xlabel('ML $\mu$m')
+    ax[0,1].set_ylabel('AP $\mu$m')
+
+    ax[0,0].set_title('Coronal projection')
+    ax[1,0].set_title('Sagittal projection')
+    ax[0,1].set_title('Axial projection' )
+
+    ax[0,0].text(1,1,'AP=0',color='red',transform=ax[0,0].transAxes,ha='right',va='top')
+    ax[1,0].text(1,1,'ML=0',color='red',transform=ax[1,0].transAxes,ha='right',va='top')
+    ax[0,1].text(1,1,'DV=-500um',color='red',transform=ax[0,1].transAxes,ha='right',va='top')
+
+    plt.savefig(save_fn,dpi=300)
+    plt.close('all')
+    
+
 
 def plot_insertion_layout(df, save_fn):
     ref_list = ["occipital apex", "occipital nadir"]
@@ -326,7 +373,7 @@ def plot_insertion_layout(df, save_fn):
     plt.title("Caudal Approach Layout Coronal Projection")
     plt.tight_layout()
     sns.despine(trim=True)
-    plt.savefig(save_fn)
+    plt.savefig(save_fn,dpi=300)
     plt.close("all")
 
 class DirectorySelector(QWidget):
@@ -963,7 +1010,6 @@ class InsertionTableAppBase(QDialog):
         return self.df
 
 
-# TODO: Fix colors column for NPX
 class NpxInsertionTableApp(InsertionTableAppBase):
     def __init__(self, n_rows=1, n_gates=10, name=""):
         super().__init__(n_rows, n_gates, name)
@@ -1037,9 +1083,10 @@ class OptoInsertionTableApp(InsertionTableAppBase):
 
 
 class NotesDialog(QDialog):
-    def __init__(self, n_gates=1):
+    def __init__(self, n_gates, notes_fn):
         super().__init__()
         self.setWindowTitle("Notes Dialog")
+        self.notes_fn = notes_fn
 
         # initialize the window to be big
         self.setGeometry(100, 100, 1000, 800)
@@ -1079,6 +1126,9 @@ class NotesDialog(QDialog):
         submit_button.clicked.connect(self.submit)
         layout.addWidget(submit_button)
 
+        # Load notes if the file exists
+        self.load_notes()
+
     def submit(self):
         self.close()  # Close the dialog box
 
@@ -1095,3 +1145,12 @@ class NotesDialog(QDialog):
             json.dump(notes, f)
 
         return notes
+
+    def load_notes(self):
+        if self.notes_fn.exists():
+            with open(self.notes_fn, "r") as f:
+                notes = json.load(f)
+                self.overall_notes_text.setText(notes.get("overall_notes", ""))
+                for i, text_field in enumerate(self.text_fields):
+                    gate_note = notes.get("gate_notes", {}).get(f"gate_{i}", "")
+                    text_field.setText(gate_note)

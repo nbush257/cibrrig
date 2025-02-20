@@ -23,7 +23,6 @@ from cibrrig.sorting import spikeinterface_ks4
 from cibrrig.gui import DirectorySelector, OptoFileFinder, WiringEditor,OptoInsertionTableApp, NpxInsertionTableApp,NotesDialog,plot_probe_insertion, plot_insertion_layout
 import subprocess
 import pandas as pd
-import asyncio
 
 
 #TODO: Solve depth issue with insertions
@@ -57,8 +56,8 @@ def main():
 
     n_gates = len(gate_paths)
     notes_fn = local_run_path.joinpath("notes.json")
-    notes = NotesDialog(n_gates)
-    notes.save_notes(notes_fn)
+    notes = NotesDialog(n_gates,notes_fn)
+    notes.save_notes()
 
 
     # Get the opto calibrations and wiring files
@@ -76,7 +75,7 @@ def main():
                 print("Skipping opto file")
 
     # Get the wiring.json files
-        wiring_fn = list(gate.glob("nidq.wiring.json"))
+        wiring_fn = list(gate.glob("*nidq.wiring.json"))
         if not wiring_fn:
             wiring_fn = gate.joinpath("nidq.wiring.json")
             wiring_editor = WiringEditor(title=gate.stem)
@@ -111,10 +110,7 @@ def main():
     save_fn = Path(local_run_path).joinpath("caudal_insertion_map.png")
     plot_insertion_layout(insertions,save_fn)
     save_fn = Path(local_run_path).joinpath("all_insertions.png")
-    try:
-        asyncio.run(plot_probe_insertion(insertions,save_fn))
-    except Exception as e:
-        print('URCHIN error - likely an ssl problem')
+    plot_probe_insertion(insertions,save_fn)
 
 
     # RUN BACKUP
