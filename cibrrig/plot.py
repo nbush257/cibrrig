@@ -1034,6 +1034,7 @@ def plot_most_likely_dynamics(
     ax=None,
     figsize=(3, 3),
     colors=[f"C{x}" for x in range(7)],
+    zval=None
 ):
     """
     Plotting of underlying vector fields from Linderman Lab
