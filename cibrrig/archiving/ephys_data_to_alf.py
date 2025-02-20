@@ -1,5 +1,5 @@
 """
-This module reformats raw electrophysiological data to match the ALF (ALigned File) standards
+This module reformats raw electrophysiological data to match the ALF standards
 used by the International Brain Laboratory (IBL). It is intended for organizing data generated
 by SpikeGLX. The script renames and moves files in place, so ensure that the raw data has
 been backed up before running the script.
