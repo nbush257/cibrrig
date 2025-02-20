@@ -402,7 +402,7 @@ class DirectorySelector(QWidget):
         self.local_run_path = DEFAULT_SUBJECTS_PATH
         self.remote_archive_path = DEFAULT_ARCHIVE_PATH
         self.remote_working_path = DEFAULT_WORKING_PATH
-        self.remove_opto_artifact = True
+        self.remove_opto_artifact = False
         self.run_ephys_qc = True
 
         self.init_ui()
@@ -462,7 +462,7 @@ class DirectorySelector(QWidget):
         self.num_probes_label = QLabel("Number of Probes:")
         self.num_probes_spinbox = QSpinBox()
         self.num_probes_spinbox.setValue(1)
-        self.num_probes_spinbox.setMinimum(1)
+        self.num_probes_spinbox.setMinimum(0)
         grid_layout.addWidget(self.num_probes_label, 5, 0)
         grid_layout.addWidget(self.num_probes_spinbox, 5, 1)
 
@@ -746,7 +746,7 @@ class WiringEditor(QDialog):
 
 
 class InsertionTableAppBase(QDialog):
-    def __init__(self, n_rows=1, n_gates=10, name=""):
+    def __init__(self, n_rows=1, n_gates=20, name=""):
         super().__init__()
         self.setWindowTitle(f"Insertion Data Table {name}")
         self.n_gates = n_gates
