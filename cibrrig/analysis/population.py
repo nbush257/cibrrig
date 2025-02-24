@@ -219,7 +219,7 @@ class Population:
     A class for analyzing and visualizing population-level neural activity.
 
     Attributes:
-        spike_times (array-like): Array of spike times.
+        spike_times (array-like): Array of spike times. Must be converted to seconds, not samples
         spike_clusters (array-like): Array of cluster IDs corresponding to each spike time.
         ndims (int): Number of dimensions for PCA projection.
         binsize (float): Time bin size in seconds.
@@ -351,7 +351,7 @@ class Population:
 
         Keyword Args passed to "plot_projection" from the plotting module.
             ax (matplotlib.axes.Axes, optional): The axes to plot on. If not provided, a new figure and axes will be created.
-            color (str, optional): The color of the data points or lines. Default is "k" (black) if no color variable (`cvar`) is provided.
+            c (str, optional): The color of the data points or lines. Default is "k" (black) if no color variable (`cvar`) is provided.
             alpha (float, optional): Transparency level for the points. Should be between 0 (fully transparent) and 1 (fully opaque).
                 - Default is 0.5.
             lw (float, optional): Line width for plotting. Applies if plotting a line plot. Default is 0.5.
