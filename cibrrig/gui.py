@@ -43,7 +43,7 @@ ba = AllenAtlas()
 # TODO: Fix ptich correctin for CCF
 
 
-DEFAULT_SUBJECTS_PATH = Path("D:/sglx_data/Subjects")
+DEFAULT_SUBJECTS_PATH = Path("D:/Subjects")
 DEFAULT_ARCHIVE_PATH = Path("U:/alf_data_repo/ramirez/Subjects")
 DEFAULT_WORKING_PATH = Path("X:/alf_data_repo/ramirez/Subjects")
 

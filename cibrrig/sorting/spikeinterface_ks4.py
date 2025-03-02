@@ -274,7 +274,7 @@ def split_shanks_and_spatial_filter(rec):
     combined_preprocessed_recording = si.aggregate_channels(preprocessed_recordings)
     return combined_preprocessed_recording
 
-def remove_and_interpolate(recording,t0=0,tf=120,remove=True,plot=True,save=True):
+def remove_and_interpolate(recording,probe_dir,t0=0,tf=120,remove=True,plot=True,save=True):
     ''' Remove channels outside the brain and interpolate bad channels
     
     Args:
@@ -297,7 +297,6 @@ def remove_and_interpolate(recording,t0=0,tf=120,remove=True,plot=True,save=True
         recording_sub = recording_sub.time_slice(t0,tf)
     else:
         recording_sub = recording.time_slice(t0,tf)
-    probe_dir = Path(recording.neo_reader.dirname)
 
     # Detect bad channels
     _,chan_labels = si.detect_bad_channels(recording_sub,outside_channels_location='both')
@@ -366,7 +365,7 @@ def apply_preprocessing(
     rec_shifted = spre.phase_shift(rec_filtered)
 
     # Remove channels outside the brain and interpolate bad channels
-    rec_interpolated,chan_labels = remove_and_interpolate(rec_shifted,remove=True,plot=True,save=True)
+    rec_interpolated,chan_labels = remove_and_interpolate(rec_shifted,probe_dir,remove=True,plot=True,save=True)
     plt.close('all')
 
     # Apply spatial filtering and split shanks
