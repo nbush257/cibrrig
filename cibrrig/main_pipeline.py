@@ -30,8 +30,8 @@ import enum
 class Status(enum.IntEnum):
     NONE = 0
     PREPROC = 10
-    CONCATENATED = 20
-    SPIKESORTED = 30
+    SPIKESORTED = 20
+    CONCATENATED = 30
     WAVEFORMS = 40
 
 
@@ -188,18 +188,25 @@ def main():
             preproc_pipeline.run(session, skip_ephysQC)
             rec = Recording(session)
             set_status(session,Status.PREPROC)
-        if status<Status.CONCATENATED:
-            rec.concatenate_session()
-            set_status(session,Status.CONCATENATED)
+
 
         # RUN SPIKESORTING
         if status<Status.SPIKESORTED:
-            spikeinterface_ks4.run(session, skip_remove_opto=skip_remove_opto)
-            params_files = session.rglob("params.py")
-            set_status(session,Status.SPIKESORTED)
+            try:
+                spikeinterface_ks4.run(session, skip_remove_opto=skip_remove_opto)
+                params_files = session.rglob("params.py")
+                set_status(session,Status.SPIKESORTED)
+                sorted = True
+            except Exception as e:
+                logging.error(f"Error in spikesorting: {e}")
+                sorted = False
 
+        if status<Status.CONCATENATED:
+            rec.concatenate_session()
+            set_status(session,Status.CONCATENATED)
         # PHY EXTRACT WAVEFORMS
-        if status<Status.WAVEFORMS:
+
+        if status<Status.WAVEFORMS and sorted:
             for pp in params_files:
                 command = ["phy", "extract-waveforms", pp]
                 subprocess.run(command, cwd=pp.parent)

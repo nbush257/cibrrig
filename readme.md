@@ -33,7 +33,6 @@ mamba create -n cibrrig python=3.12
 mamba activate cibrrig
 ```
 
-
 Then change directory to a place to install cibrrig locally. 
 >[!IMPORTANT]
 >If you are on NPX 971 room computer, this has already been cloned and you should just install into your new venv.
@@ -54,7 +53,14 @@ Then change directory to a place to install cibrrig locally.
 > **Once your virtual (mamba/conda) environment has been set up, `git pull` in the cibrrig directory will update `cibrrig` so you do not have to redo the pip install**
 
 
-Helper packages (Primarily matlab packages) should live in `C:/helpers` on the NPX computer so they are available to all users. Some functionality relies on these packages.
+
+Then, make sure the GPU is working for Kilosort (See [kilosort install instructions](https://github.com/MouseLand/Kilosort) steps 7 and 8):
+>Next, if the CPU version of pytorch was installed (will happen on Windows), remove it with `pip uninstall torch`
+>Then install the GPU version of pytorch `conda install pytorch pytorch-cuda=11.8 -c pytorch -c nvidia`
+
+Make sure you are using the GPU by running the kilosort gui:`python -m kilosort` and confirming the PyTorch device is the GPU and not the CPU: ![](gpu_check.png)
+
+Helper packages (Primarily matlab packages) should live in `C:/helpers` on the NPX computer so they are available to all users. Some functionality relies on these packages, but much is being phased out
 
 These include:
  - [Kilosort](https://github.com/MouseLand/Kilosort) (versions 2,3)

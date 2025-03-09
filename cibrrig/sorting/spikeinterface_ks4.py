@@ -90,7 +90,7 @@ def move_motion_info(motion_path, destination):
 
 
 def remove_opto_artifacts(
-    recording, session_path, probe_path, object="laser", ms_before=0.5, ms_after=2.0
+    recording, session_path, probe_path, object="laser", ms_before=0.125, ms_after=0.25
 ):
     """
     Use the Spikeinterface "remove_artifacts" to zero out around the onsets and offsets of the laser
@@ -101,13 +101,36 @@ def remove_opto_artifacts(
         session_path (Path):
         probe_dir (Path):
         object (str, optional): ALF object. Defaults to 'laser'.
-        ms_before (float, optional): Time before laser to blank. Defaults to 0.5.
-        ms_after (float, optional): Time after laser to blank. Defaults to 2.0.
+        ms_before (float, optional): Time before laser to blank. Defaults to 0.125.
+        ms_after (float, optional): Time after laser to blank. Defaults to 0.25.
 
     Returns:
         spikeinterface.RecordingExtractor: Recording extractor with artifacts removed.
     """
+    def _align_artifacts(recording,samps,winsize=0.001):
+        """
+        Align artifact removal window to the peak of the artifact. Do this because
+        the time stamp of the laser onset is not always the peak of the artifact.
+        This allows us to cut a smaller chunk of data out
+
+        Args:
+            recording (spikeinterface.RecordingExtractor): Recording extractor object.
+            samps (np.array): Array of sample indices.
+            winsize (float, optional): Window size in seconds. Defaults to 0.001.
+        
+        Returns:
+            np.array: Array of aligned sample indices.
+    
+        """
+        samps_aligned = np.empty_like(samps)
+        win_samps=int(winsize*recording.get_sampling_frequency())
+        for ii,stim in enumerate(samps):
+            _snippet = recording.frame_slice(stim-win_samps,stim+win_samps).get_traces()
+            samps_aligned[ii] = np.argmax(np.mean(_snippet**2,1))+stim-win_samps
+        return samps_aligned
+
     rec_list = []
+    _log.info("Removing opto artifacts")
     for ii in range(recording.get_num_segments()):
         sync_fn = alfio.filter_by(probe_path, object=f"ephysData_*t{ii}", extra="sync")[
             0
@@ -126,15 +149,17 @@ def remove_opto_artifacts(
             opto_times_adj = apply_sync(
                 probe_path.joinpath(sync_fn), opto_times, forward=False
             )
-            opto_samps = np.array(
-                [
-                    recording.time_to_sample_index(x, segment_index=ii)
-                    for x in opto_times_adj
-                ]
-            )
+
+            # Map times to samples in ints and align to peak artifact
+            opto_samps = opto_times_adj * recording.get_sampling_frequency()
+            opto_samps = np.round(opto_samps).astype(int)
+            opto_samps = _align_artifacts(segment,opto_samps)
+
+            # Blank out the artifacts
             new_segment = si.remove_artifacts(
                 segment, opto_samps, ms_before=ms_before, ms_after=ms_after
             )
+
             rec_list.append(new_segment)
         else:
             rec_list.append(segment)
@@ -164,7 +189,11 @@ def concatenate_recording(recording, t0=0, tf=None):
         seg = recording.select_segments(ii)
         if tf is not None:
             _log.warning(f"TESTING: ONLY RUNNING ON {tf-t0}s per segment")
-            seg = seg.frame_slice(t0, 30000 * tf)
+            sf = int(seg.get_sampling_frequency()*tf)
+            sf = np.min([sf,seg.get_num_frames()])
+            s0 = int(seg.get_sampling_frequency()*t0)
+            s0 = np.max([s0,0])
+            seg = seg.frame_slice(s0, sf)
         rec_list.append(seg)
     recording = si.concatenate_recordings(rec_list)
     return recording
@@ -291,12 +320,18 @@ def remove_and_interpolate(recording,probe_dir,t0=0,tf=120,remove=True,plot=True
     '''
     _log.info('Removing and interpolating bad channels')
 
-    # Deal with multiple segments
-    if recording.get_num_segments()>1:
-        recording_sub = si.select_segment_recording(recording,0)
-        recording_sub = recording_sub.time_slice(t0,tf)
-    else:
-        recording_sub = recording.time_slice(t0,tf)
+    # Map times to samples with recording start as t0 (fix since recording start is not always 0 in spikeinterface>0.100ish)
+    sr = recording.get_sampling_frequency()
+    s0,sf = sr*t0,sr*tf
+    s0 = np.round(s0).astype(int)
+    sf = np.round(sf).astype(int)
+
+    # Get the segment between t0 and tf by indexing into frames
+    recording_sub = si.select_segment_recording(recording,0) # Grab the first segment
+    s0 = np.max([s0,0])
+    sf = np.min([sf,recording_sub.get_num_frames()])
+    recording_sub = recording_sub.frame_slice(s0,sf)
+    
 
     # Detect bad channels
     _,chan_labels = si.detect_bad_channels(recording_sub,outside_channels_location='both')
