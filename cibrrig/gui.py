@@ -92,7 +92,7 @@ DEFAULT_WIRING = {
 
 # List of Sync inputs that are expected
 POSSIBLE_WIRINGS = {
-    "Digital": ["None", "record", "imec_sync", "right_camera", "Custom"],
+    "Digital": ["None", "record", "imec_sync", "right_camera","laser2", "Custom"],
     "Analog": [
         "None",
         "diaphragm",

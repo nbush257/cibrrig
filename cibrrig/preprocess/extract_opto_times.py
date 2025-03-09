@@ -14,14 +14,9 @@ import pandas as pd
 import logging
 import json
 from scipy.interpolate import interp1d
+import one.alf.io as alfio
 
-try:
-    from .nidq_utils import binary_onsets, get_trig_string
-except ImportError:
-    import sys
-
-    sys.path.append("../")
-    from nidq_utils import get_trig_string, binary_onsets
+from cibrrig.preprocess.nidq_utils import binary_onsets, get_trig_string
 from one.alf import spec
 
 logging.basicConfig()
@@ -68,8 +63,27 @@ def get_opto_df(raw_opto, v_thresh, ni_sr, min_dur=0.001, max_dur=20):
 
     return opto_df
 
+def get_opto_df_digital(SR,opto_chan):
+    dig_signal = SR.read_sync_digital(slice(None,None))[:,opto_chan]
+    rec_duration = SR.ns / SR.fs
+    onsets = np.where(np.diff(dig_signal) == 1)[0]
+    offsets = np.where(np.diff(dig_signal) == -1)[0]
 
-def process_rec(SR, opto_chan=5, v_thresh=0.5, **kwargs):
+    if offsets[0] < onsets[0]:
+        onsets = np.insert(onsets,0,0)
+    if offsets[-1] < onsets[-1]:
+        offsets = np.append(offsets,rec_duration)
+    if len(onsets) != len(offsets):
+        _log.warning("Number of onsets and offsets do not match!")
+        return pd.DataFrame(['on_sec','off_sec','dur_sec'])
+
+    on_sec = onsets / SR.fs
+    off_sec = offsets / SR.fs
+    dur_sec = np.round(off_sec - on_sec,3)
+    return pd.DataFrame({'on_sec':on_sec,'off_sec':off_sec,'dur_sec':dur_sec})
+    
+
+def process_rec(SR, opto_chan, v_thresh=0.5, **kwargs):
     """
     Create a DataFrame where each row is an opto pulse.
     Information about the pulse timing, amplitude, and duration are created.
@@ -82,6 +96,17 @@ def process_rec(SR, opto_chan=5, v_thresh=0.5, **kwargs):
     Returns:
         pd.DataFrame: DataFrame with columns 'on_sec', 'off_sec', 'dur_sec', and 'amps'.
     """
+    if opto_chan < 16:
+        digital=True
+    else:
+        digital=False
+        # Magic number 16 because analog channel 0 maps to sync channel 16
+        opto_chan = opto_chan - 16
+        
+    if digital:
+        _log.info(f"Extracting digital opto pulses on channel {opto_chan}")
+        df = get_opto_df_digital(SR,opto_chan)
+        return df
 
     _log.info("Reading raw data...")
     raw_opto = SR.read(nsel=slice(None, None, None), csel=opto_chan)[0]
@@ -195,37 +220,24 @@ def run_session(session_path, v_thresh):
         trig_string = get_trig_string(ni_fn.stem)
         SR_ni = spikeglx.Reader(ni_fn)
         for chan, label in zip(chans, labels):
-            _log.debug("Assumes the laser channel is on an analog channel")
-            opto_chan = (
-                chan - 16
-            )  # Magic number 16 because analog channel 0 maps to sync channel 16
-            df = process_rec(SR_ni, opto_chan=opto_chan, v_thresh=v_thresh)
+
+            df = process_rec(SR_ni,chan, v_thresh=v_thresh)
+            output = {}
+            output['intervals'] = df[['on_sec','off_sec']].values
+
+            # If amplitude is not in the dataframe, assume digital 1V pulses without a calibration
+            if 'amps' not in df.columns:
+                output['amplitudesVolts'] = np.ones(df.shape[0])*1
+                alfio.save_object_npy(dest_path,output,label,namespace='cibrrig',parts=trig_string)
+                continue
+            else:
+                output['amplitudesVolts'] = df['amps'].values
 
             # Calibrate if a calibration function is provided
             if calib_fcn is not None:
-                df["milliwattage"] = calib_fcn(df["amps"])
-                fn_amps = spec.to_alf(
-                    label, "amplitudesMilliwatts", "npy", "cibrrig", extra=trig_string
-                )
-                amps = df["milliwattage"].values
-                np.save(dest_path.joinpath(fn_amps), amps)
-
-            # Save the data
-            fn_intervals = spec.to_alf(
-                label, "intervals", "npy", "cibrrig", extra=trig_string
-            )
-            intervals = df[["on_sec", "off_sec"]].values
-            np.save(dest_path.joinpath(fn_intervals), intervals)
-
-            fn_amps = spec.to_alf(
-                label, "amplitudesVolts", "npy", "cibrrig", extra=trig_string
-            )
-            amps = df["amps"].values
-            np.save(dest_path.joinpath(fn_amps), amps)
-
-            # fn = spec.to_alf(label,'table','pqt','cibrrig',extra=trig_string)
-            # df.to_parquet(dest_path.joinpath(fn))
-
+                output['amplitudesMilliwatts'] = calib_fcn(df["amps"])
+            
+            alfio.save_object_npy(dest_path,output,label,namespace='cibrrig',parts=trig_string)
 
 def run(input_path, opto_chan=None, v_thresh=0.5, label="laser", calib=None):
     """

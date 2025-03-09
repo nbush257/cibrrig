@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 import click
 import matplotlib.pyplot as plt
-from . import (
+from cibrrig.preprocess import (
     extract_frame_times,
     extract_opto_times,
     extract_physiology,
