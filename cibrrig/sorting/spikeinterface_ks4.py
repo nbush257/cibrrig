@@ -412,9 +412,7 @@ def apply_preprocessing(
     else:
         if not skip_remove_opto:
             # Remove optogenetic artifacts if not skipped
-            rec_processed = remove_opto_artifacts(
-                rec_destriped, session_path, probe_dir, ms_before=0.5, ms_after=2
-            )
+            rec_processed = remove_opto_artifacts(rec_destriped, session_path, probe_dir)
         else:
             rec_processed = rec_destriped
 
@@ -448,7 +446,7 @@ def run_probe(
 
     # Temporary paths that will not be coming with us
     SORT_PATH = temp_local.joinpath(".ks4")
-    WVFM_PATH = temp_local.joinpath(".wvfm")
+    ANALYZER_PATH = temp_local.joinpath(".analyzer")
     PREPROC_PATH = temp_local.joinpath(".preproc")
     MOTION_PATH = temp_local.joinpath(".motion")
     probe_local.mkdir(parents=True, exist_ok=True)
@@ -490,13 +488,13 @@ def run_probe(
         _log.info("Preprocessed data exists. Loading")
 
     # ============= Load preprocessed data from disk ============ #
-    recording = si.load_extractor(PREPROC_PATH)
+    recording = si.load(PREPROC_PATH)
     recording.annotate(is_filtered=True)
 
     # ============= RUN SORTER ==================== #
     if SORT_PATH.exists():
         _log.info("Found sorting. Loading...")
-        sort_rez = si.load_extractor(SORT_PATH)
+        sort_rez = si.load(SORT_PATH)
     else:
         _log.info(f"Running {SORTER}")
         ## Originally we were sorting by channel shank separately - this caused some issues with some data. 
@@ -521,98 +519,74 @@ def run_probe(
         sort_rez.save(folder=SORT_PATH)
 
     print_elapsed_time(start_time)
+    sort_rez = si.remove_duplicated_spikes(sort_rez, censored_period_ms=0.166)
+    
+    
 
-    # ========= WAVEFORMS ============= #
-    if WVFM_PATH.exists():
-        _log.info("Found waveforms. Loading")
-        we = si.load_waveforms(WVFM_PATH)
-        sort_rez = we.sorting
+    # ========= analyzer ============= #
+    if ANALYZER_PATH.with_suffix('.zarr').exists():
+        _log.info("Found sorting analyzer. Loading")
+        clean_analyzer = si.load(ANALYZER_PATH.with_suffix('.zarr'))
     else:
-        _log.info("Extracting waveforms...")
-        we = si.extract_waveforms(
-            recording, sort_rez, folder=WVFM_PATH, sparse=False, **job_kwargs
-        )
-        _log.info("Removing redundant spikes...")
-        sort_rez = si.remove_duplicated_spikes(sort_rez, censored_period_ms=0.166)
-        sort_rez = si.remove_redundant_units(
-            sort_rez, align=False, remove_strategy="max_spikes"
-        )
-        we = si.extract_waveforms(
-            recording,
-            sort_rez,
-            sparse=False,
-            folder=WVFM_PATH,
-            overwrite=True,
-            **job_kwargs,
-        )
-
-    _log.info("Comuting sparsity")
-    sparsity = si.compute_sparsity(we, num_channels=9)
-    print_elapsed_time(start_time)
-
-    # ============ COMPUTE METRICS ============== #
-    # Compute features
-    _log.info("Computing amplitudes and locations")
-    _ = si.compute_spike_amplitudes(we, load_if_exists=True, **job_kwargs)
-    locations = si.compute_spike_locations(we, load_if_exists=True, **job_kwargs)
-    unit_locations = si.compute_unit_locations(we, load_if_exists=True)
-    _ = si.compute_drift_metrics(we)
-
-    if RUN_PC:
-        _ = si.compute_principal_components(
-            waveform_extractor=we,
-            n_components=5,
-            load_if_exists=True,
-            mode="by_channel_local",
-            **job_kwargs,
-            sparsity=sparsity,
-        )
-
-    # Compute metrics
-    _log.info("Computing metrics")
-    metrics = si.compute_quality_metrics(waveform_extractor=we, load_if_exists=True)
-    _log.info("Template metrics")
-    template_metrics = si.compute_template_metrics(we, load_if_exists=True)
-
-    # Perform automated quality control
-    query = f"amplitude_cutoff<{AMPLITUDE_CUTOFF} & sliding_rp_violation<{SLIDING_RP} & amplitude_median>{AMP_THRESH}"
-    good_unit_ids = metrics.query(query).index
-    metrics["group"] = "mua"
-    metrics.loc[good_unit_ids, "group"] = "good"
-    print_elapsed_time(start_time)
-
-    # =================== EXPORT ========= #
-    _log.info("Exporting to phy")
+        analyzer = si.create_sorting_analyzer(sort_rez, recording,sparse=False)
+        analyzer.compute('random_spikes')
+        analyzer.compute('waveforms',**job_kwargs)
+        analyzer.compute('templates')
+        clean_sorting = si.remove_redundant_units(analyzer,duplicate_threshold=0.9)
+        clean_analyzer = analyzer.select_units(clean_sorting.unit_ids)
+        clean_analyzer.compute(['noise_levels','spike_amplitudes','spike_locations','unit_locations'])
+        # clean_analyzer.compute('principal_components',n_components=3,mode='by_channel_global',whiten=True)
+        quality = clean_analyzer.compute('quality_metrics')
+        template = clean_analyzer.compute('template_metrics')
+        # _log.info("Computing correlograms")
+        # clean_analyzer.compute('correlograms')
+        
+        # Save the analyzer
+        # clean_analyzer.delete('waveforms')
+        # clean_analyzer.save_as(format='zarr',folder=ANALYZER_PATH)
+            
+    # Exports
+    si.export_report(clean_analyzer,temp_local.joinpath("report.html"))
     si.export_to_phy(
-        waveform_extractor=we,
-        output_folder=PHY_DEST,
-        # sparsity=sparsity,
+        clean_analyzer,
+        PHY_DEST,
         use_relative_path=True,
         copy_binary=True,
         compute_pc_features=False,
-        **job_kwargs,
-    )
+        **job_kwargs)
+
+    # Label "good" and "mua" units
+    query = f"amplitude_cutoff<{AMPLITUDE_CUTOFF} & sliding_rp_violation<{SLIDING_RP} & abs(amplitude_median)>{AMP_THRESH}"    
+    good_unit_ids = quality.get_data().query(query)
+    good_unit_ids = quality.get_data().query(query).index
+    group = pd.Series(index=clean_analyzer.sorting.unit_ids,dtype='str')
+    group.iloc[:] = 'mua'
+    group.loc[good_unit_ids] = 'good'
+    group.to_csv(PHY_DEST.joinpath('group.tsv'),sep='\t')
+
+
+    print_elapsed_time(start_time)
+
 
     # ============= AUTOMERGE ============= #
     _log.info("Getting suggested merges")
-    auto_merge_candidates = si.get_potential_auto_merge(we)
+    auto_merge_candidates = si.compute_merge_unit_groups(clean_analyzer)
     pd.DataFrame(auto_merge_candidates).to_csv(
         PHY_DEST.joinpath("potential_merges.tsv"), sep="\t"
     )
 
     # ============= SAVE METRICS ============= #
     #
+    locations = clean_analyzer.get_extension('spike_locations').get_data()
     spike_locations = np.vstack([locations["x"], locations["y"]]).T
     np.save(PHY_DEST.joinpath("spike_locations.npy"), spike_locations)
+
+    unit_locations = clean_analyzer.get_extension('unit_locations').get_data()
     np.save(PHY_DEST.joinpath("cluster_locations.npy"), unit_locations)
+
     shutil.copy(
         PHY_DEST.joinpath("channel_groups.npy"), PHY_DEST.joinpath("channel_shanks.npy")
     )
-    for col in template_metrics:
-        this_col = pd.DataFrame(template_metrics[col])
-        this_col["cluster_id"] = sort_rez.get_unit_ids()
-        this_col = this_col[["cluster_id", col]]
-        this_col.to_csv(PHY_DEST.joinpath(f"cluster_{col}.tsv"), sep="\t", index=False)
 
     _log.info("Done sorting!")
 
