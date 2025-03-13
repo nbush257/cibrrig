@@ -28,12 +28,14 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 _log = logging.getLogger("SI-Kilosort4")
 _log.setLevel(logging.INFO)
 
+
 # Parameters
 job_kwargs = dict(chunk_duration="1s", n_jobs=15, progress_bar=True)
 we_kwargs = dict()
 sorter_params = dict(do_CAR=False, do_correction=True)
 USE_MOTION_SI = not sorter_params["do_correction"]
 COMPUTE_MOTION_SI = True
+OPTO_OBJECTS = ["laser","laser2"] # Alf objects to look for by default that we wish to remove the artifact for
 
 # QC presets
 AMPLITUDE_CUTOFF = 0.1
@@ -90,7 +92,7 @@ def move_motion_info(motion_path, destination):
 
 
 def remove_opto_artifacts(
-    recording, session_path, probe_path, object="laser", ms_before=0.125, ms_after=0.25
+    recording, session_path, probe_path, opto_objects=None, ms_before=0.125, ms_after=0.25
 ):
     """
     Use the Spikeinterface "remove_artifacts" to zero out around the onsets and offsets of the laser
@@ -129,6 +131,12 @@ def remove_opto_artifacts(
             samps_aligned[ii] = np.argmax(np.mean(_snippet**2,1))+stim-win_samps
         return samps_aligned
 
+    # Set which alf objects to look for
+    if opto_objects is None:
+        opto_objects = OPTO_OBJECTS
+    if not isinstance(opto_objects, list):
+        opto_objects = [opto_objects]
+
     rec_list = []
     _log.info("Removing opto artifacts")
     for ii in range(recording.get_num_segments()):
@@ -137,17 +145,22 @@ def remove_opto_artifacts(
         ][0]
         segment = recording.select_segments(ii)
         _log.debug(segment.__repr__())
-        opto_stims = alfio.load_object(
-            session_path.joinpath("alf"),
-            object=object,
-            namespace="cibrrig",
-            extra=f"t{ii:.0f}",
-            short_keys=True,
-        )
-        opto_times = opto_stims.intervals.ravel()
-        if len(opto_times) > 0:
+        all_opto_times = []
+        for obj in opto_objects:
+            opto_stims = alfio.load_object(
+                session_path.joinpath("alf"),
+                object=opto_objects,
+                namespace="cibrrig",
+                extra=f"t{ii:.0f}",
+                short_keys=True,
+            )
+            opto_times = opto_stims.intervals.ravel()
+            all_opto_times.append(opto_times)
+        all_opto_times = np.concatenate(all_opto_times)
+
+        if len(all_opto_times) > 0:
             opto_times_adj = apply_sync(
-                probe_path.joinpath(sync_fn), opto_times, forward=False
+                probe_path.joinpath(sync_fn), all_opto_times, forward=False
             )
 
             # Map times to samples in ints and align to peak artifact

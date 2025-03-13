@@ -186,7 +186,6 @@ def main():
         status = get_status(session)
         if status<Status.PREPROC:
             preproc_pipeline.run(session, skip_ephysQC)
-            rec = Recording(session)
             set_status(session,Status.PREPROC)
 
 
@@ -202,6 +201,7 @@ def main():
                 sorted = False
 
         if status<Status.CONCATENATED:
+            rec = Recording(session)
             rec.concatenate_session()
             set_status(session,Status.CONCATENATED)
         # PHY EXTRACT WAVEFORMS

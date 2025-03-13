@@ -103,7 +103,7 @@ def run(session_path, debug=False, no_display=False):
             ef["ap"] = probe_fn
             out_files.extend(_save_timestamps_npy(ef, timestamps, sr))
 
-    sync2alf(session_path)
+    # sync2alf(session_path)
 
 def sync2alf(session_path):
     raw_ephys_path = session_path.joinpath("raw_ephys_data")
