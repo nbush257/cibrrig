@@ -524,7 +524,7 @@ def run_probe(
         sort_rez = ss.run_sorter(
             sorter_name=SORTER,
             recording=recording,
-            output_folder=SORT_PATH.parent.joinpath("ks4_working"),
+            folder=SORT_PATH.parent.joinpath("ks4_working"),
             verbose=True,
             remove_existing_folder=False,
             **sorter_params,

@@ -11,6 +11,8 @@ Takes a spikeglx run and performs:
 from PyQt5.QtWidgets import (
     QApplication,
 )
+import os
+os.environ['OMP_NUM_THREADS'] = '1'
 from pathlib import Path
 import shutil
 import sys
@@ -191,14 +193,14 @@ def main():
 
         # RUN SPIKESORTING
         if status<Status.SPIKESORTED:
-            try:
-                spikeinterface_ks4.run(session, skip_remove_opto=skip_remove_opto)
-                params_files = session.rglob("params.py")
-                set_status(session,Status.SPIKESORTED)
-                sorted = True
-            except Exception as e:
-                logging.error(f"Error in spikesorting: {e}")
-                sorted = False
+            # try:
+            spikeinterface_ks4.run(session, skip_remove_opto=skip_remove_opto)
+            params_files = session.rglob("params.py")
+            set_status(session,Status.SPIKESORTED)
+            sorted = True
+            # except Exception as e:
+            #     logging.error(f"Error in spikesorting: {e}")
+            #     sorted = False
 
         if status<Status.CONCATENATED:
             rec = Recording(session)

@@ -52,6 +52,8 @@ Then change directory to a place to install cibrrig locally.
 >(note the period)
 > **Once your virtual (mamba/conda) environment has been set up, `git pull` in the cibrrig directory will update `cibrrig` so you do not have to redo the pip install**
 
+Then, install phy:
+`pip install git+https://github.com/cortex-lab/phy.git`
 
 
 Then, make sure the GPU is working for Kilosort (See [kilosort install instructions](https://github.com/MouseLand/Kilosort) steps 7 and 8):
