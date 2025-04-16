@@ -1019,7 +1019,7 @@ def plot_sweeps(xt, x, times, pre, post, ax=None, **kwargs):
     for tt in times:
         t0 = tt - pre
         tf = tt + post
-        s0, st, sf = np.searchsorted(xt, [t0, tt, tf])
+        s0, st, sf = np.searchsorted(xt, [t0, tt, tf])-1
         ax.plot(xt[s0:sf] - xt[st], x[s0:sf], **kwargs)
     return ax
 
