@@ -528,6 +528,7 @@ def run_probe(probe_path, tags, consideration_window, wavelength, plot=False,no_
     else:
         p_stat = np.ones_like(cluster_ids)*np.nan
         I_stat = np.ones_like(cluster_ids)*np.nan
+        salt_rez = None  # ensure it's defined
 
     # Compute heuristic data
     n_stims_with_spikes, base_rate, stim_rate = compute_tagging_summary(
