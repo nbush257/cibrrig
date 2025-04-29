@@ -3,10 +3,6 @@
 
 [ReadTheDocs](https://cibrrig.readthedocs.io/)
 
-#TODO: Currently the log file does not get copied in the archiving. Need to:
-
-- [ ] Archive the log file in all future recordings
-- [ ] Archive the log file in all previously recorded data.
 
 ## Description
 Code to integrate hardware and software on the Neuropixel rig in JMB 971 at Seattle Childrens Research Institute, Center for Integrative Brain Research (SCRI-CIBR)
