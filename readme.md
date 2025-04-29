@@ -1,5 +1,4 @@
 # CIBRRIG
-**Updated 2024-09-07**
 
 [ReadTheDocs](https://cibrrig.readthedocs.io/)
 
