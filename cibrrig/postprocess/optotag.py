@@ -258,13 +258,13 @@ def make_plots(
     cluster_ids,
     tags,
     save_folder,
-    salt_rez=None,
+    optotag_rez=None,
     pre_time=None,
     post_time=None,
     wavelength=473,
     consideration_window=0.01,
     cmap="magma",
-    plot_desc=False,
+    plot_desc=True,
 ):
     """
     Plots rasters and PETHs for each cell aligned to stimulus.
@@ -277,7 +277,7 @@ def make_plots(
         cluster_ids (np.ndarray): List of clusters to include.
         tags (np.ndarray): Array of tags for each stimulus.
         save_folder (Path): Folder to save the plots.
-        salt_rez (pd.DataFrame, optional): DataFrame containing SALT results. Defaults to None.
+        tag_df (pd.DataFrame, optional): DataFrame containing tagging results. Defaults to None.
         pre_time (float, optional): Time before stimulus onset to include in plots. Defaults to None.
         post_time (float, optional): Time after stimulus onset to include in plots. Defaults to None.
         wavelength (int, optional): Wavelength of the stimulus in nm. Defaults to 473.
@@ -362,8 +362,10 @@ def make_plots(
         ax[0].set_title(f"Cluster {clu}")
 
         # Additional info if available
-        if salt_rez is not None and plot_desc:
-            this_cell = salt_rez.query("cluster_id==@clu")
+        if optotag_rez is not None:
+            this_cell = optotag_rez.query("cluster_id==@clu")
+
+        if optotag_rez is not None and plot_desc:
             p_salt = this_cell["salt_p_stat"].values[0]
             p_ks = this_cell["p_ks"].values[0]
             base_rate = this_cell["base_rate"].values[0]
@@ -383,7 +385,7 @@ def make_plots(
 
         # Save plot
         is_tagged = False
-        if salt_rez is not None:
+        if optotag_rez is not None:
             is_tagged = this_cell["is_tagged"].values[0]
         if is_tagged:
             save_fn = save_folder.joinpath(f"tagged_clu_{clu:04.0f}.png")
@@ -398,10 +400,10 @@ def make_plots(
     # Population plots - seperate by salt_p_stat <0.001
     f, ax = plt.subplots(figsize=(8, 8), ncols=2, sharex=True)
     tagged_clus = np.where(
-        np.isin(cluster_ids, salt_rez.query("is_tagged")["cluster_id"].values)
+        np.isin(cluster_ids, optotag_rez.query("is_tagged")["cluster_id"].values)
     )[0]
     untagged_clus = np.where(
-        np.isin(cluster_ids, salt_rez.query("~is_tagged")["cluster_id"].values)
+        np.isin(cluster_ids, optotag_rez.query("~is_tagged")["cluster_id"].values)
     )[0]
     max_spikes = 250
     cc1 = ax[0].pcolormesh(
@@ -484,7 +486,7 @@ def kstest_optotag(
     return p
 
 
-def run_probe(probe_path, tags, consideration_window, wavelength, plot=False,no_matlab=False):
+def run_probe(probe_path, tags, consideration_window, wavelength, plot=False,no_matlab=False,overwrite=False):
     """
     Computes the optotag statistics on data from one probe.
     Loads in from the ALF format.
@@ -507,6 +509,26 @@ def run_probe(probe_path, tags, consideration_window, wavelength, plot=False,no_
     spikes = alfio.load_object(probe_path, "spikes")
     clusters = alfio.load_object(probe_path, "clusters")
     cluster_ids = np.arange(len(clusters.amps),dtype='int16')
+    if hasattr(clusters,'optotag') or hasattr(clusters,'isTagged'):
+        if overwrite:
+            print('Removing existing optotag data')
+            fn,parts = alfio.filter_by(probe_path,object='clusters',attribute='optotag')
+            for f in fn:
+                probe_path.joinpath(f).unlink()
+            fn,parts = alfio.filter_by(probe_path,object='clusters',attribute='isTagged')
+            for f in fn:
+                probe_path.joinpath(f).unlink()
+        else:
+            print('Optotag data already exists. Use --overwrite to overwrite.')
+            return
+
+    # Set the query to mark as "tagged"
+    if no_matlab:
+        query = "p_ks<@SALT_P_CUTOFF & pct_stims_with_spikes>@MIN_PCT_TAGS_WITH_SPIKES & stim_rate/base_rate>@RATIO"
+        method = "ks"
+    else:
+        query = "salt_p_stat<@SALT_P_CUTOFF & pct_stims_with_spikes>@MIN_PCT_TAGS_WITH_SPIKES"
+        method = "salt"
 
     spike_times = spikes.times
     spike_clusters = spikes.clusters
@@ -528,7 +550,6 @@ def run_probe(probe_path, tags, consideration_window, wavelength, plot=False,no_
     else:
         p_stat = np.ones_like(cluster_ids)*np.nan
         I_stat = np.ones_like(cluster_ids)*np.nan
-        salt_rez = None  # ensure it's defined
 
     # Compute heuristic data
     n_stims_with_spikes, base_rate, stim_rate = compute_tagging_summary(
@@ -551,38 +572,29 @@ def run_probe(probe_path, tags, consideration_window, wavelength, plot=False,no_
     )
 
     # Export to a pqt
-    if not no_matlab:
-        salt_rez = pd.DataFrame()
-        salt_rez["cluster_id"] = clusters.metrics.cluster_id
-        salt_rez.loc[cluster_ids, "salt_p_stat"] = p_stat
-        salt_rez.loc[cluster_ids, "salt_I_stat"] = I_stat
-        salt_rez.loc[cluster_ids, "n_stims_with_spikes"] = n_stims_with_spikes
-        salt_rez.loc[cluster_ids, "pct_stims_with_spikes"] = (
-            n_stims_with_spikes / n_tags * 100
-        )
-        salt_rez.loc[cluster_ids, "base_rate"] = base_rate
-        salt_rez.loc[cluster_ids, "stim_rate"] = stim_rate
-        salt_rez.loc[cluster_ids, "p_ks"] = p_ks
-        salt_rez["is_tagged"] = False
-        if wavelength == 473:
-            salt_rez.loc[cluster_ids, "is_tagged"] = salt_rez.eval(
-                "salt_p_stat<@SALT_P_CUTOFF & pct_stims_with_spikes>@MIN_PCT_TAGS_WITH_SPIKES"
-            )
-        elif wavelength == 635:
-            # salt_rez.loc[cluster_ids,'is_tagged'] = salt_rez.eval('salt_p_stat<@SALT_P_CUTOFF & pct_stims_with_spikes>@MIN_PCT_TAGS_WITH_SPIKES & stim_rate/base_rate>@RATIO')
-            salt_rez.loc[cluster_ids, "is_tagged"] = salt_rez.eval(
-                "p_ks<@SALT_P_CUTOFF & pct_stims_with_spikes>@MIN_PCT_TAGS_WITH_SPIKES & stim_rate/base_rate>@RATIO"
-            )
-
-        save_fn = probe_path.joinpath(
-            alfio.spec.to_alf("clusters", "optotag", namespace="salt", extension="pqt")
-        )
-        salt_rez.to_parquet(save_fn)
-        is_tagged = {"isTagged": salt_rez["is_tagged"].values}
-        alfio.save_object_npy(probe_path, is_tagged, "clusters", namespace="salt")
-        print(f"optotagging info saved to {save_fn}.")
-    else:
-        print("Not saving SALT results as MATLAB was skipped")
+    optotag_rez = pd.DataFrame()
+    optotag_rez["cluster_id"] = clusters.metrics.cluster_id
+    optotag_rez.loc[cluster_ids, "salt_p_stat"] = p_stat
+    optotag_rez.loc[cluster_ids, "salt_I_stat"] = I_stat
+    optotag_rez.loc[cluster_ids, "n_stims_with_spikes"] = n_stims_with_spikes
+    optotag_rez.loc[cluster_ids, "pct_stims_with_spikes"] = (
+        n_stims_with_spikes / n_tags * 100
+    )
+    optotag_rez.loc[cluster_ids, "base_rate"] = base_rate
+    optotag_rez.loc[cluster_ids, "stim_rate"] = stim_rate
+    optotag_rez.loc[cluster_ids, "p_ks"] = p_ks
+    optotag_rez["is_tagged"] = False
+    optotag_rez.loc[cluster_ids,'is_tagged'] = optotag_rez.eval(query)
+    optotag_rez['method'] = method
+    save_fn = probe_path.joinpath(
+        alfio.spec.to_alf("clusters", "optotag", namespace="cibrrig", extension="pqt")
+    )
+    optotag_rez.to_parquet(save_fn)
+    
+    # Save to the clusters alf object
+    is_tagged = {"isTagged": optotag_rez["is_tagged"].values}
+    alfio.save_object_npy(probe_path, is_tagged, "clusters", namespace='cibrrig')
+    print(f"optotagging info saved to {save_fn}.")
 
     if plot:
         make_plots(
@@ -591,7 +603,7 @@ def run_probe(probe_path, tags, consideration_window, wavelength, plot=False,no_
             cluster_ids,
             tags,
             save_folder=probe_path.joinpath("tag_plots"),
-            salt_rez=salt_rez,
+            optotag_rez=optotag_rez,
             wavelength=wavelength,
             consideration_window=consideration_window,
         )
@@ -599,13 +611,14 @@ def run_probe(probe_path, tags, consideration_window, wavelength, plot=False,no_
     import json
 
     fn_parameters = probe_path.joinpath(
-        alfio.spec.to_alf("optotag", "parameters", "json", "salt")
+        alfio.spec.to_alf("optotag", "parameters", "json", "cibrrig")
     )
     params = dict(
         SALT_P_CUTOFF=SALT_P_CUTOFF,
         MIN_PCT_TAGS_WITH_SPIKES=MIN_PCT_TAGS_WITH_SPIKES,
         consideration_window=consideration_window,
         wavelength=wavelength,
+        method=method,
     )
     if wavelength == 635:
         params["RATIO"] = RATIO
@@ -613,7 +626,7 @@ def run_probe(probe_path, tags, consideration_window, wavelength, plot=False,no_
         json.dump(params, fid)
 
 
-def run_session(session_path, consideration_window, plot, wavelength,no_matlab=False):
+def run_session(session_path, consideration_window, plot, wavelength,no_matlab=False,overwrite=False):
     """
     Run optotagging statistics on each probe in a session.
     Reads in the laser object to get the opto stimulation parameters.
@@ -646,7 +659,8 @@ def run_session(session_path, consideration_window, plot, wavelength,no_matlab=F
             consideration_window=consideration_window,
             wavelength=wavelength,
             plot=plot,
-            no_matlab=no_matlab
+            no_matlab=no_matlab,
+            overwrite=overwrite,
         )
 
 
@@ -666,7 +680,8 @@ def run_session(session_path, consideration_window, plot, wavelength,no_matlab=F
 )
 @click.option("-p", "--plot", is_flag=True, help="Flag to make plots for each cell")
 @click.option("--no-matlab", is_flag=True, help="Flag to skip matlab")
-def main(session_path, consideration_window, plot, wavelength, no_matlab):
+@click.option('--overwrite', is_flag=True, help='Flag to overwrite existing optotag data')
+def main(session_path, consideration_window, plot, wavelength, no_matlab,overwrite):
     """
     CLI entry to run session
 
@@ -679,7 +694,7 @@ def main(session_path, consideration_window, plot, wavelength, no_matlab):
     if no_matlab:
         print('Skipping SALT computation that requires MATLAB')
     session_path = Path(session_path)
-    run_session(session_path, consideration_window, plot, wavelength,no_matlab=no_matlab)
+    run_session(session_path, consideration_window, plot, wavelength,no_matlab=no_matlab,overwrite=overwrite)
 
 
 if __name__ == "__main__":
