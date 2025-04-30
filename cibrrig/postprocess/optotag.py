@@ -265,6 +265,7 @@ def make_plots(
     consideration_window=0.01,
     cmap="magma",
     plot_desc=True,
+    method="salt",
 ):
     """
     Plots rasters and PETHs for each cell aligned to stimulus.
@@ -432,7 +433,7 @@ def make_plots(
             aa.axvline(stim_duration, color="w", ls=":")
     ax[0].set_title("Untagged")
     ax[1].set_title(
-        f"Tagged (salt p<{SALT_P_CUTOFF} and \nstims with  spikes>{MIN_PCT_TAGS_WITH_SPIKES:0.0f}%)"
+        f"Tagged ({method} p<{SALT_P_CUTOFF} and \nstims with  spikes>{MIN_PCT_TAGS_WITH_SPIKES:0.0f}%)"
     )
     cax1 = plt.colorbar(cc1)
     cax2 = plt.colorbar(cc2)
@@ -606,6 +607,7 @@ def run_probe(probe_path, tags, consideration_window, wavelength, plot=False,no_
             optotag_rez=optotag_rez,
             wavelength=wavelength,
             consideration_window=consideration_window,
+            method=method
         )
 
     import json
