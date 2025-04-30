@@ -1,7 +1,6 @@
 """
 This module runs the preprocessing pipeline for a session.
 It extracts sync, video frame, opto, and physiology information from the session.
-(DEPRECATED runs ephysqc on the session.)
 """
 
 import logging
@@ -17,7 +16,6 @@ from cibrrig.preprocess import (
 )
 if sys.platform == "linux":
     import matplotlib
-
     matplotlib.use("Agg")
 import numpy as np
 import one.alf.io as alfio
@@ -31,6 +29,13 @@ _log.setLevel(logging.INFO)
 
 
 def plot_QC(ephysQC):
+    """
+    Plot the quality control figures for the ephys data.
+    Saves images to the raw ephys folder
+
+    Args:
+        ephysQC (EphysQC): EphysQC object containing the quality control data computed by IBL
+    """
     _log.info(f"Plotting QC for {ephysQC.probe_path.name}")
     pname = ephysQC.probe_path.name
     fig, axs = plt.subplots(
@@ -107,6 +112,11 @@ def run_ephys_qc_session(session_path):
 def run(session_path, skip_ephysqc=False):
     """
     Run the preprocessing pipeline for a session.
+    1) Extract sync times (digital signals from the SpikeGLX NIDQ signal)
+    2) Extract video frame times (from the digital line on the NIDQ input)
+    3) Extract opto times (From either digital or analog signals, looks for "laser" in the wiring dictionary)
+    4) Extract physiology data (emgs, ekgs, pressure differential, temperature)
+    5) Run ephysQC (optional)
 
     Args:
         session_path (str or Path): Path to the session directory.

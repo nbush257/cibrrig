@@ -202,23 +202,6 @@ def load_ds_pdiff(SR, chan_id, ds_factor=10, inhale_dir=-1):
     return (dat, sr_sub)
 
 
-def load_ds_process_flowmeter(SR, chan_id, vin=9, ds_factor=10, inhale_dir=-1):
-    raise NotImplementedError("Need to reimplement flow correction")
-    # assert (type(ds_factor) is int)
-    # idx = np.arange(0,SR.ns,ds_factor)
-    # flow = SR.read(nsel=idx,csel=chan_id,sync=False)
-    # sr = SR.fs
-    # sr_sub = sr / ds_factor
-    # winsize = 5
-    # # Calibrate voltage to flow
-    # flow_calibrated = data.calibrate_flowmeter(flow, vin=vin)
-    # # Correct for bias flow
-    # flow_calibrated_corrected = data.baseline_correct_integral(flow_calibrated,sr=sr,winsize=winsize)
-    # # Make inhalation updward deflections
-    # flow_calibrated_corrected = flow_calibrated_corrected * inhale_dir
-    # return(flow_calibrated_corrected,sr_sub)
-
-
 def load_dia_emg(SR, chan_id):
     """
     Read the raw diaphragm EMG data. Does not downsample the data

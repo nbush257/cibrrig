@@ -131,10 +131,13 @@ def weighted_histogram(x, weights, bins, wrap=False):
 
 
     Args:
-        x (_type_): Variable on the x-axis
-        weights (_type_): variable on the y axis
-        bins (int or array): either the number of bins on x, or explicit bin edges.
-        wrap (bool, optional): whether to duplicate the first bin and add it to the end. Good for circular variables. Defaults to False.
+        x (1D numpy array): The variable to compute the histogram for.
+        weights (1D numpy array): Weights for each bin.
+        bins (1D numpy array): Bin edges for the histogram.
+        wrap (bool, optional): If True, wraps the histogram around. Defaults to False.
+    Returns:
+        bins (1D numpy array): The bin centers of the histogram.
+        likli (1D numpy array): Weighted 
     """
     assert x.size == weights.size
     prior, bins = np.histogram(x, bins)

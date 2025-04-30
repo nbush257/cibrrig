@@ -23,6 +23,58 @@ _log.setLevel(logging.INFO)
 MAP_TO_INTERVALS = [] # set of keys that should be mapped to intervals instead of staying as polarities
 OMIT_SIGNALS = ['imec_sync','record'] # Signals we do not want to extract (they will alway be in the sync file)
 
+
+def sync2alf(session_path):
+    """ 
+    Extract all data from the digital sync line in the ALF format
+    
+    Data that matches OMIT_SIGNALS is not extracted. 
+    Data that matches MAP_TO_INTERVALS is extracted as intervals (2 columns, start and end times)
+    """
+    raw_ephys_path = session_path.joinpath("raw_ephys_data")
+    alf_path = session_path.joinpath("alf")
+    alf_path.mkdir(exist_ok=True)
+    triggers = get_triggers(session_path)
+    
+    sync_map = spikeglx.get_sync_map(raw_ephys_path)
+    dig_sync = {k: v for k, v in sync_map.items() if v<16}
+
+    for trig in triggers:
+        ni_fn = list(raw_ephys_path.glob(f"*{trig}.nidq*.bin"))
+        assert (
+            len(ni_fn)
+        ) == 1, f"More than one NI file found. found {len(ni_fn)} files"
+        ni_fn = ni_fn[0]
+        ni = spikeglx.Reader(ni_fn)        
+        rec_duration = ni.ns / ni.fs
+        sync = alfio.load_object(raw_ephys_path,'sync',namespace='spikeglx',extra=trig,short_keys=True)
+        for label,chan in dig_sync.items():
+            idx = sync.channels == chan
+            if label in OMIT_SIGNALS:
+                continue
+            if 'laser' in label:
+                continue
+            if label in MAP_TO_INTERVALS:
+                onsets = sync.times[idx][sync.polarities[idx] == 1]
+                offsets = sync.times[idx][sync.polarities[idx] == -1]
+
+                # Deal with digital value being high at the start or end of the recording
+                if offsets[0] < onsets[0]:
+                    onsets = np.insert(onsets,0,0)
+                if offsets[-1] < onsets[-1]:
+                    offsets = np.append(offsets,rec_duration)
+                
+                # If the number of onsets and offsets do not match, log a warning and save the times and polarities
+                if len(onsets) != len(offsets):
+                    _log.warning(f"Number of onsets and offsets do not match for {label}")
+                    output  = {'times':sync.times[idx],'polarities':sync.polarities[idx]}
+                else:
+                    output = {'intervals':np.c_[onsets,offsets]}
+            else:
+                output  = {'times':sync.times[idx],'polarities':sync.polarities[idx]}
+            alfio.save_object_npy(alf_path,output,label,namespace='spikeglx',parts=trig)
+            
+
 def run(session_path, debug=False, no_display=False):
     """
     Extract synchronization times from the session data.
@@ -105,50 +157,6 @@ def run(session_path, debug=False, no_display=False):
 
     sync2alf(session_path)
 
-def sync2alf(session_path):
-    raw_ephys_path = session_path.joinpath("raw_ephys_data")
-    alf_path = session_path.joinpath("alf")
-    alf_path.mkdir(exist_ok=True)
-    triggers = get_triggers(session_path)
-    
-    sync_map = spikeglx.get_sync_map(raw_ephys_path)
-    dig_sync = {k: v for k, v in sync_map.items() if v<16}
-
-    for trig in triggers:
-        ni_fn = list(raw_ephys_path.glob(f"*{trig}.nidq*.bin"))
-        assert (
-            len(ni_fn)
-        ) == 1, f"More than one NI file found. found {len(ni_fn)} files"
-        ni_fn = ni_fn[0]
-        ni = spikeglx.Reader(ni_fn)        
-        rec_duration = ni.ns / ni.fs
-        sync = alfio.load_object(raw_ephys_path,'sync',namespace='spikeglx',extra=trig,short_keys=True)
-        for label,chan in dig_sync.items():
-            idx = sync.channels == chan
-            if label in OMIT_SIGNALS:
-                continue
-            if 'laser' in label:
-                continue
-            if label in MAP_TO_INTERVALS:
-                onsets = sync.times[idx][sync.polarities[idx] == 1]
-                offsets = sync.times[idx][sync.polarities[idx] == -1]
-
-                # Deal with digital value being high at the start or end of the recording
-                if offsets[0] < onsets[0]:
-                    onsets = np.insert(onsets,0,0)
-                if offsets[-1] < onsets[-1]:
-                    offsets = np.append(offsets,rec_duration)
-                
-                # If the number of onsets and offsets do not match, log a warning and save the times and polarities
-                if len(onsets) != len(offsets):
-                    _log.warning(f"Number of onsets and offsets do not match for {label}")
-                    output  = {'times':sync.times[idx],'polarities':sync.polarities[idx]}
-                else:
-                    output = {'intervals':np.c_[onsets,offsets]}
-            else:
-                output  = {'times':sync.times[idx],'polarities':sync.polarities[idx]}
-            alfio.save_object_npy(alf_path,output,label,namespace='spikeglx',parts=trig)
-            
         
 
 
