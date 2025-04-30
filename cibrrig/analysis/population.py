@@ -483,8 +483,8 @@ class Population:
                 
             stim_colors = [stim_color for _ in range(intervals.shape[0])]
             ax = plot_projection_line_multicondition(
-                X_slice,
-                self.tbins[s0:sf],
+                self.projection,
+                self.tbins,
                 intervals,
                 colors=stim_colors,
                 dims=dims,

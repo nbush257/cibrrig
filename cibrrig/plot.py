@@ -257,7 +257,12 @@ def _setup_colorbar(ax, p, vmin, vmax, colorbar_title):
     if vmin >= 0:
         cbar.set_ticks([vmin, vmax])
     else:
-        cbar.set_ticks([vmin, 0, vmax])
+        # Check if vmin and vmax are  close to -pi and pi
+        if np.isclose(vmin, -np.pi,rtol=0.1) and np.isclose(vmax, np.pi, rtol=0.1):
+            cbar.set_ticks([-np.pi, 0, np.pi])
+            cbar.set_ticklabels([r"$\pi$", "0", r"$\pi$"])
+        else:
+            cbar.set_ticks([vmin, 0, vmax])
     cbar.outline.set_edgecolor("none")
 
     cbar.solids.set_alpha(1)
@@ -1019,7 +1024,7 @@ def plot_sweeps(xt, x, times, pre, post, ax=None, **kwargs):
     for tt in times:
         t0 = tt - pre
         tf = tt + post
-        s0, st, sf = np.searchsorted(xt, [t0, tt, tf])
+        s0, st, sf = np.searchsorted(xt, [t0, tt, tf])-1
         ax.plot(xt[s0:sf] - xt[st], x[s0:sf], **kwargs)
     return ax
 
