@@ -1,6 +1,11 @@
 # CIBRRIG
 
-[ReadTheDocs](https://cibrrig.readthedocs.io/)
+## :book: [ReadTheDocs](https://cibrrig.readthedocs.io/)
+#### Support for extraction, preprocessing, sorting, analysis and plotting of physiology and Neuropixel recordings from rig to fig
+
+
+
+<video src=https://github.com/user-attachments/assets/9d79f0d9-8c97-41cb-890a-edcbcbc12d93 width="200" height="500" style="border-radius: 25px;" autoplay />
 
 
 ## Description
