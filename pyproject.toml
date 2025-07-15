@@ -12,7 +12,7 @@ authors = [
     {name = "Nicholas E. Bush"}
 ]
 dependencies = [
-    "ibllib>=2.30",
+    "ibllib>=2.30, < 3.0",
     "spikeinterface",
     "ipython",
     "myst-parser",
