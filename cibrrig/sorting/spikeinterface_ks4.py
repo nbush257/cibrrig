@@ -23,13 +23,15 @@ import sys
 import time
 import one.alf.io as alfio
 from ibllib.ephys.sync_probes import apply_sync
+import os
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 _log = logging.getLogger("SI-Kilosort4")
 _log.setLevel(logging.INFO)
 
 # Parameters
-job_kwargs = dict(chunk_duration="1s", n_jobs=15, progress_bar=True)
+n_jobs = int(os.environ.get('SLURM_CPUS_PER_TASK',15))
+job_kwargs = dict(chunk_duration="1s", n_jobs=n_jobs, progress_bar=True)
 we_kwargs = dict()
 sorter_params = dict(do_CAR=False, do_correction=True)
 USE_MOTION_SI = not sorter_params["do_correction"]

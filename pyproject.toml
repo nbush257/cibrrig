@@ -19,7 +19,7 @@ dependencies = [
     "sphinx_rtd_theme",
     "sphinx-autoapi",
     "oursin",
-    "kilosort[gui]"
+    "kilosort[gui]>4.0.16"
 ]
 
 [project.scripts]
