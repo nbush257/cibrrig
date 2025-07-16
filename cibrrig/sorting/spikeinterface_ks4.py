@@ -10,7 +10,6 @@ import spikeinterface.sortingcomponents.motion.motion_interpolation as sim
 import spikeinterface.full as si
 from pathlib import Path
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 import shutil
 import click
@@ -19,10 +18,6 @@ import sys
 import time
 import one.alf.io as alfio
 from ibllib.ephys.sync_probes import apply_sync
-
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
-_log = logging.getLogger("SI-Kilosort4")
-_log.setLevel(logging.INFO)
 
 # May want to do a "remove duplicate spikes" after manual sorting  - this would allow manual sorting to merge  units that have some, but not a majority, of duplicated spikes
 # Parameters
@@ -35,7 +30,7 @@ else:
     CHUNK_DUR = '1s'
 
 MOTION_PRESET = "dredge"  # 'kilosort_like','dredge'
-SCRACTH_NAME = f'SCRATCH_{MOTION_PRESET}'
+SCRATCH_NAME = f'SCRATCH_{MOTION_PRESET}'
 
 job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=N_JOBS, progress_bar=True)
 si.set_global_job_kwargs(**job_kwargs)
@@ -63,6 +58,10 @@ EXTENSIONS=dict(
     template_similarity={},
 )
 
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+_log = logging.getLogger("SI-Kilosort4") 
+_log.setLevel(logging.INFO)
 
 # QC presets
 AMPLITUDE_CUTOFF = 0.1
@@ -72,18 +71,12 @@ MIN_SPIKES = 500
 
 RUN_PC = False
 SORTER = "kilosort4"
-if sys.platform=='linux':
-    _log.info('Using Linux system')
-    SCRATCH_DIR = None
-else:
-    SCRATCH_DIR = Path(r"D:/si_temp")
-    SCRATCH_DIR.mkdir(exist_ok=True)
 
-def print_elapsed_time(start_time):
+def log_elapsed_time(start_time):
     _log.info(f"Elapsed time: {time.time()-start_time:0.0f} seconds")
 
 
-def move_motion_info(motion_path, destination):
+def move_motion_info(src, destination):
     """
     Rename the motion data computed by Spikeinterface into a alf-like format
     If it doesn't exist, do nothing
@@ -93,11 +86,11 @@ def move_motion_info(motion_path, destination):
         destination (_type_): Path to where the motion data land
     """
     try:
-        drift_depths = motion_path.joinpath("spatial_bins.npy")
-        drift = motion_path.joinpath("motion.npy")
-        drift_times = motion_path.joinpath("temporal_bins.npy")
-        drift_fig = motion_path.joinpath("driftmap.png")
-        drift_fig_zoom = motion_path.joinpath("driftmap_zoom.png")
+        drift_depths = src.joinpath("spatial_bins.npy")
+        drift = src.joinpath("motion.npy")
+        drift_times = src.joinpath("temporal_bins.npy")
+        drift_fig = src.joinpath("driftmap.png")
+        drift_fig_zoom = src.joinpath("driftmap_zoom.png")
 
         drift_depths.rename(destination.joinpath("drift_depths.um.npy"))
         drift.rename(destination.joinpath("drift.um.npy"))
@@ -211,21 +204,21 @@ def si_motion(recording, MOTION_PATH):
     return (rec_mc, motion_info)
 
 
-def plot_motion(motion_path):
+def plot_motion(motion_path,rec):
     """
     Plot the motion and safe the figure
 
     Args:
         MOTION_PATH (Path): Directory where the motion info lives
-        probe_local (Path): Directory to save the motion figures
+        rec (SI recording): Recording to plot the motion on
     """
     _log.info("Plotting motion info")
     try:
         motion_info = si.load_motion_info(motion_path)
         if not motion_path.joinpath("driftmap.png").exists():
             fig = plt.figure(figsize=(14, 8))
-            si.plot_motion(
-                motion_info,
+            si.plot_motion_info(
+                motion_info, rec,
                 figure=fig,
                 color_amplitude=True,
                 amplitude_cmap="inferno",
@@ -235,8 +228,9 @@ def plot_motion(motion_path):
             for ax in fig.axes[:-1]:
                 ax.set_xlim(30, 60)
             plt.savefig(motion_path.joinpath("driftmap_zoom.png"), dpi=300)
-    except Exception:
+    except Exception as e:
         _log.error("Plotting motion failed")
+        _log.error(e)
 
 
 def split_shanks_and_spatial_filter(rec):
@@ -309,11 +303,18 @@ def run_probe(
     temp_local = probe_local.joinpath(".si")
     PHY_DEST = probe_local.joinpath(label)
     # Temporary paths that will not be coming with us?
-    SORT_PATH = temp_local.joinpath(".ks4")
-    PREPROC_PATH = temp_local.joinpath(".preproc")
+    SORT_PATH = temp_local.joinpath(label)
     MOTION_PATH = temp_local.joinpath(".motion")
     ANALYZER_PATH = temp_local.joinpath('sorting_analyzer')
     probe_local.mkdir(parents=True, exist_ok=True)
+
+    # Generate log file
+    logfile = probe_local.joinpath(f"{label}.log")
+    file_handler = logging.FileHandler(logfile)
+    formatter = logging.Formatter(fmt="%(asctime)s - %(levelname)s - %(name)s - %(lineno)d - %(message)s",datefmt="%Y-%m-%d %H:%M:%S")
+    file_handler.setFormatter(formatter)
+    _log.addHandler(file_handler)
+    
 
     if PHY_DEST.exists():
         _log.warning(
@@ -321,38 +322,28 @@ def run_probe(
         )
         return
 
-    if not PREPROC_PATH.exists():
-        stream = si.get_neo_streams("spikeglx", probe_dir)[0][0]
-        recording = se.read_spikeglx(probe_dir, stream_id=stream)
-        session_path = probe_dir.parent.parent
+    stream = si.get_neo_streams("spikeglx", probe_dir)[0][0]
+    recording = se.read_spikeglx(probe_dir, stream_id=stream)
+    session_path = probe_dir.parent.parent
 
-        # =========== Preprocessing =================== #
-        rec_destriped = apply_preprocessing(
-            recording,
-            session_path,
-            probe_dir,
-            testing,
-            skip_remove_opto=skip_remove_opto,
-        )
+    # =========== Preprocessing =================== #
+    rec_destriped = apply_preprocessing(
+        recording,
+        session_path,
+        probe_dir,
+        testing,
+        skip_remove_opto=skip_remove_opto,
+    )
 
-        # =============== Compute motion if requested.  ============ #
-        if COMPUTE_MOTION_SI:
-            rec_mc, motion = si_motion(rec_destriped.astype('float32'), MOTION_PATH)
+    # =============== Compute motion if requested.  ============ #
+    if COMPUTE_MOTION_SI:
+        rec_mc, motion = si_motion(rec_destriped.astype('float32'), MOTION_PATH)
 
-        # ============== Save motion if requested ============== #
-        if COMPUTE_MOTION_SI and USE_MOTION_SI:
-            final_preproc = rec_mc
-        else:
-            final_preproc = rec_destriped
-
-        final_preproc.save(folder=PREPROC_PATH, **job_kwargs)
-        print_elapsed_time(start_time)
+    # ============== Save motion if requested ============== #
+    if COMPUTE_MOTION_SI and USE_MOTION_SI:
+        recording = rec_mc
     else:
-        _log.info("Preprocessed data exists. Loading")
-
-    # ============= Load preprocessed data from disk ============ #
-    recording = si.load_extractor(PREPROC_PATH)
-    recording.annotate(is_filtered=True)
+        recording = rec_destriped
 
     # ============= RUN SORTER ==================== #
     if SORT_PATH.exists():
@@ -370,13 +361,13 @@ def run_probe(
             **sorter_params,
         )
         sort_rez.save(folder=SORT_PATH)
-
-    print_elapsed_time(start_time)
+    _log.info('Finished sotring:')
+    log_elapsed_time(start_time)
     
+    _log.info('Computing waveforms and QC')
     if ANALYZER_PATH.exists():
         analyzer = si.load_sorting_analyzer(folder=ANALYZER_PATH)
         metrics = analyzer.get_extension('quality_metrics').get_data()
-
     else:
         analyzer = si.create_sorting_analyzer(sorting=sort_rez,recording=recording)
         analyzer.compute_several_extensions(EXTENSIONS,**job_kwargs)
@@ -384,63 +375,29 @@ def run_probe(
         si.remove_duplicated_spikes(sort_rez, censored_period_ms=0.166)
         si.remove_redundant_units(analyzer)
         analyzer.save_as(format='binary_folder',folder=ANALYZER_PATH)
-    # _log.info("Getting suggested merges")
-    # auto_merge_candidates = si.get_potential_auto_merge(analyzer)
-    # pd.DataFrame(auto_merge_candidates).to_csv(
-    #     ANALYZER_PATH.joinpath("potential_merges.tsv"), sep="\t"
-    # )
+    _log.info('Exporting to PHY')
     si.export_to_phy(analyzer,output_folder=PHY_DEST,compute_pc_features=False)
 
-    
-    
-    # # Perform automated quality control
-    # query = f"amplitude_cutoff<{AMPLITUDE_CUTOFF} & sliding_rp_violation<{SLIDING_RP} & amplitude_median>{AMP_THRESH}"
-    # good_unit_ids = metrics.query(query).index
-    # metrics["group"] = "mua"
-    # metrics.loc[good_unit_ids, "group"] = "good"
-    # print_elapsed_time(start_time)
 
-
-
-    # # =================== EXPORT ========= #
-    # _log.info("Exporting to phy")
-    # si.export_to_phy(
-    #     waveform_extractor=we,
-    #     output_folder=PHY_DEST,
-    #     # sparsity=sparsity,
-    #     use_relative_path=True,
-    #     copy_binary=True,
-    #     compute_pc_features=False,
-    #     **job_kwargs,
+    # Generate IBL GUI output
+    # # Get LFP recording
+    # lfp_recording = se.read_spikeglx(probe_dir,stream_id=stream.replace('ap','lf'))
+    # if testing:
+    #     n_samps = int(60*lfp_recording.sampling_frequency)
+    #     lfp_recording = lfp_recording.frame_slice(0,n_samps)
+    # # Process LFP
+    # lfp_recording = spre.bandpass_filter(lfp_recording, freq_min=1, freq_max=300)
+    # lfp_recording = spre.decimate(lfp_recording, 10)
+    # # Export
+    # si.export_to_ibl_gui(
+    #     analyzer,PHY_DEST.joinpath('ibl'),
+    #     lfp_recording=lfp_recording,
+    #     n_jobs=N_JOBS
     # )
-
-    # _log.info("Getting suggested merges")
-    # auto_merge_candidates = si.get_potential_auto_merge(we)
-    # pd.DataFrame(auto_merge_candidates).to_csv(
-    #     PHY_DEST.joinpath("potential_merges.tsv"), sep="\t"
-    # )
-
-    # # Make some appends to the phy destination
-    # spike_locations = np.vstack([locations["x"], locations["y"]]).T
-    # np.save(PHY_DEST.joinpath("spike_locations.npy"), spike_locations)
-    # np.save(PHY_DEST.joinpath("cluster_locations.npy"), unit_locations)
-    # shutil.copy(
-    #     PHY_DEST.joinpath("channel_groups.npy"), PHY_DEST.joinpath("channel_shanks.npy")
-    # )
-
-    # # Make cluster shanks a tsv!
-
-    # for col in template_metrics:
-    #     this_col = pd.DataFrame(template_metrics[col])
-    #     this_col["cluster_id"] = sort_rez.get_unit_ids()
-    #     this_col = this_col[["cluster_id", col]]
-    #     this_col.to_csv(PHY_DEST.joinpath(f"cluster_{col}.tsv"), sep="\t", index=False)
-
-    # _log.info("Done sorting!")
-
-    plot_motion(MOTION_PATH)
-    move_motion_info(MOTION_PATH, PHY_DEST)
-    # return PHY_DEST
+   
+    plot_motion(MOTION_PATH,recording)
+    shutil.move(str(MOTION_PATH), str(PHY_DEST))
+    shutil.move(str(logfile),str(PHY_DEST))
 
 
 @click.command()
@@ -489,7 +446,7 @@ def run(
     # Get paths
     session_path = Path(session_path)
     if sys.platform=='linux':
-        SCRATCH_DIR = session_path.joinpath(SCRACTH_NAME)
+        SCRATCH_DIR = session_path.joinpath(SCRATCH_NAME)
     session_local = SCRATCH_DIR.joinpath(
         session_path.parent.name + "_" + session_path.name
     )
@@ -561,7 +518,7 @@ def run(
     if move_final and rm_intermediate and n_probes > 0:
         _log.info(f"Removing {session_local}")
         shutil.rmtree(session_local)
-
+    shutil.rmtree(SCRATCH_DIR)
 
 if __name__ == "__main__":
     cli()

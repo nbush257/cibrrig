@@ -3,3 +3,4 @@
 preprocess/__pycache__
 build
 *.egg*
+docs
