@@ -1,7 +1,9 @@
 *.pyc
 .vscode
 preprocess/__pycache__
+build
 *.egg*
+docs
 docs/_build
 build
 *.db
