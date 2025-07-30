@@ -46,6 +46,17 @@ DEFAULT_NIDQ = {
     },
 }
 
+def _get_probe_number(probe_path):
+    matches = re.search(r"(?<=imec)\d{1,2}", probe_path.name)
+    if not matches:
+        raise ValueError(
+            f"No probe number found in {probe_path.name}. Cannot rename probe folder."
+        )
+
+    probe_num = int(matches.group())
+    out_str = f"probe{probe_num:02.0f}"
+    return out_str
+    
 
 def rename_probe_folders(session_path):
     """
@@ -60,20 +71,44 @@ def rename_probe_folders(session_path):
 
     raw_ephys_folder = session_path.joinpath("raw_ephys_data")
     raw_ephys_folder.mkdir(exist_ok=True)
-    probe_paths = []
 
-    def _get_probe_number(probe_path):
-        probe_num = int(re.search(r"(?<=imec)\d", probe_path.name).group())
-        out_str = f"probe{probe_num:02.0f}"
-        return out_str
+    # First check if there are any imec data
+    ap_bin_files = list(session_path.rglob("*imec*.ap.bin"))
+    if len(ap_bin_files) == 0:
+        _log.warning("No imec data found. Skipping probe renaming.")
+        return 
+    if ap_bin_files[0].parent == session_path:
+        # Move all probe data into probe folders first
+        probe_paths = rename_flat_probe(session_path, raw_ephys_folder, ap_bin_files)
+    else:
+        probe_paths = rename_nested_probes(session_path, raw_ephys_folder,ap_bin_files)
+    return probe_paths
 
-    ap_bin_files = list(session_path.rglob("*.ap.bin"))
+def rename_nested_probes(session_path, raw_ephys_folder, ap_bin_files):
     probe_paths_origs = set([x.parent for x in ap_bin_files])
+    probe_paths=  []
     for probe_path_orig in probe_paths_origs:
         print(probe_path_orig)
         probe_path_dest = raw_ephys_folder.joinpath(_get_probe_number(probe_path_orig))
         probe_path_orig.rename(probe_path_dest)
         probe_paths.append(probe_path_dest)
+    return probe_paths
+
+def rename_flat_probe(session_path, raw_ephys_folder, ap_bin_files):
+    _log.info("Moving probe data into probe folders.")
+    probe_paths = []
+    for ap_bin_file in ap_bin_files:
+        probe_folder = raw_ephys_folder.joinpath(_get_probe_number(ap_bin_file))
+        probe_folder.mkdir(exist_ok=True)
+        probe_name = re.search(r"imec\d{1,2}", ap_bin_file.name).group()
+        probe_files = list(session_path.glob(f"*{probe_name}*"))
+        for probe_file in probe_files:
+            if probe_file.is_file():
+                _log.debug(f"Moving {probe_file} to {probe_folder}")
+                shutil.move(probe_file, probe_folder)
+            else:
+                _log.warning(f"{probe_file} is not a file. Skipping.")
+            probe_paths.append(probe_folder)
     return probe_paths
 
 
