@@ -197,7 +197,7 @@ class Recording:
 
         if overwrite:
             _log.info("Removing old files")
-            _log.debug("\n\t" + "\n\t".join(old_files))
+            _log.debug("\n\t" + "\n\t".join(str(x) for x in old_files))
             for fn in old_files:
                 self.session_path.joinpath(fn).unlink()
 
@@ -259,7 +259,7 @@ class Recording:
 
             if save:
                 if "table" in attributes:
-                    table_fn = alfio.files.spec.to_alf(
+                    table_fn = alfio.spec.to_alf(
                         object_name, "table", extension="pqt", namespace=namespace
                     )
                     _log.info(f"Saving concatenated {object_name} to parquet")
@@ -273,7 +273,7 @@ class Recording:
                     )
             if overwrite:
                 _log.info("Removing old files")
-                _log.debug("\n\t" + "\n\t".join(old_files))
+                _log.debug("\n\t" + "\n\t".join([str(x) for x in old_files]))
                 for fn in old_files:
                     self.alf_path.joinpath(fn).unlink()
 

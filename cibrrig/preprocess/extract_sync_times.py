@@ -155,7 +155,7 @@ def run(session_path, debug=False, no_display=False):
             ef["ap"] = probe_fn
             out_files.extend(_save_timestamps_npy(ef, timestamps, sr))
 
-    sync2alf(session_path)
+    # sync2alf(session_path)
 
         
 
