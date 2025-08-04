@@ -184,7 +184,7 @@ class Recording:
         log_df_out.reset_index(inplace=True, drop=True)
         log_df_out = self.improve_opto_log(log_df_out)
         if save:
-            table_fn = alfio.files.spec.to_alf(
+            table_fn = alfio.spec.to_alf(
                 "log", "table", extension="tsv", namespace="cibrrig"
             )
 

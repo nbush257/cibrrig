@@ -146,7 +146,7 @@ def _load_opto_calibration_fn(calib_fn):
     _log.info("Computing calibration")
     x = calib["command_voltage"]
     y = calib["light_power"]
-    f = interp1d(x, y)
+    f = interp1d(x, y, bounds_error=False, fill_value="extrapolate")
     return f
 
 

@@ -249,10 +249,7 @@ def si_motion(recording, MOTION_PATH):
         motion_info = si.load_motion_info(MOTION_PATH)
         rec_mc = sim.interpolate_motion(
             recording=recording,
-            motion=motion_info["motion"],
-            temporal_bins=motion_info["temporal_bins"],
-            spatial_bins=motion_info["spatial_bins"],
-            **motion_info["parameters"]["interpolate_motion_kwargs"],
+            motion=motion_info["motion"]
         )
     else:
         _log.info(f"Motion correction {MOTION_PRESET}...")
@@ -375,8 +372,12 @@ def remove_and_interpolate(recording,probe_dir,t0=0,tf=120,remove=True,plot=True
 
     if plot:
         f,ax = plt.subplots(ncols=3,sharey=True)
-        si.plot_traces(recording,time_range=(5,9),clim=(-50,50),ax=ax[0],segment_index=0)
-        si.plot_traces(recording_good,time_range=(5,9),clim=(-50,50),ax=ax[1],segment_index=0)
+        t0 = recording.get_start_time()+10
+        tf = t0+4
+        tf = min(tf,recording.get_end_time())
+
+        si.plot_traces(recording,time_range=(t0,tf),clim=(-50,50),ax=ax[0],segment_index=0)
+        si.plot_traces(recording_good,time_range=(t0,tf),clim=(-50,50),ax=ax[1],segment_index=0)
 
         ax[2].plot(chan_labels,recording.get_channel_locations()[:,1])
         ax[0].set_title('Original')
@@ -531,7 +532,7 @@ def run_probe(
         sort_rez = ss.run_sorter(
             sorter_name=SORTER,
             recording=recording,
-            grouping_property="group",
+            # grouping_property="group",
             folder=SORT_PATH.parent.joinpath("ks4_working"),
             verbose=True,
             remove_existing_folder=False,
@@ -627,6 +628,8 @@ def run(
     session_path = Path(session_path)
     if sys.platform=='linux':
         SCRATCH_DIR = session_path.joinpath(SCRATCH_NAME)
+    else:
+        SCRATCH_DIR = Path("D:/").joinpath(SCRATCH_NAME)
     session_local = SCRATCH_DIR.joinpath(
         session_path.parent.name + "_" + session_path.name
     )
