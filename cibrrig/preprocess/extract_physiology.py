@@ -12,6 +12,8 @@ This script does the following:
 5) Extracts features from the integrated EMG.
 6) Extracts heart rate from EKG channel if recorded
 6) Saves to alf standardized files in the session path
+
+Supports both uncompressed (.bin) and compressed (.cbin) SpikeGLX files.
 """
 
 import subprocess
@@ -26,10 +28,16 @@ from one.alf import spec
 try:
     from . import physiology
     from . import nidq_utils
+    from ..utils.spikeglx_utils import find_spikeglx_files, detect_nidq_format
 except ImportError:
     sys.path.append("../")
     import physiology
     import nidq_utils
+    # For standalone usage, import from relative path
+    from pathlib import Path
+    import sys
+    sys.path.append(str(Path(__file__).parent.parent))
+    from utils.spikeglx_utils import find_spikeglx_files, detect_nidq_format
 import logging
 
 logging.basicConfig()
@@ -315,9 +323,16 @@ def run(session_path, v_in=9, inhale_pos=False, save_path=None, debug=False):
     save_path.mkdir(exist_ok=True)
     ephys_path = session_path.joinpath("raw_ephys_data")
     _log.debug(f"Looking for ephys in : {ephys_path}")
-    ni_fn_list = list(ephys_path.glob("*nidq.bin"))
+    
+    # Find both .bin and .cbin NIDQ files
+    ni_fn_list = find_spikeglx_files(ephys_path, 'nidq')
     ni_fn_list.sort()
     _log.debug(f"Found Nidaq data: {ni_fn_list}")
+    
+    if ni_fn_list:
+        # Log the detected file format
+        file_format = detect_nidq_format(ephys_path)
+        _log.info(f"Detected NIDQ file format: {file_format}")
 
     # Process each Nidaq file
     for ni_fn in ni_fn_list:

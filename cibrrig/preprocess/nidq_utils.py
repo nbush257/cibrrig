@@ -4,6 +4,8 @@ I/O functions with NIDAQ data specifically for some of our physiology needs.
 This module is primarily focused on loading and manipulating data from
 the NIDAQ files recorded by spikeglx, and passes most computation to the physiology module,
 which is more general in scope.
+
+Supports both uncompressed (.bin) and compressed (.cbin) SpikeGLX files.
 """
 
 import scipy.integrate
@@ -15,11 +17,15 @@ import spikeglx
 
 try:
     from . import physiology
+    from ..utils.spikeglx_utils import find_spikeglx_files
 except ImportError:
     import sys
-
     sys.path.append("../")
     import physiology
+    # For standalone usage, import from relative path
+    from pathlib import Path
+    sys.path.append(str(Path(__file__).parent.parent))
+    from utils.spikeglx_utils import find_spikeglx_files
 import logging
 import re
 import matplotlib.pyplot as plt
@@ -39,7 +45,8 @@ def get_triggers(session_path):
     Returns:
         list: Sorted list of trigger strings found in the NIDQ files.
     """
-    ni_files = list(session_path.joinpath("raw_ephys_data").glob("*.nidq.bin"))
+    # Find both .bin and .cbin NIDQ files
+    ni_files = find_spikeglx_files(session_path.joinpath("raw_ephys_data"), 'nidq')
     trig_strings = [get_trig_string(x.stem) for x in ni_files]
     trig_strings.sort()
     return trig_strings
