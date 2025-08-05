@@ -8,7 +8,7 @@ import logging
 from one.alf import spec
 
 try:
-    from .nidq_utils import get_trig_string
+    from cibrrig.preprocess.nidq_utils import get_trig_string
 except ImportError:
     import sys
 

@@ -1,4 +1,4 @@
-from ..preprocess.physiology import compute_dia_phase
+from cibrrig.preprocess.physiology import compute_dia_phase
 import numpy as np
 import warnings
 from tqdm import tqdm
