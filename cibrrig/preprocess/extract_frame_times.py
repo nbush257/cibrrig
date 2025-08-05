@@ -9,11 +9,15 @@ from one.alf import spec
 
 try:
     from .nidq_utils import get_trig_string
+    from ..utils.spikeglx_utils import find_spikeglx_files, detect_nidq_format
 except ImportError:
     import sys
 
     sys.path.append("../")
     from nidq_utils import get_trig_string
+    # For standalone usage, import from relative path
+    sys.path.append(str(Path(__file__).parent.parent))
+    from utils.spikeglx_utils import find_spikeglx_files, detect_nidq_format
 logging.basicConfig()
 _log = logging.getLogger("extract_camera_frames")
 _log.setLevel(logging.INFO)
@@ -124,9 +128,15 @@ def run_session(session_path):
     dest_path = session_path.joinpath("alf")
     dest_path.mkdir(exist_ok=True)
 
-    ni_list = list(session_path.glob("raw_ephys_data/*nidq.bin"))
+    # Find both .bin and .cbin NIDQ files
+    ni_list = find_spikeglx_files(session_path.joinpath("raw_ephys_data"), 'nidq')
     ni_list.sort()
     _log.info(f"NI LIST: {ni_list}")
+    
+    if ni_list:
+        # Log the detected file format
+        file_format = detect_nidq_format(session_path.joinpath("raw_ephys_data"))
+        _log.info(f"Detected NIDQ file format: {file_format}")
 
     #  Allow user to run as a regular command line
     chans, cams = get_camera_chans(session_path)

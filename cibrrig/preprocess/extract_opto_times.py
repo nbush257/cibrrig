@@ -4,6 +4,8 @@ It is similar to the extract_frame_times.py script, but it extracts optogenetic 
 The script reads the raw data from the NIDAQ file, processes it to find the optogenetic stimulation times, and saves the results in an ALF file.
 The script can be run from the command line using the main function, which takes the input path to the NIDAQ file as an argument.
 The script also provides options to specify the optogenetic channel, voltage threshold, and label for the extracted data.
+
+Supports both uncompressed (.bin) and compressed (.cbin) SpikeGLX files.
 """
 
 import click
@@ -18,6 +20,7 @@ import one.alf.io as alfio
 
 from cibrrig.preprocess.nidq_utils import binary_onsets, get_trig_string
 from one.alf import spec
+from ..utils.spikeglx_utils import find_spikeglx_files, detect_nidq_format
 
 logging.basicConfig()
 _log = logging.getLogger("extract_opto")
@@ -204,8 +207,15 @@ def run_session(session_path, v_thresh):
     """
     dest_path = session_path.joinpath("alf")
     dest_path.mkdir(exist_ok=True)
-    ni_list = list(session_path.rglob("*nidq.bin"))
+    
+    # Find both .bin and .cbin NIDQ files
+    ni_list = find_spikeglx_files(session_path.joinpath("raw_ephys_data"), 'nidq')
     ni_list.sort()
+    
+    if ni_list:
+        # Log the detected file format
+        file_format = detect_nidq_format(session_path.joinpath("raw_ephys_data"))
+        _log.info(f"Detected NIDQ file format: {file_format}")
 
     # Extract calibration
     calib_fcn = load_opto_calibration(session_path)

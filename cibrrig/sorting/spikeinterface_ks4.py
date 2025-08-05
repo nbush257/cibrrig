@@ -22,6 +22,8 @@ import sys
 import time
 import one.alf.io as alfio
 from ibllib.ephys.sync_probes import apply_sync
+# Import the shared utility function
+from ..utils.spikeglx_utils import detect_spikeglx_format
 
 # May want to do a "remove duplicate spikes" after manual sorting  - this would allow manual sorting to merge  units that have some, but not a majority, of duplicated spikes
 # Parameters
@@ -450,37 +452,7 @@ def apply_preprocessing(
     return rec_out
 
 
-def detect_spikeglx_format(probe_dir):
-    """
-    Detect the format of SpikeGLX files in the probe directory.
-    
-    Args:
-        probe_dir (Path): Path to the probe directory.
-        
-    Returns:
-        str: File format ('.bin' for uncompressed, '.cbin' for compressed)
-        
-    Raises:
-        FileNotFoundError: If no SpikeGLX files are found.
-    """
-    probe_dir = Path(probe_dir)
-    
-    # Check for compressed files first (cbin)
-    cbin_files = list(probe_dir.glob('*.ap.cbin')) + list(probe_dir.glob('*.lf.cbin'))
-    if cbin_files:
-        return '.cbin'
-    
-    # Check for uncompressed files (bin)
-    bin_files = list(probe_dir.glob('*.ap.bin')) + list(probe_dir.glob('*.lf.bin'))
-    if bin_files:
-        return '.bin'
-    
-    # If neither found, list available files for debugging
-    available_files = [f.name for f in probe_dir.glob('*')]
-    raise FileNotFoundError(
-        f"No SpikeGLX files (.bin or .cbin) found in {probe_dir}. "
-        f"Available files: {available_files}"
-    )
+
 
 
 def run_probe(
