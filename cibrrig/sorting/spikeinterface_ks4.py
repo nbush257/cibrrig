@@ -475,13 +475,7 @@ def run_probe(
     ANALYZER_PATH = temp_local.joinpath('sorting_analyzer')
     probe_local.mkdir(parents=True, exist_ok=True)
 
-    # Generate log file
-    logfile = probe_local.joinpath(f"{label}.log")
-    file_handler = logging.FileHandler(logfile)
-    formatter = logging.Formatter(fmt="%(asctime)s - %(levelname)s - %(name)s - %(lineno)d - %(message)s",datefmt="%Y-%m-%d %H:%M:%S")
-    file_handler.setFormatter(formatter)
-    _log.addHandler(file_handler)
-    
+
 
     if PHY_DEST.exists():
         _log.warning(
@@ -575,7 +569,6 @@ def run_probe(
    
     plot_motion(MOTION_PATH,recording)
     shutil.move(str(MOTION_PATH), str(PHY_DEST))
-    shutil.move(str(logfile),str(PHY_DEST))
 
 
 @click.command()
