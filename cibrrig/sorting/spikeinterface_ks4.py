@@ -539,11 +539,11 @@ def run_probe(
     _log.info('Computing waveforms and QC')
     if ANALYZER_PATH.exists():
         analyzer = si.load_sorting_analyzer(folder=ANALYZER_PATH)
-        metrics = analyzer.get_extension('quality_metrics').get_data()
+        analyzer.get_extension('quality_metrics').get_data()
     else:
         analyzer = si.create_sorting_analyzer(sorting=sort_rez,recording=recording)
         analyzer.compute_several_extensions(EXTENSIONS,**job_kwargs)
-        metrics = analyzer.get_extension('quality_metrics').get_data()
+        analyzer.get_extension('quality_metrics').get_data()
         si.remove_duplicated_spikes(sort_rez, censored_period_ms=0.166)
         si.remove_redundant_units(analyzer)
         analyzer.save_as(format='binary_folder',folder=ANALYZER_PATH)
