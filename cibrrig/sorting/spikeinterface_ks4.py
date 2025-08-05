@@ -1,6 +1,9 @@
 """
 Run Kilosort 4 locally on the NPX computer.
 Data must be reorganized using the preprocess.ephys_data_to_alf.py script first.
+
+This module supports both uncompressed (.bin) and compressed (.cbin) SpikeGLX files.
+The file format is automatically detected and handled by SpikeInterface.
 """
 # May want to do a "remove duplicate spikes" after manual sorting  - this would allow manual sorting to merge  units that have some, but not a majority, of duplicated spikes
 
@@ -447,6 +450,39 @@ def apply_preprocessing(
     return rec_out
 
 
+def detect_spikeglx_format(probe_dir):
+    """
+    Detect the format of SpikeGLX files in the probe directory.
+    
+    Args:
+        probe_dir (Path): Path to the probe directory.
+        
+    Returns:
+        str: File format ('.bin' for uncompressed, '.cbin' for compressed)
+        
+    Raises:
+        FileNotFoundError: If no SpikeGLX files are found.
+    """
+    probe_dir = Path(probe_dir)
+    
+    # Check for compressed files first (cbin)
+    cbin_files = list(probe_dir.glob('*.ap.cbin')) + list(probe_dir.glob('*.lf.cbin'))
+    if cbin_files:
+        return '.cbin'
+    
+    # Check for uncompressed files (bin)
+    bin_files = list(probe_dir.glob('*.ap.bin')) + list(probe_dir.glob('*.lf.bin'))
+    if bin_files:
+        return '.bin'
+    
+    # If neither found, list available files for debugging
+    available_files = [f.name for f in probe_dir.glob('*')]
+    raise FileNotFoundError(
+        f"No SpikeGLX files (.bin or .cbin) found in {probe_dir}. "
+        f"Available files: {available_files}"
+    )
+
+
 def run_probe(
     probe_dir, probe_local, label="kilosort4", testing=False, skip_remove_opto=False
 ):
@@ -488,8 +524,32 @@ def run_probe(
         )
         return
 
-    stream = si.get_neo_streams("spikeglx", probe_dir)[0][0]
-    recording = se.read_spikeglx(probe_dir, stream_id=stream)
+    # Detect and read SpikeGLX data (supports both .bin and .cbin formats)
+    try:
+        # First detect the file format
+        file_format = detect_spikeglx_format(probe_dir)
+        _log.info(f"Detected SpikeGLX file format: {file_format}")
+        
+        # Get available streams
+        streams = si.get_neo_streams("spikeglx", probe_dir)
+        if not streams or not streams[0]:
+            raise RuntimeError(f"No SpikeGLX streams found in {probe_dir}")
+        
+        stream = streams[0][0]
+        _log.info(f"Using SpikeGLX stream: {stream}")
+        
+        # Read the recording - this supports both .bin and .cbin files automatically
+        recording = se.read_spikeglx(probe_dir, stream_id=stream)
+        _log.info(f"Successfully loaded recording with {recording.get_num_channels()} channels, "
+                  f"{recording.get_sampling_frequency()} Hz sampling rate")
+            
+    except Exception as e:
+        # Provide more detailed error information
+        available_files = list(probe_dir.glob('*'))
+        _log.error(f"Failed to read SpikeGLX data from {probe_dir}")
+        _log.error(f"Available files: {[f.name for f in available_files]}")
+        _log.error(f"Error: {e}")
+        raise
     session_path = probe_dir.parent.parent
 
     # =========== Preprocessing =================== #
