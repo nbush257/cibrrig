@@ -1,4 +1,4 @@
-ibllib==3.13.0
+ibllib==3.4.1
 spikeinterface==0.103.0
 ipython
 myst-parser

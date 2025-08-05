@@ -38,7 +38,7 @@ _log = logging.getLogger(name=__name__)
 _log.setLevel(logging.INFO)
 DEFAULT_SUBJECTS_PATH = Path(r"D:\remote_test\Subjects")
 DEFAULT_SESSION_PATH = Path(r"D:\test\Subjects")
-DEFAULT_VIDEO_DIRECTORY = Path("D:\sglx_data")
+DEFAULT_VIDEO_DIRECTORY = Path(r"D:\sglx_data")
 
 
 class Archiver:
