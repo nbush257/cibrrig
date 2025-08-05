@@ -24,8 +24,8 @@ import sys
 from one.alf import spec
 
 try:
-    from . import physiology
-    from . import nidq_utils
+    from cibrrig.preprocess import physiology
+    from cibrrig.preprocess import nidq_utils
 except ImportError:
     sys.path.append("../")
     import physiology

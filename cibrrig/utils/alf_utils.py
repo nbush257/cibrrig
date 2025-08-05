@@ -13,7 +13,7 @@ import numpy as np
 import spikeglx
 import logging
 import pandas as pd
-from ..preprocess.extract_opto_times import load_opto_calibration
+from cibrrig.preprocess.extract_opto_times import load_opto_calibration
 
 logging.basicConfig()
 _log = logging.getLogger(__name__)
