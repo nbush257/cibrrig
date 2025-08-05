@@ -18,7 +18,10 @@ import logging
 import sys
 import time
 import one.alf.io as alfio
-from ibllib.ephys.sync import apply_sync
+try:
+    from ibllib.ephys.sync import apply_sync
+except ImportError:
+    from ibllib.ephys.sync_probes import apply_sync
 
 # May want to do a "remove duplicate spikes" after manual sorting  - this would allow manual sorting to merge  units that have some, but not a majority, of duplicated spikes
 # Parameters

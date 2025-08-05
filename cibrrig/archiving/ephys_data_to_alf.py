@@ -14,7 +14,10 @@ Key Features:
 # TODO: rename Audio
 # TODO: Comments on functions
 
-from ibllib.io import misc
+try:
+    from ibllib.io import misc
+except ImportError:
+    from ibllib.pipes import misc
 import spikeglx
 from pathlib import Path
 import re

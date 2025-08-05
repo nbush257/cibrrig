@@ -8,12 +8,22 @@ import numpy as np
 import one.alf.io as alfio
 import click
 import logging
-from ibllib.io.extractors.ephys_fpga import get_sync_fronts, sync_to_alf
-from ibllib.ephys.sync_probes import (
-    sync_probe_front_times,
-    save_timestamps_npy,
-    check_diff_3b,
-)
+try:
+    from ibllib.io.extractors.ephys_fpga import get_sync_fronts, sync_to_alf
+except ImportError:
+    from ibllib.io.extractors.ephys_fpga import get_sync_fronts, _sync_to_alf as sync_to_alf
+try:
+    from ibllib.ephys.sync_probes import (
+        sync_probe_front_times,
+        save_timestamps_npy,
+        check_diff_3b,
+    )
+except ImportError:
+    from ibllib.ephys.sync_probes import (
+        sync_probe_front_times,
+        _save_timestamps_npy as save_timestamps_npy,
+        _check_diff_3b as check_diff_3b,
+    )
 import matplotlib.pyplot as plt
 from cibrrig.preprocess.nidq_utils import get_triggers
 

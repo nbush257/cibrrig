@@ -13,8 +13,17 @@ Key Features:
 
 """
 
-from ibllib.ephys.sync import apply_sync
-from ibllib.ephys.qc import spike_sorting_metrics
+try:
+    from ibllib.ephys.sync import apply_sync
+except ImportError:
+    try:
+        from ibllib.ephys.sync_probes import apply_sync
+    except ImportError:
+        from ibllib.ephys.spikes import apply_sync
+try:
+    from ibllib.ephys.qc import spike_sorting_metrics
+except ImportError:
+    from ibllib.ephys.ephysqc import spike_sorting_metrics
 from pathlib import Path
 import spikeglx
 import one.alf.io as alfio
