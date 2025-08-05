@@ -20,7 +20,7 @@ except ImportError:
     print("No brainbox package")
     has_brainbox = False
 
-from .utils.utils import parse_opto_log, validate_intervals, weighted_histogram
+from cibrrig.utils.utils import parse_opto_log, validate_intervals, weighted_histogram
 
 # Maps laser wavelengths to hex codes
 laser_colors = {473: "#00b7ff", 565: "#d2ff00", 635: "#ff0000"}

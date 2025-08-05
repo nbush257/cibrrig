@@ -12,12 +12,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import one.alf.io as alfio
 
-try:
-    from ..analysis.singlecell import get_all_phase_curves
-    from ..preprocess.physiology import compute_dia_phase
-except ImportError:
-    from cibrrig.analysis.singlecell import get_all_phase_curves
-    from cibrrig.preprocess.physiology import compute_dia_phase
+from cibrrig.analysis.singlecell import get_all_phase_curves
+from cibrrig.preprocess.physiology import compute_dia_phase
 
 import pandas as pd
 
