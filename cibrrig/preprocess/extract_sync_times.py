@@ -8,22 +8,12 @@ import numpy as np
 import one.alf.io as alfio
 import click
 import logging
-try:
-    from ibllib.io.extractors.ephys_fpga import get_sync_fronts, sync_to_alf
-except ImportError:
-    from ibllib.io.extractors.ephys_fpga import get_sync_fronts, _sync_to_alf as sync_to_alf
-try:
-    from ibllib.ephys.sync_probes import (
-        sync_probe_front_times,
-        save_timestamps_npy,
-        check_diff_3b,
-    )
-except ImportError:
-    from ibllib.ephys.sync_probes import (
-        sync_probe_front_times,
-        _save_timestamps_npy as save_timestamps_npy,
-        _check_diff_3b as check_diff_3b,
-    )
+from ibllib.io.extractors.ephys_fpga import get_sync_fronts, _sync_to_alf
+from ibllib.ephys.sync_probes import (
+    sync_probe_front_times,
+    _save_timestamps_npy,
+    _check_diff_3b,
+)
 import matplotlib.pyplot as plt
 from cibrrig.preprocess.nidq_utils import get_triggers
 
@@ -115,7 +105,7 @@ def run(session_path, debug=False, no_display=False):
         ni_fn = ni_fn[0]
         label = Path(ni_fn.stem).stem
         _log.info(f"Extracting sync from {ni_fn}")
-        sync_nidq = sync_to_alf(ni_fn, parts=label)
+        sync_nidq = _sync_to_alf(ni_fn, parts=label)
         alfio.save_object_npy(
             ni_fn.parent, sync_nidq, "sync", parts=trig, namespace="spikeglx"
         )
@@ -130,7 +120,7 @@ def run(session_path, debug=False, no_display=False):
             sr = spikeglx._get_fs_from_meta(md)
             label = Path(probe_fn.stem).stem
 
-            sync_probe = sync_to_alf(probe_fn, parts=label)
+            sync_probe = _sync_to_alf(probe_fn, parts=label)
             out_files = alfio.save_object_npy(
                 probe_fn.parent, sync_nidq, "sync", parts=trig, namespace="spikeglx"
             )
@@ -143,7 +133,7 @@ def run(session_path, debug=False, no_display=False):
             ), "Sync Fronts do not match"
             sync_idx = np.min([sync_nidq.times.size, sync_probe.times.size])
 
-            qcdiff = check_diff_3b(sync_probe)
+            qcdiff = _check_diff_3b(sync_probe)
             if not qcdiff:
                 type_probe = type or "exact"
             else:
@@ -163,7 +153,7 @@ def run(session_path, debug=False, no_display=False):
             # Hack
             ef = alfio.Bunch()
             ef["ap"] = probe_fn
-            out_files.extend(save_timestamps_npy(ef, timestamps, sr))
+            out_files.extend(_save_timestamps_npy(ef, timestamps, sr))
 
     # sync2alf(session_path)
 

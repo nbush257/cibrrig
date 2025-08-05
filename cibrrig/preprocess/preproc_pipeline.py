@@ -20,14 +20,8 @@ if sys.platform == "linux":
 import numpy as np
 import one.alf.io as alfio
 from brainbox.ephys_plots import image_rms_plot
-try:
-    from ibllib.plots import remove_axis_outline, set_axis_label_size
-except ImportError:
-    from ibllib.plots.figures import remove_axis_outline, set_axis_label_size
-try:
-    from ibllib.ephys.qc import EphysQC, extract_rmsmap
-except ImportError:
-    from ibllib.ephys.ephysqc import EphysQC, extract_rmsmap
+from ibllib.plots.figures import remove_axis_outline, set_axis_label_size
+from ibllib.ephys.ephysqc import EphysQC, extract_rmsmap
 
 logging.basicConfig()
 _log = logging.getLogger("PIPELINE")
