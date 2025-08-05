@@ -201,6 +201,7 @@ This pipeline runs:
     - Camera frames times
     - Laser data
 - Spike sorting with Kilosort 4 *via* spikeinterface
+    - Supports both uncompressed (.bin) and compressed (.cbin) SpikeGLX files
     - IBL destriping
     - Motion estimation (for plotting, in Spikeinterface)
     - Motion correction (in KS4)
