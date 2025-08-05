@@ -14,7 +14,7 @@ import warnings
 import spikeglx
 
 try:
-    from . import physiology
+    from cibrrig.preprocess import physiology
 except ImportError:
     import sys
 

@@ -3,13 +3,13 @@ import numpy as np
 from iblutil.numerical import bincount2D
 from scipy.ndimage import gaussian_filter1d
 import logging
-from ..plot import (
+from cibrrig.plot import (
     plot_projection,
     plot_projection_line,
     plot_most_likely_dynamics,
     plot_projection_line_multicondition,
 )
-from ..utils.utils import validate_intervals, remap_time_basis
+from cibrrig.utils.utils import validate_intervals, remap_time_basis
 import pickle
 from matplotlib.colors import ListedColormap
 from matplotlib.lines import Line2D

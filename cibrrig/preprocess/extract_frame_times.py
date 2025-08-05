@@ -6,16 +6,10 @@ import re
 import one.alf.io as alfio
 import logging
 from one.alf import spec
+from cibrrig.preprocess.nidq_utils import get_trig_string
 
-try:
-    from .nidq_utils import get_trig_string
-except ImportError:
-    import sys
-
-    sys.path.append("../")
-    from nidq_utils import get_trig_string
 logging.basicConfig()
-_log = logging.getLogger("extract_camera_frames")
+_log = logging.getLogger(__name__)
 _log.setLevel(logging.INFO)
 
 
