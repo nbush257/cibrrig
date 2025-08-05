@@ -12,14 +12,15 @@ authors = [
     {name = "Nicholas E. Bush"}
 ]
 dependencies = [
-    "ibllib>=2.30, < 3.0",
-    "spikeinterface",
+    "ibllib>=3.0",
+    "spikeinterface>=0.103.0",
     "ipython",
     "myst-parser",
     "sphinx_rtd_theme",
     "sphinx-autoapi",
     "oursin",
-    "kilosort[gui]>4.0.16"
+    "kilosort[gui]>=4.1.0",
+    "one-api>=2.7.0"
 ]
 
 [project.scripts]

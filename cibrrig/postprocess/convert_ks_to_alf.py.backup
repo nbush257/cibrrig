@@ -13,8 +13,8 @@ Key Features:
 
 """
 
-from ibllib.ephys.sync import apply_sync
-from ibllib.ephys.qc import spike_sorting_metrics
+from ibllib.ephys.spikes import apply_sync
+from ibllib.ephys.ephysqc import spike_sorting_metrics
 from pathlib import Path
 import spikeglx
 import one.alf.io as alfio
