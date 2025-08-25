@@ -13,7 +13,7 @@ authors = [
 ]
 dependencies = [
     "ibllib==3.4.1",
-    "spikeinterface==0.103.0", 
+    "spikeinterface==0.102.3", 
     "ipython",
     "myst-parser",
     "sphinx_rtd_theme",

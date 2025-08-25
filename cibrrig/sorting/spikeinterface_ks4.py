@@ -27,7 +27,7 @@ if sys.platform == 'linux':
     N_JOBS = joblib.effective_n_jobs()
     CHUNK_DUR = '1s'
 else:
-    N_JOBS=15
+    N_JOBS=12
     CHUNK_DUR = '1s'
 
 MOTION_PRESET = "dredge"  # 'kilosort_like','dredge'
@@ -48,7 +48,7 @@ EXTENSIONS=dict(
     waveforms={'ms_before':1.3,'ms_after':2.6},
     templates={'operators':['average','median','std']},
     noise_levels={},
-    amplitude_scalings = {},
+    # amplitude_scalings = {},
     spike_amplitudes={},
     isi_histograms = {},
     spike_locations={},
@@ -539,14 +539,15 @@ def run_probe(
     _log.info('Computing waveforms and QC')
     if ANALYZER_PATH.exists():
         analyzer = si.load_sorting_analyzer(folder=ANALYZER_PATH)
-        analyzer.get_extension('quality_metrics').get_data()
+        metrics = analyzer.get_extension('quality_metrics').get_data()
     else:
-        analyzer = si.create_sorting_analyzer(sorting=sort_rez,recording=recording)
-        analyzer.compute_several_extensions(EXTENSIONS,**job_kwargs)
-        analyzer.get_extension('quality_metrics').get_data()
-        si.remove_duplicated_spikes(sort_rez, censored_period_ms=0.166)
+        analyzer = si.create_sorting_analyzer(sorting=sort_rez,recording=recording,folder=ANALYZER_PATH,format='binary_folder')
         si.remove_redundant_units(analyzer)
-        analyzer.save_as(format='binary_folder',folder=ANALYZER_PATH)
+        si.remove_duplicated_spikes(sort_rez, censored_period_ms=0.166)
+        analyzer.compute_several_extensions(EXTENSIONS,n_jobs=N_JOBS//2,progress_bar=True,chunk_duration=CHUNK_DUR)
+        metrics = analyzer.get_extension('quality_metrics').get_data()
+        # analyzer.save_as(format='binary_folder',folder=ANALYZER_PATH)
+    
     _log.info('Exporting to PHY')
     si.export_to_phy(analyzer,output_folder=PHY_DEST,compute_pc_features=False)
 
