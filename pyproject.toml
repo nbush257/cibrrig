@@ -14,7 +14,7 @@ authors = [
 dependencies = [
     "ibllib==3.4.1",
     "spikeinterface==0.103.0", 
-    "joblib<1.5.0"
+    "joblib<1.5.0",
     "ipython",
     "myst-parser",
     "sphinx_rtd_theme",
