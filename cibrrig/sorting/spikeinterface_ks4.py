@@ -19,50 +19,54 @@ import sys
 import time
 import one.alf.io as alfio
 from ibllib.ephys.sync_probes import apply_sync
+import os
+import pandas as pd
 
 # May want to do a "remove duplicate spikes" after manual sorting  - this would allow manual sorting to merge  units that have some, but not a majority, of duplicated spikes
 # Parameters
-if sys.platform == 'linux':
+if sys.platform == "linux":
     import joblib
+
     N_JOBS = joblib.effective_n_jobs()
-    CHUNK_DUR = '1s'
+    CHUNK_DUR = "1s"
 else:
-    N_JOBS=12
-    CHUNK_DUR = '1s'
+    N_JOBS = 12
+    CHUNK_DUR = "1s"
 
 MOTION_PRESET = "dredge"  # 'kilosort_like','dredge'
-SCRATCH_NAME = f'SCRATCH_{MOTION_PRESET}'
+SCRATCH_NAME = f"SCRATCH_{MOTION_PRESET}"
 
 job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=N_JOBS, progress_bar=True)
 si.set_global_job_kwargs(**job_kwargs)
 do_correction = False
-if MOTION_PRESET == 'kilosort_like':
-    do_correction=True
+if MOTION_PRESET == "kilosort_like":
+    do_correction = True
 USE_MOTION_SI = not do_correction
 sorter_params = dict(do_CAR=False, do_correction=do_correction)
 COMPUTE_MOTION_SI = True
-OPTO_OBJECTS = ["laser","laser2"] # Alf objects to look for by default that we wish to remove the artifact for
+OPTO_OBJECTS = [
+    "laser",
+    "laser2",
+]  # Alf objects to look for by default that we wish to remove the artifact for
 
-EXTENSIONS=dict(
-    random_spikes={'method':'uniform','max_spikes_per_unit':600,'seed':42},
-    waveforms={'ms_before':1.3,'ms_after':2.6},
-    templates={'operators':['average','median','std']},
+EXTENSIONS = dict(
+    random_spikes={"method": "uniform", "max_spikes_per_unit": 600, "seed": 42},
+    waveforms={"ms_before": 1.3, "ms_after": 2.6},
+    templates={"operators": ["average", "median", "std"]},
     noise_levels={},
-    # amplitude_scalings = {},
+    amplitude_scalings = {},
     spike_amplitudes={},
-    isi_histograms = {},
+    isi_histograms={},
     spike_locations={},
     unit_locations={},
-    quality_metrics={},
-    template_metrics={},
-    # principal_components={},
+    template_metrics={'include_multi_channel_metrics':True},
     correlograms={},
     template_similarity={},
 )
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
-_log = logging.getLogger("SI-Kilosort4") 
+_log = logging.getLogger("SI-Kilosort4")
 _log.setLevel(logging.INFO)
 
 # QC presets
@@ -75,8 +79,9 @@ MIN_SPIKES = 500
 RUN_PC = False
 SORTER = "kilosort4"
 
+
 def log_elapsed_time(start_time):
-    _log.info(f"Elapsed time: {time.time()-start_time:0.0f} seconds")
+    _log.info(f"Elapsed time: {time.time() - start_time:0.0f} seconds")
 
 
 def move_motion_info(src, destination):
@@ -105,7 +110,12 @@ def move_motion_info(src, destination):
 
 
 def remove_opto_artifacts(
-    recording, session_path, probe_path, opto_objects=None, ms_before=0.125, ms_after=0.25
+    recording,
+    session_path,
+    probe_path,
+    opto_objects=None,
+    ms_before=0.125,
+    ms_after=0.25,
 ):
     """
     Use the Spikeinterface "remove_artifacts" to zero out around the onsets and offsets of the laser
@@ -122,7 +132,8 @@ def remove_opto_artifacts(
     Returns:
         spikeinterface.RecordingExtractor: Recording extractor with artifacts removed.
     """
-    def _align_artifacts(recording,samps,winsize=0.001):
+
+    def _align_artifacts(recording, samps, winsize=0.001):
         """
         Align artifact removal window to the peak of the artifact. Do this because
         the time stamp of the laser onset is not always the peak of the artifact.
@@ -132,16 +143,18 @@ def remove_opto_artifacts(
             recording (spikeinterface.RecordingExtractor): Recording extractor object.
             samps (np.array): Array of sample indices.
             winsize (float, optional): Window size in seconds. Defaults to 0.001.
-        
+
         Returns:
             np.array: Array of aligned sample indices.
-    
+
         """
         samps_aligned = np.empty_like(samps)
-        win_samps=int(winsize*recording.get_sampling_frequency())
-        for ii,stim in enumerate(samps):
-            _snippet = recording.frame_slice(stim-win_samps,stim+win_samps).get_traces()
-            samps_aligned[ii] = np.argmax(np.mean(_snippet**2,1))+stim-win_samps
+        win_samps = int(winsize * recording.get_sampling_frequency())
+        for ii, stim in enumerate(samps):
+            _snippet = recording.frame_slice(
+                stim - win_samps, stim + win_samps
+            ).get_traces()
+            samps_aligned[ii] = np.argmax(np.mean(_snippet**2, 1)) + stim - win_samps
         return samps_aligned
 
     # Set which alf objects to look for
@@ -179,7 +192,7 @@ def remove_opto_artifacts(
             # Map times to samples in ints and align to peak artifact
             opto_samps = opto_times_adj * recording.get_sampling_frequency()
             opto_samps = np.round(opto_samps).astype(int)
-            opto_samps = _align_artifacts(segment,opto_samps)
+            opto_samps = _align_artifacts(segment, opto_samps)
 
             # Blank out the artifacts
             new_segment = si.remove_artifacts(
@@ -214,11 +227,11 @@ def concatenate_recording(recording, t0=0, tf=None):
     for ii in range(recording.get_num_segments()):
         seg = recording.select_segments(ii)
         if tf is not None:
-            _log.warning(f"TESTING: ONLY RUNNING ON {tf-t0}s per segment")
-            sf = int(seg.get_sampling_frequency()*tf)
-            sf = np.min([sf,seg.get_num_frames()])
-            s0 = int(seg.get_sampling_frequency()*t0)
-            s0 = np.max([s0,0])
+            _log.warning(f"TESTING: ONLY RUNNING ON {tf - t0}s per segment")
+            sf = int(seg.get_sampling_frequency() * tf)
+            sf = np.min([sf, seg.get_num_frames()])
+            s0 = int(seg.get_sampling_frequency() * t0)
+            s0 = np.max([s0, 0])
             seg = seg.frame_slice(s0, sf)
         rec_list.append(seg)
     recording = si.concatenate_recordings(rec_list)
@@ -248,8 +261,7 @@ def si_motion(recording, MOTION_PATH):
         _log.info("Motion info loaded")
         motion_info = si.load_motion_info(MOTION_PATH)
         rec_mc = sim.interpolate_motion(
-            recording=recording,
-            motion=motion_info["motion"]
+            recording=recording, motion=motion_info["motion"]
         )
     else:
         _log.info(f"Motion correction {MOTION_PRESET}...")
@@ -263,7 +275,7 @@ def si_motion(recording, MOTION_PATH):
     return (rec_mc, motion_info)
 
 
-def plot_motion(motion_path,rec):
+def plot_motion(motion_path, rec):
     """
     Plot the motion information and save the figure.
 
@@ -280,7 +292,8 @@ def plot_motion(motion_path,rec):
         if not motion_path.joinpath("driftmap.png").exists():
             fig = plt.figure(figsize=(14, 8))
             si.plot_motion_info(
-                motion_info, rec,
+                motion_info,
+                rec,
                 figure=fig,
                 color_amplitude=True,
                 amplitude_cmap="inferno",
@@ -325,9 +338,12 @@ def split_shanks_and_spatial_filter(rec):
     combined_preprocessed_recording = si.aggregate_channels(preprocessed_recordings)
     return combined_preprocessed_recording
 
-def remove_and_interpolate(recording,probe_dir,t0=0,tf=120,remove=True,plot=True,save=True):
-    ''' Remove channels outside the brain and interpolate bad channels
-    
+
+def remove_and_interpolate(
+    recording, probe_dir, t0=0, tf=120, remove=True, plot=True, save=True
+):
+    """Remove channels outside the brain and interpolate bad channels
+
     Args:
         recording (spikeinterface.RecordingExtractor): Recording extractor object.
         t0 (float, optional): Start time in seconds. Defaults to 0.
@@ -335,63 +351,73 @@ def remove_and_interpolate(recording,probe_dir,t0=0,tf=120,remove=True,plot=True
         remove (bool, optional): If True, remove channels outside the brain. Defaults to True.
         plot (bool, optional): If True, plot the traces before and after removing bad channels. Defaults to True.
         save (bool, optional): If True, save the channel labels. Defaults to True.
-        
+
     Returns:
         spikeinterface.RecordingExtractor: Recording extractor object with bad channels removed and interpolated.
         np.array: Array of channel indices that were removed.
-    '''
-    _log.info('Removing and interpolating bad channels')
+    """
+    _log.info("Removing and interpolating bad channels")
 
     # Map times to samples with recording start as t0 (fix since recording start is not always 0 in spikeinterface>0.100ish)
     sr = recording.get_sampling_frequency()
-    s0,sf = sr*t0,sr*tf
+    s0, sf = sr * t0, sr * tf
     s0 = np.round(s0).astype(int)
     sf = np.round(sf).astype(int)
 
     # Get the segment between t0 and tf by indexing into frames
-    recording_sub = si.select_segment_recording(recording,0) # Grab the first segment
-    s0 = np.max([s0,0])
-    sf = np.min([sf,recording_sub.get_num_frames()])
-    recording_sub = recording_sub.frame_slice(s0,sf)
-    
+    recording_sub = si.select_segment_recording(recording, 0)  # Grab the first segment
+    s0 = np.max([s0, 0])
+    sf = np.min([sf, recording_sub.get_num_frames()])
+    recording_sub = recording_sub.frame_slice(s0, sf)
 
     # Detect bad channels
-    _,chan_labels = si.detect_bad_channels(recording_sub,outside_channels_location='both')
-    
-    out_channels = np.where(chan_labels=='out')[0]
+    _, chan_labels = si.detect_bad_channels(
+        recording_sub, outside_channels_location="both"
+    )
+
+    out_channels = np.where(chan_labels == "out")[0]
 
     # Set dead or noise channels to bad (i.e., exclude out channels)
-    bad_channels = recording.channel_ids[np.isin(chan_labels,['dead','noise'])]
-    
+    bad_channels = recording.channel_ids[np.isin(chan_labels, ["dead", "noise"])]
+
     # Remove channels outside the brain
     if remove:
         recording_good = recording.remove_channels(recording.channel_ids[out_channels])
-        recording_good = si.interpolate_bad_channels(recording_good,bad_channels)
+        recording_good = si.interpolate_bad_channels(recording_good, bad_channels)
     else:
-        recording_good = si.interpolate_bad_channels(recording,bad_channels)
+        recording_good = si.interpolate_bad_channels(recording, bad_channels)
 
     if plot:
-        f,ax = plt.subplots(ncols=3,sharey=True)
-        t0 = recording.get_start_time()+10
-        tf = t0+4
-        tf = min(tf,recording.get_end_time())
+        f, ax = plt.subplots(ncols=3, sharey=True)
+        t0 = recording.get_start_time() + 10
+        tf = t0 + 4
+        tf = min(tf, recording.get_end_time())
 
-        si.plot_traces(recording,time_range=(t0,tf),clim=(-50,50),ax=ax[0],segment_index=0)
-        si.plot_traces(recording_good,time_range=(t0,tf),clim=(-50,50),ax=ax[1],segment_index=0)
+        si.plot_traces(
+            recording, time_range=(t0, tf), clim=(-50, 50), ax=ax[0], segment_index=0
+        )
+        si.plot_traces(
+            recording_good,
+            time_range=(t0, tf),
+            clim=(-50, 50),
+            ax=ax[1],
+            segment_index=0,
+        )
 
-        ax[2].plot(chan_labels,recording.get_channel_locations()[:,1])
-        ax[0].set_title('Original')
-        ax[1].set_title('Removed and interpolated')
-        ax[0].set_ylim(0,3840)
+        ax[2].plot(chan_labels, recording.get_channel_locations()[:, 1])
+        ax[0].set_title("Original")
+        ax[1].set_title("Removed and interpolated")
+        ax[0].set_ylim(0, 3840)
         if save:
-            plt.savefig(probe_dir.joinpath('remove_and_interpolate.png'),dpi=300)
-        plt.close('all')
+            plt.savefig(probe_dir.joinpath("remove_and_interpolate.png"), dpi=300)
+        plt.close("all")
     if save:
-        np.save(probe_dir.joinpath('_spikeinterface_ephysChannels.siLabels.npy'),chan_labels)
+        np.save(
+            probe_dir.joinpath("_spikeinterface_ephysChannels.siLabels.npy"),
+            chan_labels,
+        )
 
-
-
-    return (recording_good,chan_labels)
+    return (recording_good, chan_labels)
 
 
 def apply_preprocessing(
@@ -426,8 +452,10 @@ def apply_preprocessing(
     rec_shifted = spre.phase_shift(rec_filtered)
 
     # Remove channels outside the brain and interpolate bad channels
-    rec_interpolated,chan_labels = remove_and_interpolate(rec_shifted,probe_dir,remove=True,plot=True,save=True)
-    plt.close('all')
+    rec_interpolated, chan_labels = remove_and_interpolate(
+        rec_shifted, probe_dir, remove=True, plot=True, save=True
+    )
+    plt.close("all")
 
     # Apply spatial filtering and split shanks
     rec_destriped = split_shanks_and_spatial_filter(rec_interpolated)
@@ -438,7 +466,9 @@ def apply_preprocessing(
     else:
         if not skip_remove_opto:
             # Remove optogenetic artifacts if not skipped
-            rec_processed = remove_opto_artifacts(rec_destriped, session_path, probe_dir)
+            rec_processed = remove_opto_artifacts(
+                rec_destriped, session_path, probe_dir
+            )
         else:
             rec_processed = rec_destriped
 
@@ -446,6 +476,34 @@ def apply_preprocessing(
     tf = 60 if testing else None
     rec_out = concatenate_recording(rec_processed, tf=tf)
     return rec_out
+
+def apply_unit_refine_labels(phy_dest, analyzer):
+    '''
+    Apply UnitRefine (https://spikeinterface.readthedocs.io/en/stable/tutorials/curation/plot_1_automated_curation.html#sphx-glr-tutorials-curation-plot-1-automated-curation-py)
+    to auto label the noise, multi-unit activity (MUA), and single-unit activity (SUA) clusters.
+
+    Writes directly to the phy destination
+    '''
+    noise_neuron_labels  = si.auto_label_units(
+        sorting_analyzer=analyzer,
+        model_folder = Path(r'C:\helpers\hugging_face\UnitRefine_noise'),
+        trust_model=True
+    )
+    noise_units = noise_neuron_labels[noise_neuron_labels['prediction']=='noise']
+    analyzer_neural = analyzer.remove_units(noise_units.index)
+
+    sua_mua_labels= si.auto_label_units(
+        sorting_analyzer=analyzer_neural,
+        model_folder = Path(r'C:\helpers\hugging_face\UnitRefine_sua'),
+        trust_model=True
+    )
+    unitrefine_label = pd.concat([sua_mua_labels, noise_units]).sort_index().reset_index(drop=True)
+    unitrefine_label.rename(columns={'prediction':'UR_prediction','probability':'UR_probability'},inplace=True)
+    unitrefine_label.index.name = 'cluster_id'
+    unitrefine_label['UR_prediction'].to_csv(phy_dest.joinpath('cluster_UR_prediction.tsv'),index=True,header=True,sep='\t')
+    unitrefine_label['UR_probability'].to_csv(phy_dest.joinpath('cluster_UR_probability.tsv'),index=True,header=True,sep='\t')
+    # df_group = unitrefine_label['UR_prediction'].rename('group')
+    # df_group.map({'noise':'noise','mua':'mua','sua':'good'}).to_csv(PHY_DEST.joinpath('cluster_group.tsv'),index=True,header=True,sep='\t')
 
 
 def run_probe(
@@ -470,12 +528,11 @@ def run_probe(
     temp_local = probe_local.joinpath(".si")
     PHY_DEST = probe_local.joinpath(label)
     # Temporary paths that will not be coming with us?
-    SORT_PATH = temp_local.joinpath(label)
+    PREPROC_PATH = temp_local.joinpath(".preprocessed")
+    SORT_PATH = temp_local.joinpath('.sort')
     MOTION_PATH = temp_local.joinpath(".motion")
-    ANALYZER_PATH = temp_local.joinpath('sorting_analyzer')
+    ANALYZER_PATH = temp_local.joinpath(".analyzer")
     probe_local.mkdir(parents=True, exist_ok=True)
-
-
 
     if PHY_DEST.exists():
         _log.warning(
@@ -487,89 +544,104 @@ def run_probe(
     recording = se.read_spikeglx(probe_dir, stream_id=stream)
     session_path = probe_dir.parent.parent
 
+    # =========== #
     # =========== Preprocessing =================== #
-    rec_destriped = apply_preprocessing(
-        recording,
-        session_path,
-        probe_dir,
-        testing,
-        skip_remove_opto=skip_remove_opto,
-    )
+    # =========== #    
+    if not PREPROC_PATH.with_suffix('.zarr').exists():
+        rec_destriped = apply_preprocessing(
+            recording,
+            session_path,
+            probe_dir,
+            testing,
+            skip_remove_opto=skip_remove_opto,
+        )
 
-    # =============== Compute motion if requested.  ============ #
-    if COMPUTE_MOTION_SI:
-        rec_mc, motion = si_motion(rec_destriped.astype('float32'), MOTION_PATH)
+        # =============== Compute motion if requested.  ============ #
+        if COMPUTE_MOTION_SI:
+            rec_mc, motion = si_motion(rec_destriped.astype("float32"), MOTION_PATH)
 
-    # ============== Save motion if requested ============== #
-    if COMPUTE_MOTION_SI and USE_MOTION_SI:
-        recording = rec_mc
-    else:
-        recording = rec_destriped
+        # ============== Save motion if requested ============== #
+        if COMPUTE_MOTION_SI and USE_MOTION_SI:
+            recording = rec_mc
+        else:
+            recording = rec_destriped
+        recording.save(folder = PREPROC_PATH, format='zarr')
+        del recording
+    _log.info('Loading preprocessed recording')
+    recording = si.load(PREPROC_PATH.with_suffix('.zarr'))
+    
+    
 
     # ============= RUN SORTER ==================== #
     if SORT_PATH.exists():
         _log.info("Found sorting. Loading...")
-        sort_rez = si.load(SORT_PATH)
+        sort_rez = si.read_sorter_folder(SORT_PATH)
     else:
         _log.info(f"Running {SORTER}")
-        ## Originally we were sorting by channel shank separately - this caused some issues with some data. 
-        ## The upside of sorting seperately is that it allows for drift to be unique on each shank
-        # sort_rez = ss.run_sorter_by_property(
-        #     sorter_name=SORTER,
-        #     recording=recording,
-        #     grouping_property="group",
-        #     working_folder=SORT_PATH.parent.joinpath("ks4_working"),
-        #     verbose=True,
-        #     remove_existing_folder=False,
-        #     **sorter_params,
-        # )
         sort_rez = ss.run_sorter(
             sorter_name=SORTER,
             recording=recording,
-            # grouping_property="group",
-            folder=SORT_PATH.parent.joinpath("ks4_working"),
+            folder=SORT_PATH,
             verbose=True,
             remove_existing_folder=False,
             **sorter_params,
         )
-        sort_rez.save(folder=SORT_PATH)
-    _log.info('Finished sotring:')
-    log_elapsed_time(start_time)
+    sort_rez = si.remove_duplicated_spikes(sort_rez, method='keep_first_iterative',censored_period_ms=.166)
     
-    _log.info('Computing waveforms and QC')
+    _log.info("Finished sorting:")
+    log_elapsed_time(start_time)
+
+    _log.info("Computing waveforms and QC")
     if ANALYZER_PATH.exists():
         analyzer = si.load_sorting_analyzer(folder=ANALYZER_PATH)
-        metrics = analyzer.get_extension('quality_metrics').get_data()
     else:
-        analyzer = si.create_sorting_analyzer(sorting=sort_rez,recording=recording,folder=ANALYZER_PATH,format='binary_folder')
-        si.remove_redundant_units(analyzer)
-        si.remove_duplicated_spikes(sort_rez, censored_period_ms=0.166)
-        analyzer.compute_several_extensions(EXTENSIONS,n_jobs=N_JOBS//2,progress_bar=True,chunk_duration=CHUNK_DUR)
-        metrics = analyzer.get_extension('quality_metrics').get_data()
-        # analyzer.save_as(format='binary_folder',folder=ANALYZER_PATH)
-    
-    _log.info('Exporting to PHY')
-    si.export_to_phy(analyzer,output_folder=PHY_DEST,compute_pc_features=False)
+        analyzer = si.create_sorting_analyzer(
+            sorting=sort_rez,
+            recording=recording,
+        )
+        analyzer.compute_several_extensions(EXTENSIONS)
+
+        # Remove redundant units
+        clean_sort_rez = si.remove_redundant_units(analyzer)
+        analyzer = analyzer.select_units(clean_sort_rez.unit_ids)
+
+        # Compute PCs
+        analyzer.compute('principal_components',n_components = 3,mode='by_channel_local',whiten=True,n_jobs=1)
+        analyzer.compute('quality_metrics')
+
+        # Stash the pre-merged analyzer
+        analyzer.save_as(folder=ANALYZER_PATH.with_suffix('.raw').with_suffix('.zarr'),format='zarr')
+
+        # Auto_merge units
+        analyzer = si.auto_merge_units(
+            sorting_analyzer=analyzer,
+            presets=['temporal_splits','similarity_correlograms'],
+            censor_ms=0.166,
+            recursive=True
+        )
+
+        # Save the merged analyzer
+        analyzer.save_as(folder=ANALYZER_PATH,format='binary_folder')
 
 
-    # Generate IBL GUI output
-    # # Get LFP recording
-    # lfp_recording = se.read_spikeglx(probe_dir,stream_id=stream.replace('ap','lf'))
-    # if testing:
-    #     n_samps = int(60*lfp_recording.sampling_frequency)
-    #     lfp_recording = lfp_recording.frame_slice(0,n_samps)
-    # # Process LFP
-    # lfp_recording = spre.bandpass_filter(lfp_recording, freq_min=1, freq_max=300)
-    # lfp_recording = spre.decimate(lfp_recording, 10)
-    # # Export
-    # si.export_to_ibl_gui(
-    #     analyzer,PHY_DEST.joinpath('ibl'),
-    #     lfp_recording=lfp_recording,
-    #     n_jobs=N_JOBS
-    # )
-   
-    plot_motion(MOTION_PATH,recording)
+    # ============= EXPORT ============= #
+    _log.info("Exporting to PHY")
+    si.export_to_phy(
+        sorting_analyzer=analyzer, 
+        output_folder=PHY_DEST, 
+        use_relative_path=True,
+    )
+
+    apply_unit_refine_labels(PHY_DEST, analyzer)
+
+
+    # Convert templates to dense for alf conversion later
+    np.save(PHY_DEST.joinpath("templates.npy"), analyzer.get_extension('templates').get_data())
+    os.remove(PHY_DEST.joinpath("template_ind.npy"))
+
+    plot_motion(MOTION_PATH, recording)
     shutil.move(str(MOTION_PATH), str(PHY_DEST))
+
 
 
 @click.command()
@@ -583,7 +655,7 @@ def run_probe(
     is_flag=True,
     help="Flag to skip removal of the light artifacts. Probably advisable if light is presented far from the probe.",
 )
-def cli(session_path, dest, testing, no_move_final, skip_remove_opto,keep_scratch):
+def cli(session_path, dest, testing, no_move_final, skip_remove_opto, keep_scratch):
     run(
         session_path,
         dest,
@@ -620,7 +692,7 @@ def run(
 
     # Get paths
     session_path = Path(session_path)
-    if sys.platform=='linux':
+    if sys.platform == "linux":
         SCRATCH_DIR = session_path.joinpath(SCRATCH_NAME)
     else:
         SCRATCH_DIR = Path("D:/").joinpath(SCRATCH_NAME)
@@ -679,11 +751,11 @@ def run(
         )
 
         # ======= Remove temporary SI folder ========= #
-        if rm_intermediate:
-            try:
-                shutil.rmtree(probe_local.joinpath(".si"))
-            except Exception:
-                _log.error("Could not delete temp si folder")
+        # if rm_intermediate:
+        #     try:
+        #         shutil.rmtree(probe_local.joinpath(".si"))
+        #     except Exception:
+        #         _log.error("Could not delete temp si folder")
 
         # ======= Move to destination ========= #
         if move_final:
@@ -705,6 +777,7 @@ def run(
             _log.error(e)
 
         shutil.rmtree(SCRATCH_DIR)
+
 
 if __name__ == "__main__":
     cli()
