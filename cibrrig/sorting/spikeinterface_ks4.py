@@ -54,7 +54,7 @@ EXTENSIONS = dict(
     waveforms={"ms_before": 1.3, "ms_after": 2.6},
     templates={"operators": ["average", "median", "std"]},
     noise_levels={},
-    amplitude_scalings = {},
+    # amplitude_scalings = {},
     spike_amplitudes={},
     isi_histograms={},
     spike_locations={},
@@ -610,7 +610,7 @@ def run_probe(
         analyzer.compute('quality_metrics')
 
         # Stash the pre-merged analyzer
-        analyzer.save_as(folder=ANALYZER_PATH.with_suffix('.raw').with_suffix('.zarr'),format='zarr')
+        analyzer.save_as(folder=ANALYZER_PATH.with_suffix('.raw.zarr'),format='zarr')
 
         # Auto_merge units
         analyzer = si.auto_merge_units(
@@ -621,7 +621,7 @@ def run_probe(
         )
 
         # Save the merged analyzer
-        analyzer.save_as(folder=ANALYZER_PATH,format='binary_folder')
+        analyzer.save_as(folder=ANALYZER_PATH.with_suffix('.zarr'),format='zarr')
 
 
     # ============= EXPORT ============= #
