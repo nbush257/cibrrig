@@ -4,6 +4,7 @@ Data must be reorganized using the preprocess.ephys_data_to_alf.py script first.
 """
 # May want to do a "remove duplicate spikes" after manual sorting  - this would allow manual sorting to merge  units that have some, but not a majority, of duplicated spikes
 
+from sklearn import metrics
 import spikeinterface.extractors as se
 import spikeinterface.preprocessing as spre
 import spikeinterface.sorters as ss
@@ -21,6 +22,9 @@ import one.alf.io as alfio
 from ibllib.ephys.sync_probes import apply_sync
 import os
 import pandas as pd
+from phylib.io.alf import EphysAlfCreator
+from phylib.io.model import TemplateModel
+
 
 # May want to do a "remove duplicate spikes" after manual sorting  - this would allow manual sorting to merge  units that have some, but not a majority, of duplicated spikes
 # Parameters
@@ -504,7 +508,7 @@ def apply_unit_refine_labels(phy_dest, analyzer):
     unitrefine_label['UR_probability'].to_csv(phy_dest.joinpath('cluster_UR_probability.tsv'),index=True,header=True,sep='\t')
     # df_group = unitrefine_label['UR_prediction'].rename('group')
     # df_group.map({'noise':'noise','mua':'mua','sua':'good'}).to_csv(PHY_DEST.joinpath('cluster_group.tsv'),index=True,header=True,sep='\t')
-
+    return unitrefine_label
 
 def run_probe(
     probe_dir, probe_local, label="kilosort4", testing=False, skip_remove_opto=False
@@ -565,6 +569,7 @@ def run_probe(
             recording = rec_mc
         else:
             recording = rec_destriped
+        recording = recording.astype('int16')
         recording.save(folder = PREPROC_PATH, format='zarr')
         del recording
     _log.info('Loading preprocessed recording')
@@ -587,13 +592,13 @@ def run_probe(
             **sorter_params,
         )
     sort_rez = si.remove_duplicated_spikes(sort_rez, method='keep_first_iterative',censored_period_ms=.166)
-    
+
     _log.info("Finished sorting:")
     log_elapsed_time(start_time)
 
     _log.info("Computing waveforms and QC")
     if ANALYZER_PATH.exists():
-        analyzer = si.load_sorting_analyzer(folder=ANALYZER_PATH)
+        analyzer = si.load_sorting_analyzer(folder=ANALYZER_PATH.with_suffix('.zarr'))
     else:
         analyzer = si.create_sorting_analyzer(
             sorting=sort_rez,
@@ -605,8 +610,8 @@ def run_probe(
         clean_sort_rez = si.remove_redundant_units(analyzer)
         analyzer = analyzer.select_units(clean_sort_rez.unit_ids)
 
-        # Compute PCs
-        analyzer.compute('principal_components',n_components = 3,mode='by_channel_local',whiten=True,n_jobs=1)
+        # Compute PCs (Must be global for ALF conversion)
+        analyzer.compute('principal_components',n_components = 3,mode='by_channel_local',n_jobs=1)
         analyzer.compute('quality_metrics')
 
         # Stash the pre-merged analyzer
@@ -619,10 +624,14 @@ def run_probe(
             censor_ms=0.166,
             recursive=True
         )
-
-        # Save the merged analyzer
+        
+        # Recompute metrics on merged data to allow for autolabel 
+        analyzer.compute_several_extensions(EXTENSIONS)
+        analyzer.compute('principal_components',n_components = 3,mode='by_channel_local',n_jobs=1)
+        analyzer.compute('quality_metrics')
+     
+        # Save the automerged analyzer
         analyzer.save_as(folder=ANALYZER_PATH.with_suffix('.zarr'),format='zarr')
-
 
     # ============= EXPORT ============= #
     _log.info("Exporting to PHY")
@@ -630,19 +639,54 @@ def run_probe(
         sorting_analyzer=analyzer, 
         output_folder=PHY_DEST, 
         use_relative_path=True,
+        remove_if_exists=True,
     )
 
-    apply_unit_refine_labels(PHY_DEST, analyzer)
-
-
+    ur_labels = apply_unit_refine_labels(PHY_DEST, analyzer)
+    
     # Convert templates to dense for alf conversion later
     np.save(PHY_DEST.joinpath("templates.npy"), analyzer.get_extension('templates').get_data())
     os.remove(PHY_DEST.joinpath("template_ind.npy"))
 
+    #  Convert to ALF   
+    alf_path = PHY_DEST.parent.joinpath('alf')
+    shutil.move(PHY_DEST.joinpath('pc_features.npy'), alf_path.joinpath('pc_features.npy'))
+    shutil.move(PHY_DEST.joinpath('pc_features_ind.npy'), alf_path.joinpath('pc_features_ind.npy'))
+
+    mdl = TemplateModel(dir_path=PHY_DEST, sample_rate=analyzer.recording.get_sampling_frequency())
+    ac = EphysAlfCreator(mdl)
+    ac.convert(alf_path, ampfactor=analyzer.recording.get_channel_gains()[0]*1e-6)
+    # Move recording?
+    shutil.move(PHY_DEST.joinpath('recording.dat'), alf_path.joinpath('recording.dat'))
+    # Add a scale to params.py? 
+    # Move over metrics
+
+    # Need to merge indices properly
+    metrics = analyzer.get_extension('quality_metrics').get_data()
+    metrics = metrics.reset_index().rename({'index':'cluster_id'},axis=1)
+    metrics = metrics.merge(ur_labels, on='cluster_id', how='left')
+    metrics.to_csv(alf_path.joinpath('clusters.metrics.csv'),index=False)
+
+    # Delete Phy
+
+
     plot_motion(MOTION_PATH, recording)
     shutil.move(str(MOTION_PATH), str(PHY_DEST))
 
-
+def write_params(output_folder,analyzer):
+    num_chans = analyzer.recording.get_num_channels()
+    dtype = analyzer.get_dtype()
+    dtype_str = np.dtype(dtype).name
+    fs = analyzer.recording.get_sampling_frequency()
+            
+    # write_binary_recording(sorting_analyzer.recording, file_paths=rec_path, dtype=dtype, **job_kwargs)
+    with (output_folder / "params.py").open("w") as f:
+        f.write("dat_path = r'recording.dat'\n")
+        f.write(f"n_channels_dat = {num_chans}\n")
+        f.write(f"dtype = '{dtype_str}'\n")
+        f.write("offset = 0\n")
+        f.write(f"sample_rate = {fs}\n")
+        f.write(f"hp_filtered = {analyzer.is_filtered()}")
 
 @click.command()
 @click.argument("session_path", type=click.Path())
