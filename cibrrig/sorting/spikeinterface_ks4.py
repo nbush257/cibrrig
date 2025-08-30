@@ -25,7 +25,6 @@ import pandas as pd
 from phylib.io.alf import EphysAlfCreator
 from phylib.io.model import TemplateModel
 
-
 # May want to do a "remove duplicate spikes" after manual sorting  - this would allow manual sorting to merge  units that have some, but not a majority, of duplicated spikes
 # Parameters
 if sys.platform == "linux":
@@ -176,17 +175,20 @@ def remove_opto_artifacts(
         segment = recording.select_segments(ii)
         _log.debug(segment.__repr__())
         all_opto_times = []
+        alf_path = session_path.joinpath("alf")
         for obj in opto_objects:
+            if not alfio.exists(alf_path,obj):
+                continue
             opto_stims = alfio.load_object(
-                session_path.joinpath("alf"),
-                object=opto_objects,
+                alf_path,
+                object=obj,
                 namespace="cibrrig",
                 extra=f"t{ii:.0f}",
                 short_keys=True,
             )
             opto_times = opto_stims.intervals.ravel()
             all_opto_times.append(opto_times)
-        all_opto_times = np.concatenate(all_opto_times)
+        all_opto_times = np.sort(np.concatenate(all_opto_times))
 
         if len(all_opto_times) > 0:
             opto_times_adj = apply_sync(
@@ -488,19 +490,35 @@ def apply_unit_refine_labels(phy_dest, analyzer):
 
     Writes directly to the phy destination
     '''
-    noise_neuron_labels  = si.auto_label_units(
-        sorting_analyzer=analyzer,
-        model_folder = Path(r'C:\helpers\hugging_face\UnitRefine_noise'),
-        trust_model=True
-    )
-    noise_units = noise_neuron_labels[noise_neuron_labels['prediction']=='noise']
-    analyzer_neural = analyzer.remove_units(noise_units.index)
+    if sys.platform == "linux":
+        noise_neuron_labels  = si.auto_label_units(
+            sorting_analyzer=analyzer,
+            repo_id = "SpikeInterface/UnitRefine_noise_neural_classifier",
+            trusted=['numpy.dtype'] 
+        )
+        noise_units = noise_neuron_labels[noise_neuron_labels['prediction']=='noise']
+        analyzer_neural = analyzer.remove_units(noise_units.index)
 
-    sua_mua_labels= si.auto_label_units(
-        sorting_analyzer=analyzer_neural,
-        model_folder = Path(r'C:\helpers\hugging_face\UnitRefine_sua'),
-        trust_model=True
-    )
+        sua_mua_labels= si.auto_label_units(
+            sorting_analyzer=analyzer_neural,
+            repo_id = "SpikeInterface/UnitRefine_sua_mua_classifier",
+            trusted = ['numpy.dtype']
+        )
+    else:
+        noise_neuron_labels  = si.auto_label_units(
+            sorting_analyzer=analyzer,
+            model_folder = Path(r'C:\helpers\hugging_face\UnitRefine_noise'),
+            trust_model=True
+        )
+        noise_units = noise_neuron_labels[noise_neuron_labels['prediction']=='noise']
+        analyzer_neural = analyzer.remove_units(noise_units.index)
+
+        sua_mua_labels= si.auto_label_units(
+            sorting_analyzer=analyzer_neural,
+            model_folder = Path(r'C:\helpers\hugging_face\UnitRefine_sua'),
+            trust_model=True
+        )
+
     unitrefine_label = pd.concat([sua_mua_labels, noise_units]).sort_index().reset_index(drop=True)
     unitrefine_label.rename(columns={'prediction':'UR_prediction','probability':'UR_probability'},inplace=True)
     unitrefine_label.index.name = 'cluster_id'
@@ -576,7 +594,8 @@ def run_probe(
     recording = si.load(PREPROC_PATH.with_suffix('.zarr'))
     
     
-
+    job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=1, progress_bar=True)
+    si.set_global_job_kwargs(**job_kwargs)
     # ============= RUN SORTER ==================== #
     if SORT_PATH.exists():
         _log.info("Found sorting. Loading...")
@@ -589,10 +608,13 @@ def run_probe(
             folder=SORT_PATH,
             verbose=True,
             remove_existing_folder=False,
+            n_jobs=1,
             **sorter_params,
         )
+    
     sort_rez = si.remove_duplicated_spikes(sort_rez, method='keep_first_iterative',censored_period_ms=.166)
-
+    job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=N_JOBS, progress_bar=True)
+    si.set_global_job_kwargs(**job_kwargs)
     _log.info("Finished sorting:")
     log_elapsed_time(start_time)
 
@@ -611,7 +633,7 @@ def run_probe(
         analyzer = analyzer.select_units(clean_sort_rez.unit_ids)
 
         # Compute PCs (Must be global for ALF conversion)
-        analyzer.compute('principal_components',n_components = 3,mode='by_channel_local',n_jobs=1)
+        analyzer.compute('principal_components',n_components = 3,mode='by_channel_local')
         analyzer.compute('quality_metrics')
 
         # Stash the pre-merged analyzer
@@ -627,7 +649,7 @@ def run_probe(
         
         # Recompute metrics on merged data to allow for autolabel 
         analyzer.compute_several_extensions(EXTENSIONS)
-        analyzer.compute('principal_components',n_components = 3,mode='by_channel_local',n_jobs=1)
+        analyzer.compute('principal_components',n_components = 3,mode='by_channel_local')
         analyzer.compute('quality_metrics')
      
         # Save the automerged analyzer
@@ -635,12 +657,16 @@ def run_probe(
 
     # ============= EXPORT ============= #
     _log.info("Exporting to PHY")
+    job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=1, progress_bar=True)
+    si.set_global_job_kwargs(**job_kwargs)
     si.export_to_phy(
         sorting_analyzer=analyzer, 
         output_folder=PHY_DEST, 
         use_relative_path=True,
         remove_if_exists=True,
     )
+    job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=N_JOBS, progress_bar=True)
+    si.set_global_job_kwargs(**job_kwargs)
 
     ur_labels = apply_unit_refine_labels(PHY_DEST, analyzer)
     
@@ -650,25 +676,34 @@ def run_probe(
 
     #  Convert to ALF   
     alf_path = PHY_DEST.parent.joinpath('alf')
+    alf_path.mkdir(exist_ok=True,parents=True)
     shutil.move(PHY_DEST.joinpath('pc_features.npy'), alf_path.joinpath('pc_features.npy'))
-    shutil.move(PHY_DEST.joinpath('pc_features_ind.npy'), alf_path.joinpath('pc_features_ind.npy'))
+    shutil.move(PHY_DEST.joinpath('pc_feature_ind.npy'), alf_path.joinpath('pc_feature_ind.npy'))
 
     mdl = TemplateModel(dir_path=PHY_DEST, sample_rate=analyzer.recording.get_sampling_frequency())
     ac = EphysAlfCreator(mdl)
     ac.convert(alf_path, ampfactor=analyzer.recording.get_channel_gains()[0]*1e-6)
     # Move recording?
     shutil.move(PHY_DEST.joinpath('recording.dat'), alf_path.joinpath('recording.dat'))
-    # Add a scale to params.py? 
+
     # Move over metrics
-
-    # Need to merge indices properly
     metrics = analyzer.get_extension('quality_metrics').get_data()
-    metrics = metrics.reset_index().rename({'index':'cluster_id'},axis=1)
-    metrics = metrics.merge(ur_labels, on='cluster_id', how='left')
-    metrics.to_csv(alf_path.joinpath('clusters.metrics.csv'),index=False)
+    template_metrics = analyzer.get_extension('template_metrics').get_data()
+    metrics = metrics.merge(template_metrics,left_index=True,right_index=True,how='left')
+    ur_labels.index = metrics.index
+    metrics = pd.concat([metrics,ur_labels],axis=1)
+    metrics.index.name = 'si_unit_id'
+    metrics = metrics.reset_index()
+    metrics.index.name = 'cluster_id'
 
-    # Delete Phy
+    bitwise_pass = metrics.eval('amplitude_cutoff<@AMPLITUDE_CUTOFF & sliding_rp_violation<@SLIDING_RP & abs(amplitude_median) > @AMP_THRESH & num_spikes>@MIN_SPIKES ')
+    bitwise_pass = bitwise_pass.fillna(False)
+    metrics['bitwise_fail'] = np.logical_not(bitwise_pass)
+    metrics['label'] = bitwise_pass.astype(int)
 
+    metrics.to_csv(alf_path.joinpath('clusters.metrics.csv'))
+
+    # Delete Phy?
 
     plot_motion(MOTION_PATH, recording)
     shutil.move(str(MOTION_PATH), str(PHY_DEST))
