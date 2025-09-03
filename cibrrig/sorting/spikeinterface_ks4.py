@@ -2,9 +2,7 @@
 Run Kilosort 4 locally on the NPX computer.
 Data must be reorganized using the preprocess.ephys_data_to_alf.py script first.
 """
-# May want to do a "remove duplicate spikes" after manual sorting  - this would allow manual sorting to merge  units that have some, but not a majority, of duplicated spikes
 
-import warnings
 import spikeinterface.extractors as se
 import spikeinterface.preprocessing as spre
 import spikeinterface.sorters as ss
@@ -20,12 +18,10 @@ import sys
 import time
 import one.alf.io as alfio
 from ibllib.ephys.sync_probes import apply_sync
-import os
-import pandas as pd
-from spikeinterface.core import write_binary_recording
 
-# May want to do a "remove duplicate spikes" after manual sorting  - this would allow manual sorting to merge  units that have some, but not a majority, of duplicated spikes
-# Parameters
+from cibrrig.sorting.export_to_alf import ALFExporter
+
+
 if sys.platform == "linux":
     import joblib
 
@@ -71,11 +67,6 @@ logging.basicConfig(level=logging.INFO)
 _log = logging.getLogger("SI-Kilosort4")
 _log.setLevel(logging.INFO)
 
-# QC presets
-AMPLITUDE_CUTOFF = 0.1
-SLIDING_RP = 0.1
-AMP_THRESH = 40.0
-MIN_SPIKES = 500
 
 # Flags
 RUN_PC = False
@@ -85,7 +76,7 @@ SORTER = "kilosort4"
 def log_elapsed_time(start_time):
     _log.info(f"Elapsed time: {time.time() - start_time:0.0f} seconds")
 
-
+#TODO: test
 def move_motion_info(src, destination):
     """
     Rename the motion data computed by Spikeinterface into a alf-like format
@@ -482,71 +473,25 @@ def apply_preprocessing(
     rec_out = concatenate_recording(rec_processed, tf=tf)
     return rec_out
 
-
-def apply_unit_refine_labels(analyzer):
+# TODO:  test
+def extract_breath_events(session_path, alf_path):
     """
-    Apply UnitRefine (https://spikeinterface.readthedocs.io/en/stable/tutorials/curation/plot_1_automated_curation.html#sphx-glr-tutorials-curation-plot-1-automated-curation-py)
-    to auto label the noise, multi-unit activity (MUA), and single-unit activity (SUA) clusters.
+    Create an 'events.csv' that has the times of each breath for the alf folder.
+    This is then used in phy if the PSTH plugin exists.
+    Args:
+        session_path (Path): Path to the session directory where the original data exists
+        alf_path (Path): Path to the ALF sorted data
 
-    Writes directly to the phy destination
+    Returns:
+        None
     """
-    if sys.platform == "linux":
-        noise_neuron_labels = si.auto_label_units(
-            sorting_analyzer=analyzer,
-            repo_id="SpikeInterface/UnitRefine_noise_neural_classifier",
-            trusted=["numpy.dtype"],
-        )
-        noise_units = noise_neuron_labels[noise_neuron_labels["prediction"] == "noise"]
-        analyzer_neural = analyzer.remove_units(noise_units.index)
-
-        sua_mua_labels = si.auto_label_units(
-            sorting_analyzer=analyzer_neural,
-            repo_id="SpikeInterface/UnitRefine_sua_mua_classifier",
-            trusted=["numpy.dtype"],
-        )
+    if alfio.exists(alf_path, "breaths"):
+        breath_times = alfio.load_object(
+            session_path.joinpath("alf"), "breaths"
+        ).to_df()["times"]
+        breath_times.to_csv(alf_path.joinpath("events.csv"), index=False, header=False)
     else:
-        noise_neuron_labels = si.auto_label_units(
-            sorting_analyzer=analyzer,
-            model_folder=Path(r"C:\helpers\hugging_face\UnitRefine_noise"),
-            trust_model=True,
-        )
-        noise_units = noise_neuron_labels[noise_neuron_labels["prediction"] == "noise"]
-        analyzer_neural = analyzer.remove_units(noise_units.index)
-
-        sua_mua_labels = si.auto_label_units(
-            sorting_analyzer=analyzer_neural,
-            model_folder=Path(r"C:\helpers\hugging_face\UnitRefine_sua"),
-            trust_model=True,
-        )
-
-    unitrefine_label = (
-        pd.concat([sua_mua_labels, noise_units]).sort_index().reset_index(drop=True)
-    )
-    unitrefine_label.rename(
-        columns={"prediction": "UR_prediction", "probability": "UR_probability"},
-        inplace=True,
-    )
-    unitrefine_label.index.name = "cluster_id"
-    return unitrefine_label
-
-
-def write_params(output_folder, analyzer):
-    num_chans = analyzer.recording.get_num_channels()
-    dtype = analyzer.get_dtype()
-    dtype_str = np.dtype(dtype).name
-    fs = analyzer.recording.get_sampling_frequency()
-    rec_path = output_folder.joinpath("recording.dat")
-
-    write_binary_recording(
-        analyzer.recording, file_paths=rec_path, dtype=dtype, **job_kwargs
-    )
-    with (output_folder / "params.py").open("w") as f:
-        f.write("dat_path = r'recording.dat'\n")
-        f.write(f"n_channels_dat = {num_chans}\n")
-        f.write(f"dtype = '{dtype_str}'\n")
-        f.write("offset = 0\n")
-        f.write(f"sample_rate = {fs}\n")
-        f.write(f"hp_filtered = {analyzer.is_filtered()}")
+        _log.info("No breath events found. Not exporting for phy curation")
 
 
 def run_probe(
@@ -682,125 +627,14 @@ def run_probe(
         analyzer.save_as(folder=ANALYZER_PATH.with_suffix(".zarr"), format="zarr")
 
     # ============= EXPORT ============= #
-    _log.info("Exporting to PHY")
-    if sys.platform == "linux":
-        job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=1, progress_bar=True)
-        si.set_global_job_kwargs(**job_kwargs)
-
-    job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=N_JOBS, progress_bar=True)
-    si.set_global_job_kwargs(**job_kwargs)
-
-    ur_labels = apply_unit_refine_labels(analyzer)
-
-    #  Convert to ALF
+    _log.info("Exporting to ALF")
     alf_path = PHY_DEST.parent.joinpath("small_alf")
-    alf_path.mkdir(exist_ok=True, parents=True)
+    exporter = ALFExporter(analyzer, alf_path, job_kwargs=job_kwargs)
+    exporter.run()
 
-    si.export_to_ibl_gui(
-        sorting_analyzer=analyzer,
-        output_folder=alf_path,
-        remove_if_exists=True,
-    )
-    # Save templates explicitly
-    templates = analyzer.get_extension("templates")
-    used_sparsity = templates.sparsity
-    sparse_templates = used_sparsity.sparsify_templates(templates.get_data())
-    channel_indices = np.vstack(
-        [x for x in used_sparsity.unit_id_to_channel_indices.values()]
-    )
-    np.save(alf_path.joinpath("clusters.waveforms.npy"), sparse_templates)
-    np.save(alf_path.joinpath("clusters.waveformsChannels.npy"), channel_indices)
-
-    np.save(alf_path.joinpath("templates.waveforms.npy"), sparse_templates)
-    np.save(alf_path.joinpath("templates.waveformsChannels.npy"), channel_indices)
-    shutil.copy(
-        alf_path.joinpath("spikes.clusters.npy"),
-        alf_path.joinpath("spikes.templates.npy"),
-    )
-
-    spike_samples = analyzer.sorting.to_spike_vector()["sample_index"]
-    np.save(alf_path.joinpath("spikes.samples.npy"), spike_samples)
-
-    # Move over metrics
-    metrics = analyzer.get_extension("quality_metrics").get_data()
-    template_metrics = analyzer.get_extension("template_metrics").get_data()
-    metrics = metrics.merge(
-        template_metrics, left_index=True, right_index=True, how="left"
-    )
-    ur_labels.index = metrics.index
-    metrics = pd.concat([metrics, ur_labels], axis=1)
-    metrics.index.name = "si_unit_id"
-    metrics = metrics.reset_index()
-    metrics.index.name = "cluster_id"
-    bitwise_pass = metrics.eval(
-        "amplitude_cutoff<@AMPLITUDE_CUTOFF & sliding_rp_violation<@SLIDING_RP & abs(amplitude_median) > @AMP_THRESH & num_spikes>@MIN_SPIKES "
-    )
-    bitwise_pass = bitwise_pass.fillna(False)
-    metrics["bitwise_fail"] = np.logical_not(bitwise_pass)
-    metrics["label"] = bitwise_pass.astype(int)
-    metrics.to_csv(alf_path.joinpath("clusters.metrics.csv"))
-
-    write_params(alf_path, analyzer)
     # TODO: Sync
-
-    # Compute and save PCs
-    # TODO: Test (ripped from spikeinterface)
-    pca_extension = analyzer.get_extension("principal_components")
-    pca_extension.run_for_all_spikes(alf_path.joinpath("pc_features.npy"), **job_kwargs)
-    max_num_channels_pc = max(
-        len(chan_inds)
-        for chan_inds in used_sparsity.unit_id_to_channel_indices.values()
-    )
-    non_empty_units = []
-    for unit in analyzer.sorting.unit_ids:
-        if len(analyzer.sorting.get_unit_spike_train(unit)) > 0:
-            non_empty_units.append(unit)
-        else:
-            empty_flag = True
-
-    if empty_flag:
-        warnings.warn("Empty units have been removed while exporting to ALF")
-    unit_ids = non_empty_units
-
-    if len(unit_ids) == 0:
-        raise Exception("No non-empty units in the sorting result, can't save to ALF.")
-
-    unit_ids = non_empty_units
-    pc_feature_ind = -np.ones((len(unit_ids), max_num_channels_pc), dtype="int64")
-    for unit_ind, unit_id in enumerate(unit_ids):
-        chan_inds = used_sparsity.unit_id_to_channel_indices[unit_id]
-        pc_feature_ind[unit_ind, : len(chan_inds)] = chan_inds
-    np.save(alf_path.joinpath("pc_feature_ind.npy"), pc_feature_ind)
-
-    # Write already extracted waveforms
-    wvfms = analyzer.get_extension("waveforms")
-    sv = analyzer.get_extension("random_spikes").get_random_spikes()
-    spike_indices = sv["sample_index"]
-    spike_clusters = sv["unit_index"]
-    chans_subset = np.zeros(
-        (len(spike_indices), channel_indices.shape[1]), dtype="int16"
-    )
-    for clu in np.unique(spike_clusters):
-        idx = np.where(spike_clusters == clu)[0]
-        chans_subset[idx] = channel_indices[clu]
-    np.save(alf_path.joinpath("_phy_spikes_subset.waveforms.npy"), wvfms.get_data())
-    np.save(
-        alf_path.joinpath("_phy_spikes_subset.spikes.npy"),
-        analyzer.get_extension("random_spikes").data,
-    )
-    np.save(alf_path.joinpath("_phy_spikes_subset.channels.npy"), chans_subset)
-
-    # Find breaths object for use in PSTH
-    # TODO:  test
-    if alfio.exists(session_path.joinpath("alf"), "breaths"):
-        breath_times = alfio.load_object(
-            session_path.joinpath("alf"), "breaths"
-        ).to_df()["times"]
-        breath_times.to_csv(alf_path.joinpath("events.csv"), index=False, header=False)
-    else:
-        _log.info('No breath events found. Not exporting for phy curation')
-
-    # TODO: Test write drift to alf folder
+    extract_breath_events(session_path, alf_path)
+    # TODO: Test 
     plot_motion(MOTION_PATH, recording)
     shutil.move(str(MOTION_PATH), str(alf_path))
 
