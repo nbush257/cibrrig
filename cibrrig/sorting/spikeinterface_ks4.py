@@ -4,6 +4,7 @@ Data must be reorganized using the preprocess.ephys_data_to_alf.py script first.
 """
 # May want to do a "remove duplicate spikes" after manual sorting  - this would allow manual sorting to merge  units that have some, but not a majority, of duplicated spikes
 
+import warnings
 import spikeinterface.extractors as se
 import spikeinterface.preprocessing as spre
 import spikeinterface.sorters as ss
@@ -22,6 +23,7 @@ from ibllib.ephys.sync_probes import apply_sync
 import os
 import pandas as pd
 from spikeinterface.core import write_binary_recording
+
 # May want to do a "remove duplicate spikes" after manual sorting  - this would allow manual sorting to merge  units that have some, but not a majority, of duplicated spikes
 # Parameters
 if sys.platform == "linux":
@@ -59,7 +61,7 @@ EXTENSIONS = dict(
     isi_histograms={},
     spike_locations={},
     unit_locations={},
-    template_metrics={'include_multi_channel_metrics':True},
+    template_metrics={"include_multi_channel_metrics": True},
     correlograms={},
     template_similarity={},
 )
@@ -174,7 +176,7 @@ def remove_opto_artifacts(
         all_opto_times = []
         alf_path = session_path.joinpath("alf")
         for obj in opto_objects:
-            if not alfio.exists(alf_path,obj):
+            if not alfio.exists(alf_path, obj):
                 continue
             opto_stims = alfio.load_object(
                 alf_path,
@@ -480,48 +482,72 @@ def apply_preprocessing(
     rec_out = concatenate_recording(rec_processed, tf=tf)
     return rec_out
 
+
 def apply_unit_refine_labels(analyzer):
-    '''
+    """
     Apply UnitRefine (https://spikeinterface.readthedocs.io/en/stable/tutorials/curation/plot_1_automated_curation.html#sphx-glr-tutorials-curation-plot-1-automated-curation-py)
     to auto label the noise, multi-unit activity (MUA), and single-unit activity (SUA) clusters.
 
     Writes directly to the phy destination
-    '''
+    """
     if sys.platform == "linux":
-        noise_neuron_labels  = si.auto_label_units(
+        noise_neuron_labels = si.auto_label_units(
             sorting_analyzer=analyzer,
-            repo_id = "SpikeInterface/UnitRefine_noise_neural_classifier",
-            trusted=['numpy.dtype'] 
+            repo_id="SpikeInterface/UnitRefine_noise_neural_classifier",
+            trusted=["numpy.dtype"],
         )
-        noise_units = noise_neuron_labels[noise_neuron_labels['prediction']=='noise']
+        noise_units = noise_neuron_labels[noise_neuron_labels["prediction"] == "noise"]
         analyzer_neural = analyzer.remove_units(noise_units.index)
 
-        sua_mua_labels= si.auto_label_units(
+        sua_mua_labels = si.auto_label_units(
             sorting_analyzer=analyzer_neural,
-            repo_id = "SpikeInterface/UnitRefine_sua_mua_classifier",
-            trusted = ['numpy.dtype']
+            repo_id="SpikeInterface/UnitRefine_sua_mua_classifier",
+            trusted=["numpy.dtype"],
         )
     else:
-        noise_neuron_labels  = si.auto_label_units(
+        noise_neuron_labels = si.auto_label_units(
             sorting_analyzer=analyzer,
-            model_folder = Path(r'C:\helpers\hugging_face\UnitRefine_noise'),
-            trust_model=True
+            model_folder=Path(r"C:\helpers\hugging_face\UnitRefine_noise"),
+            trust_model=True,
         )
-        noise_units = noise_neuron_labels[noise_neuron_labels['prediction']=='noise']
+        noise_units = noise_neuron_labels[noise_neuron_labels["prediction"] == "noise"]
         analyzer_neural = analyzer.remove_units(noise_units.index)
 
-        sua_mua_labels= si.auto_label_units(
+        sua_mua_labels = si.auto_label_units(
             sorting_analyzer=analyzer_neural,
-            model_folder = Path(r'C:\helpers\hugging_face\UnitRefine_sua'),
-            trust_model=True
+            model_folder=Path(r"C:\helpers\hugging_face\UnitRefine_sua"),
+            trust_model=True,
         )
 
-    unitrefine_label = pd.concat([sua_mua_labels, noise_units]).sort_index().reset_index(drop=True)
-    unitrefine_label.rename(columns={'prediction':'UR_prediction','probability':'UR_probability'},inplace=True)
-    unitrefine_label.index.name = 'cluster_id'
-    # df_group = unitrefine_label['UR_prediction'].rename('group')
-    # df_group.map({'noise':'noise','mua':'mua','sua':'good'}).to_csv(PHY_DEST.joinpath('cluster_group.tsv'),index=True,header=True,sep='\t')
+    unitrefine_label = (
+        pd.concat([sua_mua_labels, noise_units]).sort_index().reset_index(drop=True)
+    )
+    unitrefine_label.rename(
+        columns={"prediction": "UR_prediction", "probability": "UR_probability"},
+        inplace=True,
+    )
+    unitrefine_label.index.name = "cluster_id"
     return unitrefine_label
+
+
+def write_params(output_folder, analyzer):
+    num_chans = analyzer.recording.get_num_channels()
+    dtype = analyzer.get_dtype()
+    dtype_str = np.dtype(dtype).name
+    fs = analyzer.recording.get_sampling_frequency()
+    rec_path = output_folder.joinpath("recording.dat")
+
+    write_binary_recording(
+        analyzer.recording, file_paths=rec_path, dtype=dtype, **job_kwargs
+    )
+    with (output_folder / "params.py").open("w") as f:
+        f.write("dat_path = r'recording.dat'\n")
+        f.write(f"n_channels_dat = {num_chans}\n")
+        f.write(f"dtype = '{dtype_str}'\n")
+        f.write("offset = 0\n")
+        f.write(f"sample_rate = {fs}\n")
+        f.write(f"hp_filtered = {analyzer.is_filtered()}")
+
 
 def run_probe(
     probe_dir, probe_local, label="kilosort4", testing=False, skip_remove_opto=False
@@ -546,7 +572,7 @@ def run_probe(
     PHY_DEST = probe_local.joinpath(label)
     # Temporary paths that will not be coming with us?
     PREPROC_PATH = temp_local.joinpath(".preprocessed")
-    SORT_PATH = temp_local.joinpath('.sort')
+    SORT_PATH = temp_local.joinpath(".sort")
     MOTION_PATH = temp_local.joinpath(".motion")
     ANALYZER_PATH = temp_local.joinpath(".analyzer")
     probe_local.mkdir(parents=True, exist_ok=True)
@@ -563,8 +589,8 @@ def run_probe(
 
     # =========== #
     # =========== Preprocessing =================== #
-    # =========== #    
-    if not PREPROC_PATH.with_suffix('.zarr').exists():
+    # =========== #
+    if not PREPROC_PATH.with_suffix(".zarr").exists():
         rec_destriped = apply_preprocessing(
             recording,
             session_path,
@@ -582,13 +608,12 @@ def run_probe(
             recording = rec_mc
         else:
             recording = rec_destriped
-        recording = recording.astype('int16')
-        recording.save(folder = PREPROC_PATH, format='zarr')
+        recording = recording.astype("int16")
+        recording.save(folder=PREPROC_PATH, format="zarr")
         del recording
-    _log.info('Loading preprocessed recording')
-    recording = si.load(PREPROC_PATH.with_suffix('.zarr'))
-    
-    
+    _log.info("Loading preprocessed recording")
+    recording = si.load(PREPROC_PATH.with_suffix(".zarr"))
+
     job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=1, progress_bar=True)
     si.set_global_job_kwargs(**job_kwargs)
     # ============= RUN SORTER ==================== #
@@ -606,8 +631,10 @@ def run_probe(
             n_jobs=1,
             **sorter_params,
         )
-    
-    sort_rez = si.remove_duplicated_spikes(sort_rez, method='keep_first_iterative',censored_period_ms=.166)
+
+    sort_rez = si.remove_duplicated_spikes(
+        sort_rez, method="keep_first_iterative", censored_period_ms=0.166
+    )
     job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=N_JOBS, progress_bar=True)
     si.set_global_job_kwargs(**job_kwargs)
     _log.info("Finished sorting:")
@@ -615,7 +642,7 @@ def run_probe(
 
     _log.info("Computing waveforms and QC")
     if ANALYZER_PATH.exists():
-        analyzer = si.load_sorting_analyzer(folder=ANALYZER_PATH.with_suffix('.zarr'))
+        analyzer = si.load_sorting_analyzer(folder=ANALYZER_PATH.with_suffix(".zarr"))
     else:
         analyzer = si.create_sorting_analyzer(
             sorting=sort_rez,
@@ -628,27 +655,31 @@ def run_probe(
         analyzer = analyzer.select_units(clean_sort_rez.unit_ids)
 
         # Compute PCs (Must be global for ALF conversion)
-        analyzer.compute('principal_components',n_components = 3,mode='by_channel_local')
-        analyzer.compute('quality_metrics')
+        analyzer.compute(
+            "principal_components", n_components=3, mode="by_channel_local"
+        )
+        analyzer.compute("quality_metrics")
 
         # Stash the pre-merged analyzer
-        analyzer.save_as(folder=ANALYZER_PATH.with_suffix('.raw.zarr'),format='zarr')
+        analyzer.save_as(folder=ANALYZER_PATH.with_suffix(".raw.zarr"), format="zarr")
 
         # Auto_merge units
         analyzer = si.auto_merge_units(
             sorting_analyzer=analyzer,
-            presets=['temporal_splits','similarity_correlograms'],
+            presets=["temporal_splits", "similarity_correlograms"],
             censor_ms=0.166,
-            recursive=True
+            recursive=True,
         )
-        
-        # Recompute metrics on merged data to allow for autolabel 
+
+        # Recompute metrics on merged data to allow for autolabel
         analyzer.compute_several_extensions(EXTENSIONS)
-        analyzer.compute('principal_components',n_components = 3,mode='by_channel_local')
-        analyzer.compute('quality_metrics')
-     
+        analyzer.compute(
+            "principal_components", n_components=3, mode="by_channel_local"
+        )
+        analyzer.compute("quality_metrics")
+
         # Save the automerged analyzer
-        analyzer.save_as(folder=ANALYZER_PATH.with_suffix('.zarr'),format='zarr')
+        analyzer.save_as(folder=ANALYZER_PATH.with_suffix(".zarr"), format="zarr")
 
     # ============= EXPORT ============= #
     _log.info("Exporting to PHY")
@@ -660,11 +691,10 @@ def run_probe(
     si.set_global_job_kwargs(**job_kwargs)
 
     ur_labels = apply_unit_refine_labels(analyzer)
-    
 
-    #  Convert to ALF   
-    alf_path = PHY_DEST.parent.joinpath('small_alf')
-    alf_path.mkdir(exist_ok=True,parents=True)
+    #  Convert to ALF
+    alf_path = PHY_DEST.parent.joinpath("small_alf")
+    alf_path.mkdir(exist_ok=True, parents=True)
 
     si.export_to_ibl_gui(
         sorting_analyzer=analyzer,
@@ -672,78 +702,108 @@ def run_probe(
         remove_if_exists=True,
     )
     # Save templates explicitly
-    templates = analyzer.get_extension('templates')
-    sparse_templates = templates.sparsity.sparsify_templates(templates.get_data())
-    channel_indices = np.vstack([x for x in templates.sparsity.unit_id_to_channel_indices.values()])
+    templates = analyzer.get_extension("templates")
+    used_sparsity = templates.sparsity
+    sparse_templates = used_sparsity.sparsify_templates(templates.get_data())
+    channel_indices = np.vstack(
+        [x for x in used_sparsity.unit_id_to_channel_indices.values()]
+    )
     np.save(alf_path.joinpath("clusters.waveforms.npy"), sparse_templates)
-    np.save(alf_path.joinpath("clusters.waveformsChannels.npy"),channel_indices)
+    np.save(alf_path.joinpath("clusters.waveformsChannels.npy"), channel_indices)
 
     np.save(alf_path.joinpath("templates.waveforms.npy"), sparse_templates)
-    np.save(alf_path.joinpath("templates.waveformsChannels.npy"),channel_indices)
-    shutil.copy(alf_path.joinpath('spikes.clusters.npy'),alf_path.joinpath('spikes.templates.npy'))
+    np.save(alf_path.joinpath("templates.waveformsChannels.npy"), channel_indices)
+    shutil.copy(
+        alf_path.joinpath("spikes.clusters.npy"),
+        alf_path.joinpath("spikes.templates.npy"),
+    )
 
-    spike_samples = analyzer.sorting.to_spike_vector()['sample_index']
+    spike_samples = analyzer.sorting.to_spike_vector()["sample_index"]
     np.save(alf_path.joinpath("spikes.samples.npy"), spike_samples)
 
     # Move over metrics
-    metrics = analyzer.get_extension('quality_metrics').get_data()
-    template_metrics = analyzer.get_extension('template_metrics').get_data()
-    metrics = metrics.merge(template_metrics,left_index=True,right_index=True,how='left')
+    metrics = analyzer.get_extension("quality_metrics").get_data()
+    template_metrics = analyzer.get_extension("template_metrics").get_data()
+    metrics = metrics.merge(
+        template_metrics, left_index=True, right_index=True, how="left"
+    )
     ur_labels.index = metrics.index
-    metrics = pd.concat([metrics,ur_labels],axis=1)
-    metrics.index.name = 'si_unit_id'
+    metrics = pd.concat([metrics, ur_labels], axis=1)
+    metrics.index.name = "si_unit_id"
     metrics = metrics.reset_index()
-    metrics.index.name = 'cluster_id'
-    bitwise_pass = metrics.eval('amplitude_cutoff<@AMPLITUDE_CUTOFF & sliding_rp_violation<@SLIDING_RP & abs(amplitude_median) > @AMP_THRESH & num_spikes>@MIN_SPIKES ')
+    metrics.index.name = "cluster_id"
+    bitwise_pass = metrics.eval(
+        "amplitude_cutoff<@AMPLITUDE_CUTOFF & sliding_rp_violation<@SLIDING_RP & abs(amplitude_median) > @AMP_THRESH & num_spikes>@MIN_SPIKES "
+    )
     bitwise_pass = bitwise_pass.fillna(False)
-    metrics['bitwise_fail'] = np.logical_not(bitwise_pass)
-    metrics['label'] = bitwise_pass.astype(int)
-    metrics.to_csv(alf_path.joinpath('clusters.metrics.csv'))
+    metrics["bitwise_fail"] = np.logical_not(bitwise_pass)
+    metrics["label"] = bitwise_pass.astype(int)
+    metrics.to_csv(alf_path.joinpath("clusters.metrics.csv"))
 
-    write_params(alf_path,analyzer)
-    # TODO: Compute PCs
-    # TODO: write drift to alf folder
-    # TODO: Make events.csv
+    write_params(alf_path, analyzer)
+    # TODO: Sync
 
+    # Compute and save PCs
+    # TODO: Test (ripped from spikeinterface)
+    pca_extension = analyzer.get_extension("principal_components")
+    pca_extension.run_for_all_spikes(alf_path.joinpath("pc_features.npy"), **job_kwargs)
+    max_num_channels_pc = max(
+        len(chan_inds)
+        for chan_inds in used_sparsity.unit_id_to_channel_indices.values()
+    )
+    non_empty_units = []
+    for unit in analyzer.sorting.unit_ids:
+        if len(analyzer.sorting.get_unit_spike_train(unit)) > 0:
+            non_empty_units.append(unit)
+        else:
+            empty_flag = True
 
-    # Waveforms is : 
-    #   _phy_spikes_subset.channels : (n_spikes x n_channels_sparse)
-    #   _phy_spikes_subset.spikes: (n_spikes)
-    #   _phy_spikes_subset.waveforms ()
-    wvfms = analyzer.get_extension('waveforms')
-    sv = analyzer.get_extension('random_spikes').get_random_spikes()
-    spike_indices = sv['sample_index']
-    spike_clusters = sv['unit_index']
-    chans_subset = np.zeros((len(spike_indices), channel_indices.shape[1]),dtype='int16')
+    if empty_flag:
+        warnings.warn("Empty units have been removed while exporting to ALF")
+    unit_ids = non_empty_units
+
+    if len(unit_ids) == 0:
+        raise Exception("No non-empty units in the sorting result, can't save to ALF.")
+
+    unit_ids = non_empty_units
+    pc_feature_ind = -np.ones((len(unit_ids), max_num_channels_pc), dtype="int64")
+    for unit_ind, unit_id in enumerate(unit_ids):
+        chan_inds = used_sparsity.unit_id_to_channel_indices[unit_id]
+        pc_feature_ind[unit_ind, : len(chan_inds)] = chan_inds
+    np.save(alf_path.joinpath("pc_feature_ind.npy"), pc_feature_ind)
+
+    # Write already extracted waveforms
+    wvfms = analyzer.get_extension("waveforms")
+    sv = analyzer.get_extension("random_spikes").get_random_spikes()
+    spike_indices = sv["sample_index"]
+    spike_clusters = sv["unit_index"]
+    chans_subset = np.zeros(
+        (len(spike_indices), channel_indices.shape[1]), dtype="int16"
+    )
     for clu in np.unique(spike_clusters):
         idx = np.where(spike_clusters == clu)[0]
         chans_subset[idx] = channel_indices[clu]
-
-    # Get the cluster for each spike, then the channels
-
     np.save(alf_path.joinpath("_phy_spikes_subset.waveforms.npy"), wvfms.get_data())
-    np.save(alf_path.joinpath("_phy_spikes_subset.spikes.npy"),  analyzer.get_extension('random_spikes').data)
+    np.save(
+        alf_path.joinpath("_phy_spikes_subset.spikes.npy"),
+        analyzer.get_extension("random_spikes").data,
+    )
     np.save(alf_path.joinpath("_phy_spikes_subset.channels.npy"), chans_subset)
 
+    # Find breaths object for use in PSTH
+    # TODO:  test
+    if alfio.exists(session_path.joinpath("alf"), "breaths"):
+        breath_times = alfio.load_object(
+            session_path.joinpath("alf"), "breaths"
+        ).to_df()["times"]
+        breath_times.to_csv(alf_path.joinpath("events.csv"), index=False, header=False)
+    else:
+        _log.info('No breath events found. Not exporting for phy curation')
 
+    # TODO: Test write drift to alf folder
     plot_motion(MOTION_PATH, recording)
-    shutil.move(str(MOTION_PATH), str(PHY_DEST))
+    shutil.move(str(MOTION_PATH), str(alf_path))
 
-def write_params(output_folder,analyzer):
-    num_chans = analyzer.recording.get_num_channels()
-    dtype = analyzer.get_dtype()
-    dtype_str = np.dtype(dtype).name
-    fs = analyzer.recording.get_sampling_frequency()
-    rec_path = output_folder.joinpath("recording.dat")
-            
-    write_binary_recording(analyzer.recording, file_paths=rec_path, dtype=dtype, **job_kwargs)
-    with (output_folder / "params.py").open("w") as f:
-        f.write("dat_path = r'recording.dat'\n")
-        f.write(f"n_channels_dat = {num_chans}\n")
-        f.write(f"dtype = '{dtype_str}'\n")
-        f.write("offset = 0\n")
-        f.write(f"sample_rate = {fs}\n")
-        f.write(f"hp_filtered = {analyzer.is_filtered()}")
 
 @click.command()
 @click.argument("session_path", type=click.Path())
