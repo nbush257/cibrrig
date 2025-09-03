@@ -7,6 +7,7 @@ from spikeinterface.curation.model_based_curation import auto_label_units
 from spikeinterface.core import write_binary_recording
 from spikeinterface.exporters import export_to_ibl_gui
 import warnings
+from spikeinterface.core import SortingAnalyzer, BaseRecording
 
 # QC presets
 AMPLITUDE_CUTOFF = 0.1
@@ -18,11 +19,11 @@ MIN_SPIKES = 500
 class ALFExporter:
     def __init__(
         self,
-        analyzer,
-        dest,
-        lfp_recording=None,
-        copy_binary=True,
-        job_kwargs=dict(n_jobs=1, chunk_size="1s"),
+        analyzer: SortingAnalyzer,
+        dest: Path,
+        lfp_recording: BaseRecording | None = None,
+        copy_binary: bool = True,
+        job_kwargs: dict = dict(n_jobs=1, chunk_size="1s"),
     ):
         """
         Initialize the ALFExporter.
