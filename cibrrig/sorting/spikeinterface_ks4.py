@@ -4,7 +4,6 @@ Data must be reorganized using the preprocess.ephys_data_to_alf.py script first.
 """
 # May want to do a "remove duplicate spikes" after manual sorting  - this would allow manual sorting to merge  units that have some, but not a majority, of duplicated spikes
 
-from sklearn import metrics
 import spikeinterface.extractors as se
 import spikeinterface.preprocessing as spre
 import spikeinterface.sorters as ss
@@ -22,9 +21,7 @@ import one.alf.io as alfio
 from ibllib.ephys.sync_probes import apply_sync
 import os
 import pandas as pd
-from phylib.io.alf import EphysAlfCreator
-from phylib.io.model import TemplateModel
-
+from spikeinterface.core import write_binary_recording
 # May want to do a "remove duplicate spikes" after manual sorting  - this would allow manual sorting to merge  units that have some, but not a majority, of duplicated spikes
 # Parameters
 if sys.platform == "linux":
@@ -483,7 +480,7 @@ def apply_preprocessing(
     rec_out = concatenate_recording(rec_processed, tf=tf)
     return rec_out
 
-def apply_unit_refine_labels(phy_dest, analyzer):
+def apply_unit_refine_labels(analyzer):
     '''
     Apply UnitRefine (https://spikeinterface.readthedocs.io/en/stable/tutorials/curation/plot_1_automated_curation.html#sphx-glr-tutorials-curation-plot-1-automated-curation-py)
     to auto label the noise, multi-unit activity (MUA), and single-unit activity (SUA) clusters.
@@ -522,8 +519,6 @@ def apply_unit_refine_labels(phy_dest, analyzer):
     unitrefine_label = pd.concat([sua_mua_labels, noise_units]).sort_index().reset_index(drop=True)
     unitrefine_label.rename(columns={'prediction':'UR_prediction','probability':'UR_probability'},inplace=True)
     unitrefine_label.index.name = 'cluster_id'
-    unitrefine_label['UR_prediction'].to_csv(phy_dest.joinpath('cluster_UR_prediction.tsv'),index=True,header=True,sep='\t')
-    unitrefine_label['UR_probability'].to_csv(phy_dest.joinpath('cluster_UR_probability.tsv'),index=True,header=True,sep='\t')
     # df_group = unitrefine_label['UR_prediction'].rename('group')
     # df_group.map({'noise':'noise','mua':'mua','sua':'good'}).to_csv(PHY_DEST.joinpath('cluster_group.tsv'),index=True,header=True,sep='\t')
     return unitrefine_label
@@ -657,34 +652,38 @@ def run_probe(
 
     # ============= EXPORT ============= #
     _log.info("Exporting to PHY")
-    job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=1, progress_bar=True)
-    si.set_global_job_kwargs(**job_kwargs)
-    si.export_to_phy(
-        sorting_analyzer=analyzer, 
-        output_folder=PHY_DEST, 
-        use_relative_path=True,
-        remove_if_exists=True,
-    )
+    if sys.platform == "linux":
+        job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=1, progress_bar=True)
+        si.set_global_job_kwargs(**job_kwargs)
+
     job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=N_JOBS, progress_bar=True)
     si.set_global_job_kwargs(**job_kwargs)
 
-    ur_labels = apply_unit_refine_labels(PHY_DEST, analyzer)
+    ur_labels = apply_unit_refine_labels(analyzer)
     
-    # Convert templates to dense for alf conversion later
-    np.save(PHY_DEST.joinpath("templates.npy"), analyzer.get_extension('templates').get_data())
-    os.remove(PHY_DEST.joinpath("template_ind.npy"))
 
     #  Convert to ALF   
-    alf_path = PHY_DEST.parent.joinpath('alf')
+    alf_path = PHY_DEST.parent.joinpath('small_alf')
     alf_path.mkdir(exist_ok=True,parents=True)
-    shutil.move(PHY_DEST.joinpath('pc_features.npy'), alf_path.joinpath('pc_features.npy'))
-    shutil.move(PHY_DEST.joinpath('pc_feature_ind.npy'), alf_path.joinpath('pc_feature_ind.npy'))
 
-    mdl = TemplateModel(dir_path=PHY_DEST, sample_rate=analyzer.recording.get_sampling_frequency())
-    ac = EphysAlfCreator(mdl)
-    ac.convert(alf_path, ampfactor=analyzer.recording.get_channel_gains()[0]*1e-6)
-    # Move recording?
-    shutil.move(PHY_DEST.joinpath('recording.dat'), alf_path.joinpath('recording.dat'))
+    si.export_to_ibl_gui(
+        sorting_analyzer=analyzer,
+        output_folder=alf_path,
+        remove_if_exists=True,
+    )
+    # Save templates explicitly
+    templates = analyzer.get_extension('templates')
+    sparse_templates = templates.sparsity.sparsify_templates(templates.get_data())
+    channel_indices = np.vstack([x for x in templates.sparsity.unit_id_to_channel_indices.values()])
+    np.save(alf_path.joinpath("clusters.waveforms.npy"), sparse_templates)
+    np.save(alf_path.joinpath("clusters.waveformsChannels.npy"),channel_indices)
+
+    np.save(alf_path.joinpath("templates.waveforms.npy"), sparse_templates)
+    np.save(alf_path.joinpath("templates.waveformsChannels.npy"),channel_indices)
+    shutil.copy(alf_path.joinpath('spikes.clusters.npy'),alf_path.joinpath('spikes.templates.npy'))
+
+    spike_samples = analyzer.sorting.to_spike_vector()['sample_index']
+    np.save(alf_path.joinpath("spikes.samples.npy"), spike_samples)
 
     # Move over metrics
     metrics = analyzer.get_extension('quality_metrics').get_data()
@@ -695,15 +694,37 @@ def run_probe(
     metrics.index.name = 'si_unit_id'
     metrics = metrics.reset_index()
     metrics.index.name = 'cluster_id'
-
     bitwise_pass = metrics.eval('amplitude_cutoff<@AMPLITUDE_CUTOFF & sliding_rp_violation<@SLIDING_RP & abs(amplitude_median) > @AMP_THRESH & num_spikes>@MIN_SPIKES ')
     bitwise_pass = bitwise_pass.fillna(False)
     metrics['bitwise_fail'] = np.logical_not(bitwise_pass)
     metrics['label'] = bitwise_pass.astype(int)
-
     metrics.to_csv(alf_path.joinpath('clusters.metrics.csv'))
 
-    # Delete Phy?
+    write_params(alf_path,analyzer)
+    # TODO: Compute PCs
+    # TODO: write drift to alf folder
+    # TODO: Make events.csv
+
+
+    # Waveforms is : 
+    #   _phy_spikes_subset.channels : (n_spikes x n_channels_sparse)
+    #   _phy_spikes_subset.spikes: (n_spikes)
+    #   _phy_spikes_subset.waveforms ()
+    wvfms = analyzer.get_extension('waveforms')
+    sv = analyzer.get_extension('random_spikes').get_random_spikes()
+    spike_indices = sv['sample_index']
+    spike_clusters = sv['unit_index']
+    chans_subset = np.zeros((len(spike_indices), channel_indices.shape[1]),dtype='int16')
+    for clu in np.unique(spike_clusters):
+        idx = np.where(spike_clusters == clu)[0]
+        chans_subset[idx] = channel_indices[clu]
+
+    # Get the cluster for each spike, then the channels
+
+    np.save(alf_path.joinpath("_phy_spikes_subset.waveforms.npy"), wvfms.get_data())
+    np.save(alf_path.joinpath("_phy_spikes_subset.spikes.npy"),  analyzer.get_extension('random_spikes').data)
+    np.save(alf_path.joinpath("_phy_spikes_subset.channels.npy"), chans_subset)
+
 
     plot_motion(MOTION_PATH, recording)
     shutil.move(str(MOTION_PATH), str(PHY_DEST))
@@ -713,8 +734,9 @@ def write_params(output_folder,analyzer):
     dtype = analyzer.get_dtype()
     dtype_str = np.dtype(dtype).name
     fs = analyzer.recording.get_sampling_frequency()
+    rec_path = output_folder.joinpath("recording.dat")
             
-    # write_binary_recording(sorting_analyzer.recording, file_paths=rec_path, dtype=dtype, **job_kwargs)
+    write_binary_recording(analyzer.recording, file_paths=rec_path, dtype=dtype, **job_kwargs)
     with (output_folder / "params.py").open("w") as f:
         f.write("dat_path = r'recording.dat'\n")
         f.write(f"n_channels_dat = {num_chans}\n")
