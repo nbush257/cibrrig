@@ -16,7 +16,7 @@ MIN_SPIKES = 500
 
 
 class ALFExporter:
-    def __init__(self, analyzer, dest, job_kwargs=dict(n_jobs=1, chunk_size="1s")):
+    def __init__(self, analyzer, dest, copy_binary=True,job_kwargs=dict(n_jobs=1, chunk_size="1s")):
         '''
         Initialize the ALFExporter.
         Saves all the data in ALF format while still allowing for phy curation
@@ -32,6 +32,8 @@ class ALFExporter:
         '''
         self.analyzer = analyzer
         self.alf_path = dest
+        self.copy_binary = copy_binary
+        self.job_kwargs = job_kwargs
         self.templates = self.analyzer.get_extension("templates")
         self.used_sparsity = self.templates.sparsity
         self.sparse_templates = self.used_sparsity.sparsify_templates(
@@ -215,14 +217,15 @@ class ALFExporter:
 
 
         # Do this dance with the n_jobs because it is faster on the HPC to save with one job.
-        if sys.platform == 'linux':
-            n_jobs_stash = self.job_kwargs['n_jobs']
-            self.job_kwargs['n_jobs'] = 1
-        write_binary_recording(
-            self.analyzer.recording, file_paths=rec_path, dtype=dtype, **self.job_kwargs
-        )
-        if sys.platform == 'linux':
-            self.job_kwargs['n_jobs'] = n_jobs_stash
+        if self.copy_binary:
+            if sys.platform == 'linux':
+                n_jobs_stash = self.job_kwargs['n_jobs']
+                self.job_kwargs['n_jobs'] = 1
+            write_binary_recording(
+                self.analyzer.recording, file_paths=rec_path, dtype=dtype, **self.job_kwargs
+            )
+            if sys.platform == 'linux':
+                self.job_kwargs['n_jobs'] = n_jobs_stash
 
         with (self.alf_path / "params.py").open("w") as f:
             f.write("dat_path = r'recording.dat'\n")
