@@ -16,8 +16,15 @@ MIN_SPIKES = 500
 
 
 class ALFExporter:
-    def __init__(self, analyzer, dest, copy_binary=True,job_kwargs=dict(n_jobs=1, chunk_size="1s")):
-        '''
+    def __init__(
+        self,
+        analyzer,
+        dest,
+        lfp_recording=None,
+        copy_binary=True,
+        job_kwargs=dict(n_jobs=1, chunk_size="1s"),
+    ):
+        """
         Initialize the ALFExporter.
         Saves all the data in ALF format while still allowing for phy curation
 
@@ -29,9 +36,10 @@ class ALFExporter:
             analyzer (SpikeInterfaceAnalyzer): The analyzer object.
             dest (Path): The path where the sorted data in ALF format are to be saved.
             job_kwargs (dict, optional): Job parameters for parallel processing.
-        '''
+        """
         self.analyzer = analyzer
         self.alf_path = dest
+        self.lfp_recording = lfp_recording
         self.copy_binary = copy_binary
         self.job_kwargs = job_kwargs
         self.templates = self.analyzer.get_extension("templates")
@@ -119,9 +127,9 @@ class ALFExporter:
         return unitrefine_label
 
     def create_full_metrics(self):
-        '''
+        """
         Extract the metrics from the analyzer, join them together, apply the unitrefine model, and save
-        '''
+        """
         # Move over metrics
         metrics = self.analyzer.get_extension("quality_metrics").get_data()
         template_metrics = self.analyzer.get_extension("template_metrics").get_data()
@@ -145,11 +153,11 @@ class ALFExporter:
     # Compute and save PCs
     # TODO: Test (ripped from spikeinterface)
     def create_pca_features(self):
-        '''
+        """
         Extract the PC features from the analzyer and save to the target folder.
 
         This takes a while.
-        '''
+        """
         templates = self.analyzer.get_extension("templates")
         used_sparsity = templates.sparsity
         pca_extension = self.analyzer.get_extension("principal_components")
@@ -172,7 +180,9 @@ class ALFExporter:
         unit_ids = non_empty_units
 
         if len(unit_ids) == 0:
-            raise Exception("No non-empty units in the sorting result, can't save to ALF.")
+            raise Exception(
+                "No non-empty units in the sorting result, can't save to ALF."
+            )
 
         unit_ids = non_empty_units
         pc_feature_ind = -np.ones((len(unit_ids), max_num_channels_pc), dtype="int64")
@@ -215,17 +225,19 @@ class ALFExporter:
         fs = self.analyzer.recording.get_sampling_frequency()
         rec_path = self.alf_path.joinpath("recording.dat")
 
-
         # Do this dance with the n_jobs because it is faster on the HPC to save with one job.
         if self.copy_binary:
-            if sys.platform == 'linux':
-                n_jobs_stash = self.job_kwargs['n_jobs']
-                self.job_kwargs['n_jobs'] = 1
+            if sys.platform == "linux":
+                n_jobs_stash = self.job_kwargs["n_jobs"]
+                self.job_kwargs["n_jobs"] = 1
             write_binary_recording(
-                self.analyzer.recording, file_paths=rec_path, dtype=dtype, **self.job_kwargs
+                self.analyzer.recording,
+                file_paths=rec_path,
+                dtype=dtype,
+                **self.job_kwargs,
             )
-            if sys.platform == 'linux':
-                self.job_kwargs['n_jobs'] = n_jobs_stash
+            if sys.platform == "linux":
+                self.job_kwargs["n_jobs"] = n_jobs_stash
 
         with (self.alf_path / "params.py").open("w") as f:
             f.write("dat_path = r'recording.dat'\n")
@@ -236,13 +248,14 @@ class ALFExporter:
             f.write(f"hp_filtered = {self.analyzer.is_filtered()}")
 
     def run(self):
-        '''
-        Run all exporting steps for the sorting result.
-        '''
+        """
+        Run all steps to export sorting as ALF/IBL structure
+        """
         export_to_ibl_gui(
             sorting_analyzer=self.analyzer,
             output_folder=self.alf_path,
             remove_if_exists=True,
+            lfp_recording=self.lfp_recording,
         )
         self.exporter.save_templates()
         self.exporter.create_full_metrics()

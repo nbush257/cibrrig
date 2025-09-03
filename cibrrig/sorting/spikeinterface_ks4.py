@@ -18,7 +18,6 @@ import sys
 import time
 import one.alf.io as alfio
 from ibllib.ephys.sync_probes import apply_sync
-
 from cibrrig.sorting.export_to_alf import ALFExporter
 
 
@@ -76,7 +75,8 @@ SORTER = "kilosort4"
 def log_elapsed_time(start_time):
     _log.info(f"Elapsed time: {time.time() - start_time:0.0f} seconds")
 
-#TODO: test
+
+# TODO: test
 def move_motion_info(src, destination):
     """
     Rename the motion data computed by Spikeinterface into a alf-like format
@@ -473,6 +473,7 @@ def apply_preprocessing(
     rec_out = concatenate_recording(rec_processed, tf=tf)
     return rec_out
 
+
 # TODO:  test
 def extract_breath_events(session_path, alf_path):
     """
@@ -634,7 +635,7 @@ def run_probe(
 
     # TODO: Sync
     extract_breath_events(session_path, alf_path)
-    # TODO: Test 
+    # TODO: Test
     plot_motion(MOTION_PATH, recording)
     shutil.move(str(MOTION_PATH), str(alf_path))
 
