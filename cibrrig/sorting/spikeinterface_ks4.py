@@ -18,7 +18,7 @@ import sys
 import time
 import one.alf.io as alfio
 from ibllib.ephys.sync_probes import apply_sync
-from cibrrig.sorting.export_to_alf import ALFExporter
+from cibrrig.sorting.export_to_alf import ALFExporter, test_unit_refine_model_import
 
 
 if sys.platform == "linux":
@@ -60,7 +60,7 @@ EXTENSIONS = dict(
     correlograms={},
     template_similarity={},
 )
-
+np.random.seed(42)
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 _log = logging.getLogger(__name__)
@@ -85,18 +85,19 @@ def move_motion_info(src, destination):
         motion_path (Path): Path to where the motion data live
         destination (Path): Path to where the motion data land
     """
+    motion_dir = src.joinpath("motion")
     try:
-        drift_depths = src.joinpath("spatial_bins.npy")
-        drift = src.joinpath("motion.npy")
-        drift_times = src.joinpath("temporal_bins.npy")
+        drift_depths = motion_dir.joinpath("spatial_bins_um.npy")
+        drift = motion_dir.joinpath("displacement_seg0.npy")
+        drift_times = motion_dir.joinpath("temporal_bins_s_seg0.npy")
         drift_fig = src.joinpath("driftmap.png")
         drift_fig_zoom = src.joinpath("driftmap_zoom.png")
 
-        drift_depths.rename(destination.joinpath("drift_depths.um.npy"))
-        drift.rename(destination.joinpath("drift.um.npy"))
-        drift_times.rename(destination.joinpath("drift.times.npy"))
-        drift_fig.rename(destination.joinpath("driftmap.png"))
-        drift_fig_zoom.rename(destination.joinpath("driftmap_zoom.png"))
+        shutil.copy(drift_depths, destination.joinpath("drift_depths.um.npy"))
+        shutil.copy(drift, destination.joinpath("drift.um.npy"))
+        shutil.copy(drift_times, destination.joinpath("drift.times.npy"))
+        shutil.copy(drift_fig, destination.joinpath("driftmap.png"))
+        shutil.copy(drift_fig_zoom, destination.joinpath("driftmap_zoom.png"))
     except Exception:
         _log.warning("SI computed motion not found")
 
@@ -475,7 +476,7 @@ def apply_preprocessing(
 
 
 # TODO:  test
-def extract_breath_events(session_path, alf_path):
+def extract_breath_events(session_path, dest):
     """
     Create an 'events.csv' that has the times of each breath for the alf folder.
     This is then used in phy if the PSTH plugin exists.
@@ -485,19 +486,28 @@ def extract_breath_events(session_path, alf_path):
 
     Returns:
         None
+
     """
-    if alfio.exists(alf_path, "breaths"):
-        breath_times = alfio.load_object(
-            session_path.joinpath("alf"), "breaths"
-        ).to_df()["times"]
-        breath_times.to_csv(alf_path.joinpath("events.csv"), index=False, header=False)
-    else:
+    breaths_fn, attributes = alfio.filter_by(
+        session_path.joinpath("alf"), object="breaths", attribute="times"
+    )
+    if len(breaths_fn) == 0:
         _log.info("No breath events found. Not exporting for phy curation")
+        return
+    elif len(breaths_fn) > 1:
+        _log.error("Multiple breath events found. Not exporting for phy curation")
+        return
+
+    breaths = alfio.load_object(
+        session_path.joinpath("alf"),
+        object="breaths",
+        attribute="times",
+        short_keys=True,
+    ).to_df()
+    breaths.to_csv(dest.joinpath("events.csv"), index=False, header=False)
 
 
-def postprocess_sorting(
-    analyzer_path, recording, sort_rez
-):
+def postprocess_sorting(analyzer_path, recording, sort_rez):
     """
     Postprocess the sorting result. Saves raw and automerged versions of the sorting analyzer to disk as .zarr files.
 
@@ -521,10 +531,13 @@ def postprocess_sorting(
     Returns:
         spikeinterface.SortingAnalyzer: Postprocessed sorting analyzer object.
     """
+    n_pca_jobs = N_JOBS if sys.platform == "linux" else 1
     # Create analyzer
     analyzer = si.create_sorting_analyzer(
         sorting=sort_rez,
         recording=recording,
+        num_channels=12,
+        method="closest_channels",
     )
 
     # Compute extensions
@@ -535,7 +548,13 @@ def postprocess_sorting(
     analyzer = analyzer.select_units(clean_sort_rez.unit_ids)
 
     # Compute PCs
-    analyzer.compute("principal_components", n_components=3, mode="by_channel_local")
+
+    analyzer.compute(
+        "principal_components",
+        n_components=3,
+        mode="by_channel_local",
+        n_jobs=n_pca_jobs,
+    )
     analyzer.compute("quality_metrics")
 
     # Stash the pre-merged analyzer
@@ -551,12 +570,36 @@ def postprocess_sorting(
 
     # Recompute metrics on merged data to allow for autolabel
     analyzer.compute_several_extensions(EXTENSIONS)
-    analyzer.compute("principal_components", n_components=3, mode="by_channel_local")
+    analyzer.compute(
+        "principal_components",
+        n_components=3,
+        mode="by_channel_local",
+        n_jobs=n_pca_jobs,
+    )
     analyzer.compute("quality_metrics")
 
     # Save the automerged analyzer
     analyzer.save_as(folder=analyzer_path.with_suffix(".zarr"), format="zarr")
     return analyzer
+
+
+def move_sorted_to_alf(sorted_dir, probe_local):
+    """
+    Move the sorted data from the local scratch directory to the alf directory.
+
+    Args:
+        sorted_dir (Path): Path to the sorted data directory.
+        probe_local (Path): Path to the probe directory in the alf folder.
+    Returns:
+        None
+    """
+    for item in sorted_dir.iterdir():
+        dest = probe_local.joinpath(item.name)
+        if item.is_dir():
+            shutil.move(str(item), str(dest))
+        else:
+            shutil.move(str(item), str(dest))
+    shutil.rmtree(sorted_dir)
 
 
 def run_probe(probe_src, probe_local, testing=False, skip_remove_opto=False):
@@ -574,6 +617,12 @@ def run_probe(probe_src, probe_local, testing=False, skip_remove_opto=False):
     """
     start_time = time.time()
 
+
+    # Add log file handler
+    fh = logging.FileHandler(probe_local.joinpath("spikeinterface_ks4.log"))
+    fh.setLevel(logging.DEBUG)
+    _log.addHandler(fh)
+
     # Set paths
     si_path = probe_local.joinpath(".si")
     # Temporary paths that will not be coming with us?
@@ -581,6 +630,7 @@ def run_probe(probe_src, probe_local, testing=False, skip_remove_opto=False):
     sort_path = si_path.joinpath(".sort")
     motion_path = si_path.joinpath(".motion")
     analyzer_path = si_path.joinpath(".analyzer")
+    exported_alf_path = si_path.joinpath("kilosort4")
     probe_local.mkdir(parents=True, exist_ok=True)
     #
     stream = si.get_neo_streams("spikeglx", probe_src)[0][0]
@@ -618,7 +668,7 @@ def run_probe(probe_src, probe_local, testing=False, skip_remove_opto=False):
 
     if sort_path.exists():
         _log.info("Found sorting. Loading...")
-        sort_rez = si.read_sorter_folder(sort_path)
+        sort_rez = si.load(sort_path)
     else:
         _log.info(f"Running {SORTER}")
         # job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=1, progress_bar=True)
@@ -632,40 +682,89 @@ def run_probe(probe_src, probe_local, testing=False, skip_remove_opto=False):
             n_jobs=1,
             **sorter_params,
         )
-        sort_rez = si.remove_duplicated_spikes(
-            sort_rez, method="keep_first_iterative", censored_period_ms=0.166
-        )
-        job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=N_JOBS, progress_bar=True)
-        si.set_global_job_kwargs(**job_kwargs)
+
+        # Remove kilosort handler
+        ks_log = logging.getLogger("kilosort")
+        for h in ks_log.handlers:
+            h.close()
+            ks_log.removeHandler(h)
+    sort_rez = si.remove_duplicated_spikes(
+        sort_rez, method="keep_first_iterative", censored_period_ms=0.166
+    )
 
     _log.info("Finished sorting:")
     log_elapsed_time(start_time)
 
+    # Subset to a small number of units if testing
+    if testing:
+        unit_ids = sort_rez.get_unit_ids()
+        keep_units = np.random.choice(
+            unit_ids, size=min(40, len(unit_ids)), replace=False
+        )
+        sort_rez = sort_rez.select_units(keep_units)
+        _log.info(f"Testing, only keeping {len(keep_units)} units")
+
     # ============= POSTPROCESSING ============= #
     _log.info("Computing waveforms and QC")
-    if analyzer_path.exists():
+    if analyzer_path.with_suffix(".zarr").exists():
+        _log.info("Found analyzer. Loading...")
         analyzer = si.load_sorting_analyzer(folder=analyzer_path.with_suffix(".zarr"))
     else:
         analyzer = postprocess_sorting(analyzer_path, recording, sort_rez)
 
     # ============= EXPORT ============= #
     _log.info("Exporting to ALF")
-    exporter = ALFExporter(analyzer, probe_local, job_kwargs=job_kwargs)
+    exporter = ALFExporter(
+        analyzer=analyzer,
+        dest=exported_alf_path,
+        bin_path=probe_src,
+        job_kwargs=si.get_global_job_kwargs(),
+        testing=testing,
+    )
     exporter.run()
 
-    # TODO: Sync
-    extract_breath_events(session_path, probe_local)
-    # TODO: Test
+    extract_breath_events(session_path, exported_alf_path)
+
+    # Copy motion info to alf folder
+    _log.info("Copying motion info to alf folder")
     plot_motion(motion_path, recording)
-    shutil.move(str(motion_path), str(probe_local))
+    move_motion_info(motion_path, exported_alf_path)
+
+    # ============= MOVE TO ALF ============= #
+    _log.info("Moving sorted data to alf folder")
+    move_sorted_to_alf(exported_alf_path, probe_local)
+
+    # Close log file handler
+    fh.close()
+
+    del sort_rez
+    del analyzer
+    del recording
 
 
 @click.command()
 @click.argument("session_path", type=click.Path())
-@click.option("--dest", "-d", default=None,help="Destination folder for sorted data. Defaults to session/alf/<sorter>")
-@click.option("--testing", is_flag=True, help="Run in testing mode with reduced data for quick checks (60s segment).")
-@click.option("--no_move_final", is_flag=True, help="Prevent moving final output files to the destination directory. Copy stays in scratch.")
-@click.option("--keep_scratch", is_flag=True, help="Retain intermediate scratch files after processing. Overridden and set to false if not moving final.")
+@click.option(
+    "--dest",
+    "-d",
+    default=None,
+    help="Destination folder for sorted data. Generates subfolders for each probe. Defaults to session/alf/<sorter>",
+)
+@click.option(
+    "--testing",
+    is_flag=True,
+    help="Run in testing mode with reduced data for quick checks (60s segment).",
+)
+@click.option(
+    "--no_move_final",
+    is_flag=True,
+    help="Prevent moving final output files to the destination directory. Copy stays in scratch.",
+)
+@click.option(
+    "--keep_scratch",
+    is_flag=True,
+    help="Retain intermediate scratch files after processing. Overridden and set to false if not moving final.",
+)
 @click.option(
     "--skip_remove_opto",
     is_flag=True,
@@ -678,7 +777,7 @@ def cli(session_path, dest, testing, no_move_final, skip_remove_opto, keep_scrat
         testing,
         no_move_final,
         skip_remove_opto,
-        rm_intermediate=~keep_scratch,
+        rm_intermediate=not keep_scratch,
     )
 
 
@@ -720,6 +819,8 @@ def run(
         session_path.parent.name + "_" + session_path.name
     )
 
+    test_unit_refine_model_import()
+
     ephys_dir = session_path.joinpath("raw_ephys_data")
     _log.debug(f"{session_local=}")
     probe_dirs = list(ephys_dir.glob("probe*")) + list(ephys_dir.glob("*imec[0-9]"))
@@ -736,41 +837,48 @@ def run(
         # Set up the paths
         probe_alf_local = session_local.joinpath(probe_src.name)
         probe_alf_remote = dest.joinpath(probe_src.name)
-        if probe_alf_local.joinpath("params.py").exists():
-            _log.critical(
-                f"Sorted data found at {probe_alf_local}. Skipping {probe_name}"
-            )
-            continue
-        if probe_alf_remote.joinpath("params.py").exists():
-            _log.critical(
-                f"Sorted data found at {probe_alf_remote}. Skipping {probe_name}"
-            )
-            continue
 
+        has_local = probe_alf_local.joinpath("params.py").exists()
+        has_remote = probe_alf_remote.joinpath("params.py").exists()
+
+        if has_local:
+            _log.critical(
+                f"Sorted data found at {probe_alf_local}."
+            )
+
+        if has_remote:
+            _log.critical(
+                f"Sorted data found at {probe_alf_remote}."
+            )
+        if has_remote:
+            _log.info(
+                f"Skipping probe {probe_name} since sorted data already exists remotely"
+            )
+            continue
         # ======= Run the sorter ========= #
-        _log.info(
-            "\n"
-            + "=" * 100
-            + f"\nRunning SpikeInterface {SORTER}:"
-            + f"\n\tSession: {session_path}"
-            + f"\n\tProbe: {probe_src.name}"
-            + f"\n\t{probe_alf_local = }"
-            + f"\n\t{probe_alf_remote = }"
-            + f"\n\t{testing = }"
-            + f"\n\t{skip_remove_opto = }"
-            + f"\n\t{USE_MOTION_SI = }"
-            + f"\n\t{probe_name = }"
-            + f"\n\t{N_JOBS = }"
-            + f"\n\t{CHUNK_DUR = }\n"
-            + "=" * 100
-        )
-        run_probe(
-            probe_src,
-            probe_alf_local,
-            testing=testing,
-            label=probe_name,
-            skip_remove_opto=skip_remove_opto,
-        )
+        if not has_local and not has_remote:
+            _log.info(
+                "\n"
+                + "=" * 100
+                + f"\nRunning SpikeInterface {SORTER}:"
+                + f"\n\tSession: {session_path}"
+                + f"\n\tProbe: {probe_src.name}"
+                + f"\n\t{probe_alf_local = }"
+                + f"\n\t{probe_alf_remote = }"
+                + f"\n\t{testing = }"
+                + f"\n\t{skip_remove_opto = }"
+                + f"\n\t{USE_MOTION_SI = }"
+                + f"\n\t{probe_name = }"
+                + f"\n\t{N_JOBS = }"
+                + f"\n\t{CHUNK_DUR = }\n"
+                + "=" * 100
+            )
+            run_probe(
+                probe_src,
+                probe_alf_local,
+                testing=testing,
+                skip_remove_opto=skip_remove_opto,
+            )
 
         # ======= Move to destination ========= #
         if move_final:
@@ -788,6 +896,7 @@ def run(
     # ======= Remove temporary SI folder ========= #
     if rm_intermediate and n_probes > 0:
         shutil.rmtree(SCRATCH_DIR)
+
 
 if __name__ == "__main__":
     cli()

@@ -9,7 +9,10 @@ from spikeinterface.exporters import export_to_ibl_gui
 import warnings
 from spikeinterface.core import SortingAnalyzer, BaseRecording
 import spikeinterface.curation as sc
+import spikeinterface.extractors as se
+import spikeinterface.preprocessing as spre
 import logging
+
 logging.basicConfig(level=logging.INFO)
 _log = logging.getLogger(__name__)
 _log.setLevel(logging.INFO)
@@ -22,6 +25,7 @@ MIN_SPIKES = 500
 
 HUGGING_FACE_LOCAL = Path(r"C:\helpers\hugging_face")
 
+
 def test_unit_refine_model_import():
     """
     Test if the UnitRefine model is available.
@@ -29,13 +33,15 @@ def test_unit_refine_model_import():
     model_available = False
     try:
         model, model_info = sc.load_model(
-                repo_id="SpikeInterface/UnitRefine_noise_neural_classifier",
-                trusted=["numpy.dtype"],
+            repo_id="SpikeInterface/UnitRefine_noise_neural_classifier",
+            trusted=["numpy.dtype"],
         )
         model_available = True
         _log.info("UnitRefine model loaded from Hugging Face.")
     except Exception as e:
-        _log.info(f"UnitRefine model not available from Hugging Face. Error: {e}. \nTrying local path {HUGGING_FACE_LOCAL.joinpath('UnitRefine_noise')}")
+        _log.info(
+            f"UnitRefine model not available from Hugging Face. Error: {e}. \nTrying local path {HUGGING_FACE_LOCAL.joinpath('UnitRefine_noise')}"
+        )
         try:
             model, model_info = sc.load_model(
                 model_folder=HUGGING_FACE_LOCAL.joinpath("UnitRefine_noise"),
@@ -44,20 +50,26 @@ def test_unit_refine_model_import():
             model_available = True
             _log.info("UnitRefine model loaded from local path.")
         except Exception as e:
-            _log.error("UnitRefine model not available. Please check your internet connection or local model path.")
+            _log.error(
+                "UnitRefine model not available. Please check your internet connection or local model path."
+            )
             _log.error(e)
-    
+
     if not model_available:
-        _log.error("UnitRefine model not available. Will skip UnitRefine autolabelling (NOT RECOMMENDED).")
+        _log.error(
+            "UnitRefine model not available. Will skip UnitRefine autolabelling (NOT RECOMMENDED)."
+        )
+
 
 class ALFExporter:
     def __init__(
         self,
         analyzer: SortingAnalyzer,
         dest: Path,
-        lfp_recording: BaseRecording | None = None,
+        bin_path: Path | None = None,
         copy_binary: bool = False,
         job_kwargs: dict = dict(n_jobs=1, chunk_size="1s"),
+        testing: bool = False,
     ):
         """
         Initialize the ALFExporter.
@@ -74,9 +86,10 @@ class ALFExporter:
         """
         self.analyzer = analyzer
         self.alf_path = dest
-        self.lfp_recording = lfp_recording
+        self.bin_path = bin_path
         self.copy_binary = copy_binary
         self.job_kwargs = job_kwargs
+        self.testing = testing
         self.templates = self.analyzer.get_extension("templates")
         self.used_sparsity = self.templates.sparsity
         self.sparse_templates = self.used_sparsity.sparsify_templates(
@@ -85,6 +98,33 @@ class ALFExporter:
         self.channel_indices = np.vstack(
             [x for x in self.used_sparsity.unit_id_to_channel_indices.values()]
         )
+        self.get_lfp_recording()
+
+    def get_lfp_recording(self):
+        """
+        Get the LFP recording if available.
+        """
+        if self.bin_path is None:
+            self.lfp_recording = None
+            return
+        try:
+            stream = se.get_neo_streams("spikeglx", self.bin_path)[0][0].replace(
+                "lf", "ap"
+            )
+            lfp_recording = se.read_spikeglx(self.bin_path, stream_id=stream)
+            if self.testing:
+                lfp_recording = lfp_recording.frame_slice(
+                    0, lfp_recording.get_sampling_frequency() * 60
+                )
+            lfp_recording = spre.bandpass_filter(
+                lfp_recording, freq_min=1, freq_max=300
+            )
+            lfp_recording = spre.decimate(lfp_recording, 10)
+            self.lfp_recording = lfp_recording
+        except Exception as e:
+            _log.error("Error loading LFP recording. Proceeding without LFP.")
+            _log.error(e)
+            self.lfp_recording = None
 
     def save_templates(self):
         """
@@ -209,6 +249,7 @@ class ALFExporter:
             for chan_inds in used_sparsity.unit_id_to_channel_indices.values()
         )
         non_empty_units = []
+        empty_flag = False
         for unit in self.analyzer.sorting.unit_ids:
             if len(self.analyzer.sorting.get_unit_spike_train(unit)) > 0:
                 non_empty_units.append(unit)
@@ -246,11 +287,12 @@ class ALFExporter:
             idx = np.where(spike_clusters == clu)[0]
             chans_subset[idx] = self.channel_indices[clu]
         np.save(
-            self.alf_path.joinpath("_phy_spikes_subset.waveforms.npy"), wvfms.get_data()
+            self.alf_path.joinpath("_phy_spikes_subset.waveforms.npy"),
+            wvfms.get_data(),
         )
         np.save(
             self.alf_path.joinpath("_phy_spikes_subset.spikes.npy"),
-            self.analyzer.get_extension("random_spikes").data,
+            self.analyzer.get_extension("random_spikes").get_data(),
         )
         np.save(self.alf_path.joinpath("_phy_spikes_subset.channels.npy"), chans_subset)
 
@@ -291,13 +333,18 @@ class ALFExporter:
         """
         Run all steps to export sorting as ALF/IBL structure
         """
+        if self.alf_path.exists():
+            _log.critical(
+                f" Target sorted folder {self.alf_path} already exists. Please remove it before exporting."
+            )
+            return
         export_to_ibl_gui(
             sorting_analyzer=self.analyzer,
             output_folder=self.alf_path,
-            remove_if_exists=True,
             lfp_recording=self.lfp_recording,
         )
-        self.exporter.save_templates()
-        self.exporter.create_full_metrics()
-        self.exporter.write_params()
-        self.exporter.create_pca_features()
+        self.save_templates()
+        self.create_full_metrics()
+        self.write_params()
+        self.create_pca_features()
+        self.save_extracted_waveforms()
