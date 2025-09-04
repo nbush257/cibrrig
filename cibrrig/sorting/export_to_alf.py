@@ -8,6 +8,11 @@ from spikeinterface.core import write_binary_recording
 from spikeinterface.exporters import export_to_ibl_gui
 import warnings
 from spikeinterface.core import SortingAnalyzer, BaseRecording
+import spikeinterface.curation as sc
+import logging
+logging.basicConfig(level=logging.INFO)
+_log = logging.getLogger(__name__)
+_log.setLevel(logging.INFO)
 
 # QC presets
 AMPLITUDE_CUTOFF = 0.1
@@ -15,6 +20,32 @@ SLIDING_RP = 0.1
 AMP_THRESH = 40.0
 MIN_SPIKES = 500
 
+HUGGING_FACE_LOCAL = Path(r"C:\helpers\hugging_face")
+
+def test_unit_refine_model_import():
+    """
+    Test if the UnitRefine model is available.
+    """
+    model_available = False
+    try:
+        model, model_info = sc.load_model(
+                repo_id="SpikeInterface/UnitRefine_noise_neural_classifier",
+                trusted=["numpy.dtype"],
+        )
+        model_available = True
+    except Exception as e:
+        try:
+            model, model_info = sc.load_model(
+                model_folder=HUGGING_FACE_LOCAL.joinpath("UnitRefine_noise"),
+                trust_model=True,
+            )
+            model_available = True
+        except Exception as e:
+            _log.error("UnitRefine model not available. Please check your internet connection or local model path.")
+            _log.error(e)
+    
+    if not model_available:
+        _log.error("UnitRefine model not available. Will skip UnitRefine autolabelling (NOT RECOMMENDED).")
 
 class ALFExporter:
     def __init__(
@@ -137,9 +168,14 @@ class ALFExporter:
         metrics = metrics.merge(
             template_metrics, left_index=True, right_index=True, how="left"
         )
-        ur_labels = self._apply_unit_refine_labels()
-        ur_labels.index = metrics.index
-        metrics = pd.concat([metrics, ur_labels], axis=1)
+        try:
+            ur_labels = self._apply_unit_refine_labels()
+            ur_labels.index = metrics.index
+            metrics = pd.concat([metrics, ur_labels], axis=1)
+        except Exception as e:
+            _log.error("Error computing model-based labels. Skipping.")
+            _log.error(e)
+
         metrics.index.name = "si_unit_id"
         metrics = metrics.reset_index()
         metrics.index.name = "cluster_id"
