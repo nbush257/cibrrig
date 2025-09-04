@@ -22,7 +22,7 @@ class ALFExporter:
         analyzer: SortingAnalyzer,
         dest: Path,
         lfp_recording: BaseRecording | None = None,
-        copy_binary: bool = True,
+        copy_binary: bool = False,
         job_kwargs: dict = dict(n_jobs=1, chunk_size="1s"),
     ):
         """
