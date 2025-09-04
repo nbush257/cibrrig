@@ -23,6 +23,7 @@ from one.alf import spec
 import click
 import logging
 import json
+import cibrrig.utils.utils as utils
 
 logging.basicConfig()
 _log = logging.getLogger(__name__)
@@ -279,16 +280,7 @@ class Run:
         """
         Finds all gate directories in the run directory and stores them in sorted order.
         """
-        gates = []
-        # guess that we will never have more than 99 gates. This is dirty, but works
-        gate_list_1 = list(self.run_path.glob("*_g[0-9]"))
-        gate_list_2 = list(self.run_path.glob("*_g[0-9][0-9]"))
-        gate_list_1.sort()
-        gate_list_2.sort()
-        gate_list = gate_list_1 + gate_list_2
-        for gate in gate_list:
-            gates.append(gate) if gate.is_dir() else None
-        self.gates = gates
+        self.gates = utils.get_gates(self.run_path)
 
     def move_gates(self):
         """

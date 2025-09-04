@@ -40,6 +40,8 @@ import enum
 from cibrrig.sorting.export_to_alf import test_unit_refine_model_import
 from PyQt5.QtWidgets import QMessageBox
 import cibrrig.postprocess.synchronize_sorting_to_aux as sync_aux
+import warnings
+import cibrrig.utils.utils as utils
 
 
 class Status(enum.IntEnum):
@@ -94,6 +96,9 @@ def get_status(session):
     print(f"Status of {session}: {status}")
     return status
 
+
+
+
 def check_unit_refine():
     has_unit_refine = test_unit_refine_model_import()
     if not has_unit_refine:
@@ -135,6 +140,7 @@ def main():
     ) = window.get_paths()
 
     check_unit_refine()
+    
 
     log_fn = local_run_path.joinpath("cibrrig.log")
     logging.basicConfig(filename=log_fn, level=logging.INFO)
