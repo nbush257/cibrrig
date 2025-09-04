@@ -33,13 +33,16 @@ def test_unit_refine_model_import():
                 trusted=["numpy.dtype"],
         )
         model_available = True
+        _log.info("UnitRefine model loaded from Hugging Face.")
     except Exception as e:
+        _log.info(f"UnitRefine model not available from Hugging Face. Error: {e}. \nTrying local path {HUGGING_FACE_LOCAL.joinpath('UnitRefine_noise')}")
         try:
             model, model_info = sc.load_model(
                 model_folder=HUGGING_FACE_LOCAL.joinpath("UnitRefine_noise"),
                 trust_model=True,
             )
             model_available = True
+            _log.info("UnitRefine model loaded from local path.")
         except Exception as e:
             _log.error("UnitRefine model not available. Please check your internet connection or local model path.")
             _log.error(e)
