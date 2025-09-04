@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cibrrig"
-version = "0.8.1"
+version = "0.9.0"
 description = "Tools for data analysis and organization of Neuropixel data recorded on the CIBR rig at SCRI. Influenced by the IBL"
 readme = "readme.md"
 requires-python = ">=3.10"
@@ -13,7 +13,7 @@ authors = [
 ]
 dependencies = [
     "ibllib==3.4.1",
-    "spikeinterface==0.103.0", 
+    "spikeinterface==0.102.3", 
     "joblib<1.5.0",
     "ipython",
     "myst-parser",
