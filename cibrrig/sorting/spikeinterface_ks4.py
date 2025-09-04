@@ -47,7 +47,7 @@ OPTO_OBJECTS = [
 ]  # Alf objects to look for by default that we wish to remove the artifact for
 
 EXTENSIONS = dict(
-    random_spikes={"method": "uniform", "max_spikes_per_unit": 600, "seed": 42},
+    random_spikes={"method": "uniform", "max_spikes_per_unit": 500, "seed": 42},
     waveforms={"ms_before": 1.3, "ms_after": 2.6},
     templates={"operators": ["average", "median", "std"]},
     noise_levels={},
@@ -63,12 +63,11 @@ EXTENSIONS = dict(
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
-_log = logging.getLogger("SI-Kilosort4")
+_log = logging.getLogger(__name__)
 _log.setLevel(logging.INFO)
 
 
 # Flags
-RUN_PC = False
 SORTER = "kilosort4"
 
 
@@ -422,11 +421,12 @@ def apply_preprocessing(
     """
     Apply the IBL preprocessing pipeline to the recording.
 
-    This function applies a series of preprocessing steps to the recording, including:
-    highpass filtering,
-    phase shifting
-    bad channel detection and interpolation
-    spatial filtering.
+    This function applies a series of preprocessing steps to the recording
+    1. Highpass filtering
+    2. Phase shifting
+    3. Bad channel detection and interpolation
+    4. Spatial filtering (destriping)
+
     Optionally, it can also remove optogenetic artifacts and concatenate recording segments.
 
     Args:
@@ -495,16 +495,77 @@ def extract_breath_events(session_path, alf_path):
         _log.info("No breath events found. Not exporting for phy curation")
 
 
-def run_probe(
-    probe_dir, probe_local, label="kilosort4", testing=False, skip_remove_opto=False
+def postprocess_sorting(
+    analyzer_path, recording, sort_rez
 ):
+    """
+    Postprocess the sorting result. Saves raw and automerged versions of the sorting analyzer to disk as .zarr files.
+
+    Performs these steps:
+    1. Creates a sorting analyzer in memory
+    2. Compute all extensions requested in global EXTENSIONS
+    3. Remove redundant units
+    4. Compute PCs
+    5. Compute quality metrics
+    6. Saves the analyzer (as .raw.zarr)
+    7. Auto-merge units
+    8. Recompute metrics on merged data (required to prevent crashes downstream)
+    9. Save the automerged analyzer (as .zarr)
+
+
+    Args:
+        analyzer_path (Path): Path to save the analyzer.
+        recording (spikeinterface.RecordingExtractor): Recording extractor object.
+        sort_rez (spikeinterface.SortingExtractor): Sorting extractor object.
+
+    Returns:
+        spikeinterface.SortingAnalyzer: Postprocessed sorting analyzer object.
+    """
+    # Create analyzer
+    analyzer = si.create_sorting_analyzer(
+        sorting=sort_rez,
+        recording=recording,
+    )
+
+    # Compute extensions
+    analyzer.compute_several_extensions(EXTENSIONS)
+
+    # Remove redundant units
+    clean_sort_rez = si.remove_redundant_units(analyzer)
+    analyzer = analyzer.select_units(clean_sort_rez.unit_ids)
+
+    # Compute PCs
+    analyzer.compute("principal_components", n_components=3, mode="by_channel_local")
+    analyzer.compute("quality_metrics")
+
+    # Stash the pre-merged analyzer
+    analyzer.save_as(folder=analyzer_path.with_suffix(".raw.zarr"), format="zarr")
+
+    # Auto_merge units
+    analyzer = si.auto_merge_units(
+        sorting_analyzer=analyzer,
+        presets=["temporal_splits", "similarity_correlograms"],
+        censor_ms=0.166,
+        recursive=True,
+    )
+
+    # Recompute metrics on merged data to allow for autolabel
+    analyzer.compute_several_extensions(EXTENSIONS)
+    analyzer.compute("principal_components", n_components=3, mode="by_channel_local")
+    analyzer.compute("quality_metrics")
+
+    # Save the automerged analyzer
+    analyzer.save_as(folder=analyzer_path.with_suffix(".zarr"), format="zarr")
+    return analyzer
+
+
+def run_probe(probe_src, probe_local, testing=False, skip_remove_opto=False):
     """
     Run spikesorting on a single probe
 
     Args:
         probe_dir (Path): Path to the probe directory.
         probe_local (str): Local path to save phy sorting to.
-        label (str, optional): Label for the sorting. Defaults to 'kilosort4'.
         testing (bool, optional): If True, run in testing mode (short data snippet). Defaults to False.
         skip_remove_opto (bool, optional): If True, skip the removal of opto artifacts. Defaults to False.
 
@@ -514,40 +575,33 @@ def run_probe(
     start_time = time.time()
 
     # Set paths
-    temp_local = probe_local.joinpath(".si")
-    PHY_DEST = probe_local.joinpath(label)
+    si_path = probe_local.joinpath(".si")
     # Temporary paths that will not be coming with us?
-    PREPROC_PATH = temp_local.joinpath(".preprocessed")
-    SORT_PATH = temp_local.joinpath(".sort")
-    MOTION_PATH = temp_local.joinpath(".motion")
-    ANALYZER_PATH = temp_local.joinpath(".analyzer")
+    preproc_path = si_path.joinpath(".preprocessed")
+    sort_path = si_path.joinpath(".sort")
+    motion_path = si_path.joinpath(".motion")
+    analyzer_path = si_path.joinpath(".analyzer")
     probe_local.mkdir(parents=True, exist_ok=True)
-
-    if PHY_DEST.exists():
-        _log.warning(
-            f"Local phy destination exists ({PHY_DEST}). Skipping this probe {probe_dir}"
-        )
-        return
-
-    stream = si.get_neo_streams("spikeglx", probe_dir)[0][0]
-    recording = se.read_spikeglx(probe_dir, stream_id=stream)
-    session_path = probe_dir.parent.parent
+    #
+    stream = si.get_neo_streams("spikeglx", probe_src)[0][0]
+    recording = se.read_spikeglx(probe_src, stream_id=stream)
+    session_path = probe_src.parent.parent
 
     # =========== #
     # =========== Preprocessing =================== #
     # =========== #
-    if not PREPROC_PATH.with_suffix(".zarr").exists():
+    if not preproc_path.with_suffix(".zarr").exists():
         rec_destriped = apply_preprocessing(
             recording,
             session_path,
-            probe_dir,
+            probe_src,
             testing,
             skip_remove_opto=skip_remove_opto,
         )
 
         # =============== Compute motion if requested.  ============ #
         if COMPUTE_MOTION_SI:
-            rec_mc, motion = si_motion(rec_destriped.astype("float32"), MOTION_PATH)
+            rec_mc, motion = si_motion(rec_destriped.astype("float32"), motion_path)
 
         # ============== Save motion if requested ============== #
         if COMPUTE_MOTION_SI and USE_MOTION_SI:
@@ -555,97 +609,63 @@ def run_probe(
         else:
             recording = rec_destriped
         recording = recording.astype("int16")
-        recording.save(folder=PREPROC_PATH, format="zarr")
+        recording.save(folder=preproc_path, format="zarr")
         del recording
     _log.info("Loading preprocessed recording")
-    recording = si.load(PREPROC_PATH.with_suffix(".zarr"))
+    recording = si.load(preproc_path.with_suffix(".zarr"))
 
-    job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=1, progress_bar=True)
-    si.set_global_job_kwargs(**job_kwargs)
     # ============= RUN SORTER ==================== #
-    if SORT_PATH.exists():
+
+    if sort_path.exists():
         _log.info("Found sorting. Loading...")
-        sort_rez = si.read_sorter_folder(SORT_PATH)
+        sort_rez = si.read_sorter_folder(sort_path)
     else:
         _log.info(f"Running {SORTER}")
+        # job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=1, progress_bar=True)
+        # si.set_global_job_kwargs(**job_kwargs)
         sort_rez = ss.run_sorter(
             sorter_name=SORTER,
             recording=recording,
-            folder=SORT_PATH,
+            folder=sort_path,
             verbose=True,
             remove_existing_folder=False,
             n_jobs=1,
             **sorter_params,
         )
+        sort_rez = si.remove_duplicated_spikes(
+            sort_rez, method="keep_first_iterative", censored_period_ms=0.166
+        )
+        job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=N_JOBS, progress_bar=True)
+        si.set_global_job_kwargs(**job_kwargs)
 
-    sort_rez = si.remove_duplicated_spikes(
-        sort_rez, method="keep_first_iterative", censored_period_ms=0.166
-    )
-    job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=N_JOBS, progress_bar=True)
-    si.set_global_job_kwargs(**job_kwargs)
     _log.info("Finished sorting:")
     log_elapsed_time(start_time)
 
+    # ============= POSTPROCESSING ============= #
     _log.info("Computing waveforms and QC")
-    if ANALYZER_PATH.exists():
-        analyzer = si.load_sorting_analyzer(folder=ANALYZER_PATH.with_suffix(".zarr"))
+    if analyzer_path.exists():
+        analyzer = si.load_sorting_analyzer(folder=analyzer_path.with_suffix(".zarr"))
     else:
-        analyzer = si.create_sorting_analyzer(
-            sorting=sort_rez,
-            recording=recording,
-        )
-        analyzer.compute_several_extensions(EXTENSIONS)
-
-        # Remove redundant units
-        clean_sort_rez = si.remove_redundant_units(analyzer)
-        analyzer = analyzer.select_units(clean_sort_rez.unit_ids)
-
-        # Compute PCs (Must be global for ALF conversion)
-        analyzer.compute(
-            "principal_components", n_components=3, mode="by_channel_local"
-        )
-        analyzer.compute("quality_metrics")
-
-        # Stash the pre-merged analyzer
-        analyzer.save_as(folder=ANALYZER_PATH.with_suffix(".raw.zarr"), format="zarr")
-
-        # Auto_merge units
-        analyzer = si.auto_merge_units(
-            sorting_analyzer=analyzer,
-            presets=["temporal_splits", "similarity_correlograms"],
-            censor_ms=0.166,
-            recursive=True,
-        )
-
-        # Recompute metrics on merged data to allow for autolabel
-        analyzer.compute_several_extensions(EXTENSIONS)
-        analyzer.compute(
-            "principal_components", n_components=3, mode="by_channel_local"
-        )
-        analyzer.compute("quality_metrics")
-
-        # Save the automerged analyzer
-        analyzer.save_as(folder=ANALYZER_PATH.with_suffix(".zarr"), format="zarr")
+        analyzer = postprocess_sorting(analyzer_path, recording, sort_rez)
 
     # ============= EXPORT ============= #
     _log.info("Exporting to ALF")
-    alf_path = PHY_DEST.parent.joinpath("small_alf")
-    exporter = ALFExporter(analyzer, alf_path, job_kwargs=job_kwargs)
+    exporter = ALFExporter(analyzer, probe_local, job_kwargs=job_kwargs)
     exporter.run()
 
     # TODO: Sync
-    extract_breath_events(session_path, alf_path)
+    extract_breath_events(session_path, probe_local)
     # TODO: Test
-    plot_motion(MOTION_PATH, recording)
-    shutil.move(str(MOTION_PATH), str(alf_path))
+    plot_motion(motion_path, recording)
+    shutil.move(str(motion_path), str(probe_local))
 
 
 @click.command()
 @click.argument("session_path", type=click.Path())
-@click.option("--dest", "-d", default=None)
-@click.option("--testing", is_flag=True)
-@click.option("--no_move_final", is_flag=True)
-@click.option("--keep_scratch", is_flag=True)
+@click.option("--dest", "-d", default=None,help="Destination folder for sorted data. Defaults to session/alf/<sorter>")
+@click.option("--testing", is_flag=True, help="Run in testing mode with reduced data for quick checks (60s segment).")
+@click.option("--no_move_final", is_flag=True, help="Prevent moving final output files to the destination directory. Copy stays in scratch.")
+@click.option("--keep_scratch", is_flag=True, help="Retain intermediate scratch files after processing. Overridden and set to false if not moving final.")
 @click.option(
     "--skip_remove_opto",
     is_flag=True,
@@ -684,14 +704,18 @@ def run(
         rm_intermediate (bool, optional): If True, remove intermediate files. Defaults to True.
     """
     move_final = not no_move_final
-    label = SORTER
+    if not move_final:
+        rm_intermediate = False
 
     # Get paths
     session_path = Path(session_path)
     if sys.platform == "linux":
         SCRATCH_DIR = session_path.joinpath(SCRATCH_NAME)
     else:
-        SCRATCH_DIR = Path("D:/").joinpath(SCRATCH_NAME)
+        if Path(r"D:/").exists():
+            SCRATCH_DIR = Path("D:/").joinpath(SCRATCH_NAME)
+        else:
+            SCRATCH_DIR = Path("C:/").joinpath(SCRATCH_NAME)
     session_local = SCRATCH_DIR.joinpath(
         session_path.parent.name + "_" + session_path.name
     )
@@ -703,77 +727,67 @@ def run(
     _log.info(f"{n_probes=}")
 
     # Set destination
-    dest = dest or session_path
-    dest = Path(dest).joinpath("alf")
+    dest = dest or session_path.joinpath("alf")
     _log.debug(f"Destination set to {dest}")
 
     # ======= Loop over all probes in the session ========= #
-    for probe_dir in probe_dirs:
+    for probe_src in probe_dirs:
+        probe_name = probe_src.name  # e.g.,probe00
         # Set up the paths
-        probe_local = session_local.joinpath(probe_dir.name)
-        probe_dest = dest.joinpath(probe_dir.name)
-        phy_dest = probe_dest.joinpath(label)
-        phy_local = probe_local.joinpath(label)
-        if phy_local.exists():
-            _log.critical(f"Local PHY folder: {phy_local} exists. Not overwriting.")
-            continue
-        if phy_dest.exists():
+        probe_alf_local = session_local.joinpath(probe_src.name)
+        probe_alf_remote = dest.joinpath(probe_src.name)
+        if probe_alf_local.joinpath("params.py").exists():
             _log.critical(
-                f"Destination PHY folder: {phy_dest} exists. Not overwriting."
+                f"Sorted data found at {probe_alf_local}. Skipping {probe_name}"
             )
             continue
+        if probe_alf_remote.joinpath("params.py").exists():
+            _log.critical(
+                f"Sorted data found at {probe_alf_remote}. Skipping {probe_name}"
+            )
+            continue
+
         # ======= Run the sorter ========= #
         _log.info(
             "\n"
             + "=" * 100
             + f"\nRunning SpikeInterface {SORTER}:"
-            + f"\n\tGate: {session_path}"
-            + f"\n\tProbe: {probe_dir.name}"
-            + f"\n\t{dest=}"
-            + f"\n\t{testing=}"
-            + f"\n\t{skip_remove_opto=}"
-            + f"\n\t{USE_MOTION_SI=}"
-            + f"\n\t{label=}"
-            + f"\n\t{N_JOBS=}"
-            + f"\n\t{CHUNK_DUR=}\n"
+            + f"\n\tSession: {session_path}"
+            + f"\n\tProbe: {probe_src.name}"
+            + f"\n\t{probe_alf_local = }"
+            + f"\n\t{probe_alf_remote = }"
+            + f"\n\t{testing = }"
+            + f"\n\t{skip_remove_opto = }"
+            + f"\n\t{USE_MOTION_SI = }"
+            + f"\n\t{probe_name = }"
+            + f"\n\t{N_JOBS = }"
+            + f"\n\t{CHUNK_DUR = }\n"
             + "=" * 100
         )
         run_probe(
-            probe_dir,
-            probe_local,
+            probe_src,
+            probe_alf_local,
             testing=testing,
-            label=label,
+            label=probe_name,
             skip_remove_opto=skip_remove_opto,
         )
 
-        # ======= Remove temporary SI folder ========= #
-        # if rm_intermediate:
-        #     try:
-        #         shutil.rmtree(probe_local.joinpath(".si"))
-        #     except Exception:
-        #         _log.error("Could not delete temp si folder")
-
         # ======= Move to destination ========= #
         if move_final:
-            phy_dest = probe_dest.joinpath(phy_local.name)
-
-            if phy_dest.exists():
-                _log.warning(f"Not moving because target {phy_dest} already exists")
+            if probe_alf_remote.exists():
+                _log.warning(
+                    f"Not moving because target {probe_alf_remote} already exists. Not deleting local copy {probe_alf_local}"
+                )
+                rm_intermediate = False
             else:
-                _log.info(f"Moving sorted data from {phy_local} to {phy_dest}")
-                shutil.move(str(phy_local), str(phy_dest))
+                _log.info(
+                    f"Moving sorted data from {probe_alf_local} to {probe_alf_remote}"
+                )
+                shutil.move(str(probe_alf_local), str(probe_alf_remote))
 
     # ======= Remove temporary SI folder ========= #
-    if move_final and rm_intermediate and n_probes > 0:
-        _log.info(f"Removing {session_local}")
-        try:
-            shutil.rmtree(session_local)
-        except FileNotFoundError as e:
-            _log.error(f"Could not delete {session_local}")
-            _log.error(e)
-
+    if rm_intermediate and n_probes > 0:
         shutil.rmtree(SCRATCH_DIR)
-
 
 if __name__ == "__main__":
     cli()
