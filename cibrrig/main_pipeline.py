@@ -33,13 +33,13 @@ from cibrrig.gui import (
     plot_probe_insertion,
     plot_insertion_layout,
 )
-import subprocess
 import pandas as pd
 import logging
 import re
 import enum
 from cibrrig.sorting.export_to_alf import test_unit_refine_model_import
 from PyQt5.QtWidgets import QMessageBox
+import cibrrig.postprocess.synchronize_sorting_to_aux as sync_aux
 
 
 class Status(enum.IntEnum):
@@ -47,7 +47,8 @@ class Status(enum.IntEnum):
     PREPROC = 10
     SPIKESORTED = 20
     CONCATENATED = 30
-    WAVEFORMS = 40
+    SYNCHRONIZED = 40
+
 
 
 # TODO: Solve depth issue with insertions
@@ -119,7 +120,7 @@ def main():
     window.show()
     app.exec_()
 
-    check_unit_refine()
+
 
     # After the GUI is closed, retrieve the selected paths
     (
@@ -132,6 +133,8 @@ def main():
         num_probes,
         num_opto_fibers,
     ) = window.get_paths()
+
+    check_unit_refine()
 
     log_fn = local_run_path.joinpath("cibrrig.log")
     logging.basicConfig(filename=log_fn, level=logging.INFO)
@@ -217,26 +220,20 @@ def main():
 
         # RUN SPIKESORTING
         if status < Status.SPIKESORTED:
-            # try:
             spikeinterface_ks4.run(session, skip_remove_opto=skip_remove_opto)
-            params_files = session.rglob("params.py")
             set_status(session, Status.SPIKESORTED)
-            sorted = True
-            # except Exception as e:
-            #     logging.error(f"Error in spikesorting: {e}")
-            #     sorted = False
 
+        # RUN CONCATENATION
         if status < Status.CONCATENATED:
             rec = Recording(session)
             rec.concatenate_session()
             set_status(session, Status.CONCATENATED)
-        # PHY EXTRACT WAVEFORMS
+        
+        # RUN SYNCHRONIZATION TO AUX
+        if status < Status.SYNCHRONIZED:
+            sync_aux.run_session(session)
+            set_status(session, Status.SYNCHRONIZED)
 
-        if status < Status.WAVEFORMS and sorted:
-            for pp in params_files:
-                command = ["phy", "extract-waveforms", pp]
-                subprocess.run(command, cwd=pp.parent)
-            set_status(session, Status.WAVEFORMS)
     # Move all data to RSS
     shutil.move(local_run_path, remote_working_path)
 
