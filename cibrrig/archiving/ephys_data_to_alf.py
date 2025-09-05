@@ -15,6 +15,7 @@ Key Features:
 # TODO: Comments on functions
 
 from ibllib.io import misc
+from ibllib.pipes.misc import rename_ephys_files, move_ephys_files
 import spikeglx
 from pathlib import Path
 import re
@@ -256,8 +257,8 @@ def rename_session(session_path):
     rename_probe_folders(session_path)
     move_ni_files(session_path)
     check_wiring(session_path)
-    misc.rename_ephys_files(session_path)
-    misc.move_ephys_files(session_path)
+    rename_ephys_files(session_path)
+    move_ephys_files(session_path)
     misc.delete_empty_folders(session_path, dry=False)
     rename_and_move_video(session_path)
     remove_backup_flag(session_path)
