@@ -15,6 +15,7 @@ Key Features:
 # TODO: Comments on functions
 
 from ibllib.io import misc
+from ibllib.pipes.misc import rename_ephys_files, move_ephys_files
 import spikeglx
 from pathlib import Path
 import re
@@ -23,6 +24,7 @@ from one.alf import spec
 import click
 import logging
 import json
+import cibrrig.utils.utils as utils
 
 logging.basicConfig()
 _log = logging.getLogger(__name__)
@@ -255,8 +257,8 @@ def rename_session(session_path):
     rename_probe_folders(session_path)
     move_ni_files(session_path)
     check_wiring(session_path)
-    misc.rename_ephys_files(session_path)
-    misc.move_ephys_files(session_path)
+    rename_ephys_files(session_path)
+    move_ephys_files(session_path)
     misc.delete_empty_folders(session_path, dry=False)
     rename_and_move_video(session_path)
     remove_backup_flag(session_path)
@@ -279,16 +281,7 @@ class Run:
         """
         Finds all gate directories in the run directory and stores them in sorted order.
         """
-        gates = []
-        # guess that we will never have more than 99 gates. This is dirty, but works
-        gate_list_1 = list(self.run_path.glob("*_g[0-9]"))
-        gate_list_2 = list(self.run_path.glob("*_g[0-9][0-9]"))
-        gate_list_1.sort()
-        gate_list_2.sort()
-        gate_list = gate_list_1 + gate_list_2
-        for gate in gate_list:
-            gates.append(gate) if gate.is_dir() else None
-        self.gates = gates
+        self.gates = utils.get_gates(self.run_path)
 
     def move_gates(self):
         """

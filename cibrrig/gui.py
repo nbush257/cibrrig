@@ -26,6 +26,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QTextEdit,
+    QMessageBox
 )
 from PyQt5.QtGui import QPixmap
 import numpy as np
@@ -34,6 +35,8 @@ from PIL import Image
 import seaborn as sns
 from iblatlas.atlas import sph2cart, AllenAtlas
 import asyncio
+import cibrrig.utils.utils as utils
+from spikeglx import glob_ephys_files
 
 # Get absolute path of the file "brain_xyz.png"
 brain_xyz_path = Path(__file__).parent / "brain_xyz.png"
@@ -528,6 +531,22 @@ class DirectorySelector(QWidget):
         if directory:
             self.local_run_path = Path(directory)
             self.local_run_line_edit.setText(str(self.local_run_path))
+            is_gate, _ = utils.check_is_gate(self.local_run_path, move_if_gate=False)
+            if is_gate:
+                msg = QMessageBox(self)
+                msg.setIcon(QMessageBox.Question)
+                msg.setWindowTitle("Gate Folder Detected")
+                msg.setText("The selected folder appears to be a gate folder. Would you like to move it into a new run folder?")
+                msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+                result = msg.exec_()
+                if result == QMessageBox.Yes:
+                    # Move the gate folder
+                    _,run_path = utils.check_is_gate(self.local_run_path, move_if_gate=True)
+                    self.local_run_path = run_path
+                    self.local_run_line_edit.setText(str(self.local_run_path))
+                else:
+                    # Let user select another directory
+                    return self.select_local_run_path()
             self.get_session_info()
 
     def select_remote_archive_path(self):
@@ -556,17 +575,19 @@ class DirectorySelector(QWidget):
             self.remove_opto_artifact = False
 
     def get_gates(self):
-        gate_paths = list(self.local_run_path.glob("*_g[0-9]*"))
-        # order by gate number
-        gate_nums = [int(str(gate).split("_g")[-1]) for gate in gate_paths]
-        self.gate_paths = [x for _, x in sorted(zip(gate_nums, gate_paths))]
+        # Find all gate directories in the run directory and store them in sorted    
+        self.gate_paths = utils.get_gates(self.local_run_path)
         self.n_gates = len(self.gate_paths)
 
     def infer_num_probes(self):
         self.num_probes = 0
-        for gate in self.gate_paths:
-            probes = list(gate.glob("*imec*"))
-            self.num_probes = max(len(probes), self.num_probes)
+        ephys_files = glob_ephys_files(self.local_run_path)
+        unique_probes = set()
+        for efi in ephys_files:
+            if efi.get('ap'):
+                unique_probes.add(efi['label'].split('_')[-1])
+        self.num_probes = len(unique_probes)
+        
         # Update the spinbox value
         self.num_probes_spinbox.setValue(self.num_probes)
 

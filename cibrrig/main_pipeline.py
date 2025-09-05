@@ -40,6 +40,8 @@ import enum
 from cibrrig.sorting.export_to_alf import test_unit_refine_model_import
 from PyQt5.QtWidgets import QMessageBox
 import cibrrig.postprocess.synchronize_sorting_to_aux as sync_aux
+import cibrrig.utils.utils as utils
+import click
 
 
 class Status(enum.IntEnum):
@@ -48,7 +50,6 @@ class Status(enum.IntEnum):
     SPIKESORTED = 20
     CONCATENATED = 30
     SYNCHRONIZED = 40
-
 
 
 # TODO: Solve depth issue with insertions
@@ -94,16 +95,19 @@ def get_status(session):
     print(f"Status of {session}: {status}")
     return status
 
+
 def check_unit_refine():
     has_unit_refine = test_unit_refine_model_import()
     if not has_unit_refine:
         msg = QMessageBox()
         msg.setIcon(QMessageBox.Warning)
         msg.setWindowTitle("Unit Refine Model Not Found")
-        msg.setText("The unit refine model could not be imported. Model based unit labelling will be skipped.")
+        msg.setText(
+            "The unit refine model could not be imported. Model based unit labelling will be skipped."
+        )
         msg.setStandardButtons(QMessageBox.Ok)
         msg.exec_()
-        
+
 
 def main():
     """Main function to run the pipeline
@@ -119,8 +123,6 @@ def main():
     window = DirectorySelector()
     window.show()
     app.exec_()
-
-
 
     # After the GUI is closed, retrieve the selected paths
     (
@@ -201,8 +203,44 @@ def main():
         plot_probe_insertion(insertions, save_fn)
 
         # RUN BACKUP
-        backup.no_gui(local_run_path, remote_archive_path)
 
+    # RUN MAIN PIPELINE
+    run(
+        local_run_path,
+        remote_working_path,
+        remote_archive_path,
+        remove_opto_artifact,
+        run_ephysQC,
+    )
+
+
+def run(
+    local_run_path: Path,
+    remote_working_path: Path,
+    remote_archive_path: Path,
+    remove_opto_artifact: bool,
+    run_ephysQC: bool,
+):
+    """Run the main pipeline
+    1) Rename to ALF if not already
+    2) Preprocess each session
+    3) Spikesort each session
+    4) Move to working directory
+    5) Synchronize sorting to aux
+
+    Args:
+        local_run_path (Path): Path to the local run directory
+        remote_working_path (Path): Path to the remote working directory
+        remote_archive_path (Path): Path to the remote archive directory
+        remove_opto_artifact (bool): Whether to remove opto artifact during preprocessing
+        run_ephysQC (bool): Whether to run ephys QC during preprocessing
+    """
+    is_gate, local_run_path = utils.check_is_gate(local_run_path, move_if_gate=True)
+
+    gate_paths = utils.get_gates(local_run_path)
+    is_alf = check_is_alf(local_run_path, gate_paths)
+    if not is_alf:
+        backup.no_gui(local_run_path, remote_archive_path)
         # RUN RENAME
         ephys_data_to_alf.run(local_run_path)
 
@@ -228,7 +266,7 @@ def main():
             rec = Recording(session)
             rec.concatenate_session()
             set_status(session, Status.CONCATENATED)
-        
+
         # RUN SYNCHRONIZATION TO AUX
         if status < Status.SYNCHRONIZED:
             sync_aux.run_session(session)
@@ -238,5 +276,38 @@ def main():
     shutil.move(local_run_path, remote_working_path)
 
 
+@click.command()
+@click.argument("local_run_path", type=click.Path(exists=True))
+@click.argument("remote_working_path", type=click.Path())
+@click.argument("remote_archive_path", type=click.Path())
+@click.option("--remove_opto_artifact", "-O", is_flag=True, help= 'Remove opto artifact during preprocessing')
+@click.option("--run_ephysqc", "-Q", is_flag=True, help= 'Run ephys QC during preprocessing')
+def cli(local_run_path, remote_working_path, remote_archive_path, remove_opto_artifact=False, run_ephysqc=False):
+    """
+    Command line interface for running the main pipeline.
+
+    Args:
+        local_run_path (str): Path to the data source run directory. Typically on the local computer (NPX acquisition)
+        remote_working_path (str): Path to the remote working directory where uncompressed active data is stored
+        remote_archive_path (str): Path to the remote archive directory where compressed freezes are stored
+        remove_opto_artifact (bool): Whether to remove opto artifact during preprocessing
+        run_ephysQC (bool): Whether to run ephys QC during preprocessing
+    
+    Returns:
+        None
+    """
+    local_run_path = Path(local_run_path)
+    remote_working_path = Path(remote_working_path)
+    run(
+        local_run_path,
+        remote_working_path,
+        remote_archive_path,
+        remove_opto_artifact,
+        run_ephysqc
+    )
+
+
 if __name__ == "__main__":
-    main()
+    cli()
+
+#TODO: Preproc and spikesort from archived cbin

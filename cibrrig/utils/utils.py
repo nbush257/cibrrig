@@ -8,6 +8,8 @@ The functions are designed to be general-purpose with minimal dependencies on ot
 import numpy as np
 import pandas as pd
 import logging
+import re 
+import os
 
 logging.basicConfig()
 _log = logging.getLogger(__name__)
@@ -459,3 +461,41 @@ def get_good_spikes(spikes, clusters):
         spikes[k] = spikes[k][idx]
     return (spikes, cluster_ids)
 
+def get_gates(in_path):
+
+    gates = []
+    # guess that we will never have more than 99 gates. This is dirty, but works
+    gate_list_1 = list(in_path.glob("*_g[0-9]"))
+    gate_list_2 = list(in_path.glob("*_g[0-9][0-9]"))
+    gate_list_1.sort()
+    gate_list_2.sort()
+    gate_list = gate_list_1 + gate_list_2
+    for gate in gate_list:
+        gates.append(gate) if gate.is_dir() else None
+    
+    return gates
+
+def check_is_gate(in_path, move_if_gate=False):
+    '''
+    If the user inputs a gate directory not run (which is all gates for a given subject)
+    then create the run folder, move the gate folder into it, and return the new run folder path
+    '''
+    # use regex to check if path ends with "_g" or "g_dd"
+    is_gate = bool(re.search(r'_g\d{1,2}$', in_path.name))
+
+    if is_gate:
+        idx = in_path.name.rfind('_g')
+        run_name = in_path.name[:idx]
+        # Check if parent is run
+        if run_name == in_path.parent.name:
+            _log.info(f'The selected path {in_path} appears to be a gate directory, but the parent directory is already named {run_name}. Assuming the parent directory is the appropriate run directory. Running pipeline on {in_path.parent}')
+            return is_gate, in_path.parent
+        run_path = in_path.parent.joinpath(run_name)
+
+        if move_if_gate:
+            new_gate_path = run_path.joinpath(in_path.name)
+            run_path.mkdir(exist_ok=True)
+            os.rename(in_path, new_gate_path)
+        return is_gate, run_path
+    else:
+        return is_gate, in_path

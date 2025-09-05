@@ -27,6 +27,8 @@ dependencies = [
 backup = "cibrrig.archiving.backup:main"
 npx_preproc = "cibrrig.preprocess.preproc_pipeline:cli"
 npx_run_all = "cibrrig.main_pipeline:main"
+npx_run_all_no_gui = "cibrrig.main_pipeline:cli"
+
 ephys_to_alf = "cibrrig.archiving.ephys_data_to_alf:cli"
 spikesort = "cibrrig.sorting.spikeinterface_ks4:cli"
 convert_ks_to_alf = "cibrrig.postprocess.convert_ks_to_alf:main"
