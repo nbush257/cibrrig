@@ -253,7 +253,7 @@ def run_probe(
 
     if "resp_mod" in clusters.keys():
         _log.warning("Respiratory modulation already computed. Skipping")
-        return
+        return 0
     _log.info("Computing...")
     bins, rates, sems, theta, L_dir = compute_resp_mod(
         spike_times, spike_clusters, cluster_ids, breaths, t0, tf
@@ -388,6 +388,9 @@ def run_session(session_path, t0=None, tf=None, use_good=False, plot_tgl=True):
     _log.info(
         f"\nComputing respiratory modulation for {session_path}.\n\t{t0=}\n\t{tf=}\n\t{use_good=}"
     )
+    if not alfio.exists(session_path.joinpath("alf"), "breaths"):
+        _log.error(f"No extracted breaths data found at {session_path.joinpath('alf')}. Skipping session")
+        return -1
     breaths = alfio.load_object(session_path.joinpath("alf"), "breaths")
     xt, x = compute_dia_phase(breaths.on_sec, breaths.off_sec)
     probe_paths = list(session_path.joinpath("alf").glob("probe[0-9][0-9]"))
@@ -401,6 +404,7 @@ def run_session(session_path, t0=None, tf=None, use_good=False, plot_tgl=True):
             plot_tgl=plot_tgl,
             save_tgl=True,
         )
+    return 0
 
 
 @click.command()

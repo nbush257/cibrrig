@@ -42,6 +42,7 @@ from PyQt5.QtWidgets import QMessageBox
 import cibrrig.postprocess.synchronize_sorting_to_aux as sync_aux
 import cibrrig.utils.utils as utils
 import click
+from cibrrig.postprocess import extract_resp_modulation
 
 
 class Status(enum.IntEnum):
@@ -50,6 +51,7 @@ class Status(enum.IntEnum):
     SPIKESORTED = 20
     CONCATENATED = 30
     SYNCHRONIZED = 40
+    RESP_MOD_COMPUTED = 50
 
 
 # TODO: Solve depth issue with insertions
@@ -271,6 +273,15 @@ def run(
         if status < Status.SYNCHRONIZED:
             sync_aux.run_session(session)
             set_status(session, Status.SYNCHRONIZED)
+        
+        # RUN EXTRACT RESP MODULATION
+        if status < Status.RESP_MOD_COMPUTED:
+            rez = extract_resp_modulation.run_session(session)
+            if rez == 0:
+                print(f"Respiratory modulation computed for {session}")
+                set_status(session, Status.RESP_MOD_COMPUTED)
+            else:
+                print(f"Respiratory modulation not computed for {session}")
 
     # Move all data to RSS
     shutil.move(local_run_path, remote_working_path)
