@@ -213,6 +213,7 @@ def main():
         remote_archive_path,
         remove_opto_artifact,
         run_ephysQC,
+        compress_locally=True,  # Use new compressed archive workflow by default
     )
 
 
@@ -222,13 +223,16 @@ def run(
     remote_archive_path: Path,
     remove_opto_artifact: bool,
     run_ephysQC: bool,
+    compress_locally: bool = True,
 ):
     """Run the main pipeline
-    1) Rename to ALF if not already
-    2) Preprocess each session
-    3) Spikesort each session
-    4) Move to working directory
-    5) Synchronize sorting to aux
+    1) Compress data locally (if compress_locally=True)
+    2) Backup compressed data to archive
+    3) Rename to ALF if not already
+    4) Preprocess each session
+    5) Spikesort each session
+    6) Move to working directory
+    7) Synchronize sorting to aux
 
     Args:
         local_run_path (Path): Path to the local run directory
@@ -236,13 +240,15 @@ def run(
         remote_archive_path (Path): Path to the remote archive directory
         remove_opto_artifact (bool): Whether to remove opto artifact during preprocessing
         run_ephysQC (bool): Whether to run ephys QC during preprocessing
+        compress_locally (bool): Whether to compress data locally before backup. Defaults to True.
     """
     is_gate, local_run_path = utils.check_is_gate(local_run_path, move_if_gate=True)
 
     gate_paths = utils.get_gates(local_run_path)
     is_alf = check_is_alf(local_run_path, gate_paths)
     if not is_alf:
-        backup.no_gui(local_run_path, remote_archive_path)
+        # Pass compress_locally parameter to backup function
+        backup.no_gui(local_run_path, remote_archive_path, compress_locally=compress_locally)
         # RUN RENAME
         ephys_data_to_alf.run(local_run_path)
 
@@ -293,7 +299,8 @@ def run(
 @click.argument("remote_archive_path", type=click.Path())
 @click.option("--remove_opto_artifact", "-O", is_flag=True, help= 'Remove opto artifact during preprocessing')
 @click.option("--run_ephysqc", "-Q", is_flag=True, help= 'Run ephys QC during preprocessing')
-def cli(local_run_path, remote_working_path, remote_archive_path, remove_opto_artifact=False, run_ephysqc=False):
+@click.option("--no_local_compression", is_flag=True, help= 'Use legacy remote compression instead of local compression')
+def cli(local_run_path, remote_working_path, remote_archive_path, remove_opto_artifact=False, run_ephysqc=False, no_local_compression=False):
     """
     Command line interface for running the main pipeline.
 
@@ -303,6 +310,7 @@ def cli(local_run_path, remote_working_path, remote_archive_path, remove_opto_ar
         remote_archive_path (str): Path to the remote archive directory where compressed freezes are stored
         remove_opto_artifact (bool): Whether to remove opto artifact during preprocessing
         run_ephysQC (bool): Whether to run ephys QC during preprocessing
+        no_local_compression (bool): Whether to use legacy remote compression behavior
     
     Returns:
         None
@@ -314,11 +322,12 @@ def cli(local_run_path, remote_working_path, remote_archive_path, remove_opto_ar
         remote_working_path,
         remote_archive_path,
         remove_opto_artifact,
-        run_ephysqc
+        run_ephysqc,
+        compress_locally=not no_local_compression,
     )
 
 
 if __name__ == "__main__":
     cli()
 
-#TODO: Preproc and spikesort from archived cbin
+#TODO: Add tests for compressed archive workflow

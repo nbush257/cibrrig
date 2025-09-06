@@ -33,7 +33,7 @@ def get_ap_breaks_samps(ap_files):
     function returns [0, 110, 134].
 
     Args:
-        ap_files (list[Path]): List of paths to .ap.bin files.
+        ap_files (list[Path]): List of paths to .ap.bin or .ap.cbin files.
 
     Returns:
         numpy.ndarray: Cumulative sample lengths across recordings.
@@ -53,7 +53,7 @@ def sync_spikes(ap_files, spikes):
     negative times are set to zero.
 
     Args:
-        ap_files (list[Path]): List of paths to .ap.bin files.
+        ap_files (list[Path]): List of paths to .ap.bin or .ap.cbin files.
         spikes (AlfBunch): ALF object containing spike data.
 
     Returns:
@@ -101,7 +101,7 @@ def run_session(session_path):
             f"More than one path in {ephys_path} matches {probe_alf.name}"
         )
         raw_probe = raw_probe[0]
-        ap_files = list(raw_probe.rglob("*ap.bin"))
+        ap_files = list(raw_probe.rglob("*ap.bin")) + list(raw_probe.rglob("*ap.cbin"))
         _log.info(f"Found {len(ap_files)} ap files")
 
         # Adjust spike times to the NIDAQ clock

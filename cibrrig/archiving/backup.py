@@ -103,6 +103,44 @@ class Archiver:
         """Retrieve local electrophysiological files."""
         self.ephys_files_local = spikeglx.glob_ephys_files(self.run_path_source)
 
+    def compress_ephys_files_local(self):
+        """Compress local electrophysiological files before copying to archive."""
+        if self.ephys_files_local is None:
+            self.get_ephys_files_local()
+
+        def _run_compress(bin_file):
+            if bin_file is None:
+                return None
+            SR = spikeglx.Reader(bin_file)
+
+            if SR.is_mtscomp:
+                print(f"{bin_file.name} is already compressed")
+                return None
+
+            try:
+                SR.compress_file(keep_original=self.keep_raw)
+            except PermissionError:
+                if ~self.keep_raw:
+                    SR.close()
+                    import time
+
+                    time.sleep(1)
+                    bin_file.unlink()
+                    _log.warning(
+                        "Compression likely did not succeed in deleting. Deleting manually."
+                    )
+
+            print(f"Compressing {bin_file.name}")
+
+        for efi in self.ephys_files_local:
+            ap_file = efi.get("ap")
+            lf_file = efi.get("lf")
+            ni_file = efi.get("nidq")
+            # Not using the reader object because it currently does not support the commercial 2.0 4 shank (version 2013)
+            _run_compress(ap_file)
+            _run_compress(lf_file)
+            _run_compress(ni_file)
+
     def compress_ephys_files_remote(self):
         """Compress remote electrophysiological files."""
         if self.ephys_files_target is None:
@@ -244,6 +282,17 @@ class Archiver:
         self.compress_ephys_files_remote()
         self.compress_video_in_place()
         self.mark_backup()
+        
+    def full_archive_with_local_compression(self):
+        """ Chain all the methods to perform a full archive with local compression first"""
+        self.get_sessions_local()
+        self.compress_ephys_files_local()  # Compress locally first
+        self.make_rec_date_target()
+        self.copy_run_level_files()
+        self.copy_sessions()
+        # No need to compress remotely since files are already compressed
+        self.compress_video_in_place()
+        self.mark_backup()
 
 
 class RecordingInfoUI(QWidget):
@@ -361,7 +410,12 @@ class RecordingInfoUI(QWidget):
     is_flag=True,
     help="If passed does not remove the raw bin file after compression.",
 )
-def main(local_run_path, remote_subjects_path, keep_raw):
+@click.option(
+    "--no_local_compression", 
+    is_flag=True,
+    help="If passed, compresses files on remote server instead of locally (legacy behavior).",
+)
+def main(local_run_path, remote_subjects_path, keep_raw, no_local_compression):
     """
     Entry point for the backup process.
 
@@ -372,11 +426,12 @@ def main(local_run_path, remote_subjects_path, keep_raw):
         local_run_path (str): Path to the local recording session.
         remote_subjects_path (str): Path to the remote storage location.
         keep_raw (bool): Flag to indicate whether raw data should be kept after compression.
+        no_local_compression (bool): If True, use legacy remote compression behavior.
     """
     if local_run_path is None and remote_subjects_path is None:
         archive(keep_raw)
     elif local_run_path is not None and remote_subjects_path is not None:
-        no_gui(local_run_path, remote_subjects_path)
+        no_gui(local_run_path, remote_subjects_path, compress_locally=not no_local_compression)
     else:
         click.echo("Invalid number of arguments")
 
@@ -401,20 +456,24 @@ def archive(keep_raw):
     archiver.full_archive()
 
 
-def no_gui(local_run_path, remote_subjects_path):
+def no_gui(local_run_path, remote_subjects_path, compress_locally=True):
     """
     Run the backup process without a GUI, using command line arguments.
 
     Args:
         local_run_path (str): Path to the local recording session.
         remote_subjects_path (str): Path to the remote storage location.
+        compress_locally (bool): If True, compress files locally before copying. Defaults to True.
     """
     archiver = Archiver(keep_raw=False)
     archiver.run_path_source = Path(local_run_path)
     archiver.subjects_path_target = Path(remote_subjects_path)
     archiver.guess_subject_ID()
 
-    archiver.full_archive()
+    if compress_locally:
+        archiver.full_archive_with_local_compression()
+    else:
+        archiver.full_archive()
 
 
 if __name__ == "__main__":

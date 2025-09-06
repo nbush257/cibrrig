@@ -74,8 +74,8 @@ def rename_probe_folders(session_path):
     raw_ephys_folder = session_path.joinpath("raw_ephys_data")
     raw_ephys_folder.mkdir(exist_ok=True)
 
-    # First check if there are any imec data
-    ap_bin_files = list(session_path.rglob("*imec*.ap.bin"))
+    # First check if there are any imec data (either .bin or .cbin)
+    ap_bin_files = list(session_path.rglob("*imec*.ap.bin")) + list(session_path.rglob("*imec*.ap.cbin"))
     if len(ap_bin_files) == 0:
         _log.warning("No imec data found. Skipping probe renaming.")
         return 
