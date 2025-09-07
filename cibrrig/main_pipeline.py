@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
 )
 import os
 
-os.environ["OMP_NUM_THREADS"] = "1"
+# os.environ["OMP_NUM_THREADS"] = "1"
 from pathlib import Path
 import shutil
 import sys
@@ -109,6 +109,25 @@ def check_unit_refine():
         )
         msg.setStandardButtons(QMessageBox.Ok)
         msg.exec_()
+
+
+def setup_logging(local_run_path):
+    log_file = local_run_path.joinpath("cibrrig_pipeline.log")
+    file_handler = logging.FileHandler(log_file, mode="a")
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(name)s : %(message)s"
+)
+    file_handler.setFormatter(formatter)
+    _log = logging.getLogger()
+    _log.setLevel(logging.INFO)
+    # Remove all handlers associated with the root logger object (avoid duplicate logs)
+    for handler in _log.handlers[:]:
+        _log.removeHandler(handler)
+    _log.addHandler(file_handler)
+    # Add a handler to stdout
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    _log.addHandler(console_handler)
+    return _log
 
 
 def main():
@@ -242,14 +261,26 @@ def run(
         run_ephysQC (bool): Whether to run ephys QC during preprocessing
         compress_locally (bool): Whether to compress data locally before backup. Defaults to True.
     """
+    # Configure logging to a file handler for the session
+    _log = setup_logging(local_run_path)
+    _log.info(f"{local_run_path = }")
+    _log.info(f"{remote_working_path = }")
+    _log.info(f"{remote_archive_path = }")
+    _log.info(f"{remove_opto_artifact = }")
+    _log.info(f"{run_ephysQC = }")
+    _log.info("Starting pipeline")
+
     is_gate, local_run_path = utils.check_is_gate(local_run_path, move_if_gate=True)
 
     gate_paths = utils.get_gates(local_run_path)
     is_alf = check_is_alf(local_run_path, gate_paths)
     if not is_alf:
+        _log.debug("Not ALF Format")
+        _log.info(f"Backing up local data to {remote_archive_path}")
         # Pass compress_locally parameter to backup function
         backup.no_gui(local_run_path, remote_archive_path, compress_locally=compress_locally)
         # RUN RENAME
+        _log.info("Renaming to ALF format")
         ephys_data_to_alf.run(local_run_path)
 
     # Get all sessions
@@ -257,39 +288,47 @@ def run(
     sessions_paths.sort()
     skip_ephysQC = not run_ephysQC
     skip_remove_opto = not remove_opto_artifact
+    _log.debug(f"Found {len(sessions_paths)} sessions: {sessions_paths}")
     for session in sessions_paths:
         # RUN EXTRACT AND PREPROCESS
         status = get_status(session)
+        _log.debug(f"Session {session}: {status = }")
         if status < Status.PREPROC:
+            _log.info(f"Running preprocessing for {session}")
             preproc_pipeline.run(session, skip_ephysQC)
             set_status(session, Status.PREPROC)
 
         # RUN SPIKESORTING
         if status < Status.SPIKESORTED:
+            _log.info(f"Running spikesorting for {session}")
             spikeinterface_ks4.run(session, skip_remove_opto=skip_remove_opto)
             set_status(session, Status.SPIKESORTED)
 
         # RUN CONCATENATION
         if status < Status.CONCATENATED:
+            _log.info(f"Running concatenation for {session}")
             rec = Recording(session)
             rec.concatenate_session()
             set_status(session, Status.CONCATENATED)
 
         # RUN SYNCHRONIZATION TO AUX
         if status < Status.SYNCHRONIZED:
+            _log.info(f"Running synchronization to aux for {session}")
             sync_aux.run_session(session)
             set_status(session, Status.SYNCHRONIZED)
-        
+
         # RUN EXTRACT RESP MODULATION
         if status < Status.RESP_MOD_COMPUTED:
+            _log.info(f"Running respiratory modulation extraction for {session}")
             rez = extract_resp_modulation.run_session(session)
             if rez == 0:
-                print(f"Respiratory modulation computed for {session}")
+                _log.info(f"Respiratory modulation computed for {session}")
                 set_status(session, Status.RESP_MOD_COMPUTED)
             else:
-                print(f"Respiratory modulation not computed for {session}")
+                _log.warning(f"Respiratory modulation not computed for {session}")
 
     # Move all data to RSS
+    _log.info(f"Moving data to working directory {remote_working_path}")
     shutil.move(local_run_path, remote_working_path)
 
 
@@ -297,10 +336,23 @@ def run(
 @click.argument("local_run_path", type=click.Path(exists=True))
 @click.argument("remote_working_path", type=click.Path())
 @click.argument("remote_archive_path", type=click.Path())
-@click.option("--remove_opto_artifact", "-O", is_flag=True, help= 'Remove opto artifact during preprocessing')
-@click.option("--run_ephysqc", "-Q", is_flag=True, help= 'Run ephys QC during preprocessing')
+@click.option(
+    "--remove_opto_artifact",
+    "-O",
+    is_flag=True,
+    help="Remove opto artifact during preprocessing",
+)
+@click.option(
+    "--run_ephysqc", "-Q", is_flag=True, help="Run ephys QC during preprocessing"
+)
 @click.option("--no_local_compression", is_flag=True, help= 'Use legacy remote compression instead of local compression')
-def cli(local_run_path, remote_working_path, remote_archive_path, remove_opto_artifact=False, run_ephysqc=False, no_local_compression=False):
+def cli(
+    local_run_path,
+    remote_working_path,
+    remote_archive_path,
+    remove_opto_artifact=False,
+    run_ephysqc=False,
+    no_local_compression=False):
     """
     Command line interface for running the main pipeline.
 
@@ -311,12 +363,13 @@ def cli(local_run_path, remote_working_path, remote_archive_path, remove_opto_ar
         remove_opto_artifact (bool): Whether to remove opto artifact during preprocessing
         run_ephysQC (bool): Whether to run ephys QC during preprocessing
         no_local_compression (bool): Whether to use legacy remote compression behavior
-    
+
     Returns:
         None
     """
     local_run_path = Path(local_run_path)
     remote_working_path = Path(remote_working_path)
+    remote_archive_path = Path(remote_archive_path)
     run(
         local_run_path,
         remote_working_path,
@@ -330,4 +383,4 @@ def cli(local_run_path, remote_working_path, remote_archive_path, remove_opto_ar
 if __name__ == "__main__":
     cli()
 
-#TODO: Add tests for compressed archive workflow
+#TODO: Preproc and spikesort from archived cbin

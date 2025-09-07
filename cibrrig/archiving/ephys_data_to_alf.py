@@ -313,6 +313,8 @@ class Run:
         run_level_files = list(self.run_path.glob("*"))
         run_level_files = [x for x in run_level_files if x.is_file()]
         for fn in run_level_files:
+            if fn.name.endswith('.log'):
+                continue
             shutil.move(fn, dest)
 
 def run(run_path, skip_backup_check=False):
