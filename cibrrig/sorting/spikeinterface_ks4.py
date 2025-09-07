@@ -618,11 +618,6 @@ def run_probe(probe_src, probe_local, testing=False, skip_remove_opto=False):
     start_time = time.time()
 
 
-    # Add log file handler
-    fh = logging.FileHandler(probe_local.joinpath("spikeinterface_ks4.log"))
-    fh.setLevel(logging.DEBUG)
-    _log.addHandler(fh)
-
     # Set paths
     si_path = probe_local.joinpath(".si")
     # Temporary paths that will not be coming with us?
@@ -684,10 +679,13 @@ def run_probe(probe_src, probe_local, testing=False, skip_remove_opto=False):
         )
 
         # Remove kilosort handler
-        ks_log = logging.getLogger("kilosort")
-        for h in ks_log.handlers:
-            h.close()
-            ks_log.removeHandler(h)
+        try:
+            ks_log = logging.getLogger("kilosort")
+            for h in ks_log.handlers:
+                h.close()
+                ks_log.removeHandler(h)
+        except Exception as e:
+            _log.error(f"Could not remove kilosort log handlers: {e}")
     sort_rez = si.remove_duplicated_spikes(
         sort_rez, method="keep_first_iterative", censored_period_ms=0.166
     )
@@ -734,8 +732,6 @@ def run_probe(probe_src, probe_local, testing=False, skip_remove_opto=False):
     _log.info("Moving sorted data to alf folder")
     move_sorted_to_alf(exported_alf_path, probe_local)
 
-    # Close log file handler
-    fh.close()
 
     del sort_rez
     del analyzer
