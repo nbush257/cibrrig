@@ -69,7 +69,7 @@ class Recording:
         ), "Raw ephys data folder does not exist as expected"
         self.alf_path = self.session_path.joinpath("alf")
         assert self.alf_path.is_dir(), "Alf path does not exist as expected"
-        self.ni_fns = list(self.raw_ephys_path.glob("*nidq.bin"))
+        self.ni_fns = list(self.raw_ephys_path.glob("*nidq.bin")) + list(self.raw_ephys_path.glob("*nidq.cbin"))
         self.ni_fns.sort()
         self.n_recs = len(self.ni_fns)
         _log.info(

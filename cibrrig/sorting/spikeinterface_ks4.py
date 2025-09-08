@@ -532,12 +532,15 @@ def postprocess_sorting(analyzer_path, recording, sort_rez):
         spikeinterface.SortingAnalyzer: Postprocessed sorting analyzer object.
     """
     n_pca_jobs = N_JOBS if sys.platform == "linux" else 1
+    
+
+    
     # Create analyzer
     analyzer = si.create_sorting_analyzer(
         sorting=sort_rez,
         recording=recording,
         num_channels=12,
-        method="closest_channels",
+        method="best_channels",
     )
 
     # Compute extensions
@@ -689,6 +692,9 @@ def run_probe(probe_src, probe_local, testing=False, skip_remove_opto=False):
     sort_rez = si.remove_duplicated_spikes(
         sort_rez, method="keep_first_iterative", censored_period_ms=0.166
     )
+    spike_counts = sort_rez.count_num_spikes_per_unit()
+    keep_units = [k for k in spike_counts if spike_counts[k] > 500]
+    sort_rez = sort_rez.select_units(keep_units)
 
     _log.info("Finished sorting:")
     log_elapsed_time(start_time)
