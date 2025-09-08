@@ -39,7 +39,7 @@ def get_triggers(session_path):
     Returns:
         list: Sorted list of trigger strings found in the NIDQ files.
     """
-    ni_files = list(session_path.joinpath("raw_ephys_data").glob("*.nidq.bin"))
+    ni_files = list(session_path.joinpath("raw_ephys_data").glob("*.nidq.cbin"))
     trig_strings = [get_trig_string(x.stem) for x in ni_files]
     trig_strings.sort()
     return trig_strings
@@ -55,7 +55,7 @@ def get_trig_string(in_str):
     Returns:
         str: Extracted trigger string.
     """
-    trig_string = re.search("t\d{1,3}", in_str).group()
+    trig_string = re.search(r"t\d{1,3}", in_str).group()
     return trig_string
 
 

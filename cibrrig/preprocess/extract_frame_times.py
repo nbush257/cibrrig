@@ -118,7 +118,7 @@ def run_session(session_path):
     dest_path = session_path.joinpath("alf")
     dest_path.mkdir(exist_ok=True)
 
-    ni_list = list(session_path.glob("raw_ephys_data/*nidq.bin"))
+    ni_list = list(session_path.glob("raw_ephys_data/*nidq.*bin"))
     ni_list.sort()
     _log.info(f"NI LIST: {ni_list}")
 

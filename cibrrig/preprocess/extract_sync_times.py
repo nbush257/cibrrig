@@ -40,7 +40,7 @@ def sync2alf(session_path):
     dig_sync = {k: v for k, v in sync_map.items() if v<16}
 
     for trig in triggers:
-        ni_fn = list(raw_ephys_path.glob(f"*{trig}.nidq*.bin"))
+        ni_fn = list(raw_ephys_path.glob(f"*{trig}.nidq*.*bin"))
         assert (
             len(ni_fn)
         ) == 1, f"More than one NI file found. found {len(ni_fn)} files"
@@ -98,7 +98,7 @@ def run(session_path, debug=False, no_display=False):
     triggers = get_triggers(session_path)
     for trig in triggers:
         # Extract digital signals from the NI Stream
-        ni_fn = list(ephys_path.glob(f"*{trig}.nidq*.bin"))
+        ni_fn = list(ephys_path.glob(f"*{trig}.nidq*.*bin"))
         assert (
             len(ni_fn)
         ) == 1, f"More than one NI file found. found {len(ni_fn)} files"
