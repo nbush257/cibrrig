@@ -315,7 +315,7 @@ def run(session_path, v_in=9, inhale_pos=False, save_path=None, debug=False):
     save_path.mkdir(exist_ok=True)
     ephys_path = session_path.joinpath("raw_ephys_data")
     _log.debug(f"Looking for ephys in : {ephys_path}")
-    ni_fn_list = list(ephys_path.glob("*nidq.bin"))
+    ni_fn_list = list(ephys_path.glob("*nidq.*bin"))
     ni_fn_list.sort()
     _log.debug(f"Found Nidaq data: {ni_fn_list}")
 

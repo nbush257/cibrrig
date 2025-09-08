@@ -30,7 +30,7 @@ else:
     N_JOBS = 12
     CHUNK_DUR = "1s"
 
-MOTION_PRESET = "dredge"  # 'kilosort_like','dredge'
+MOTION_PRESET = "kilosort_like"  # 'kilosort_like','dredge'
 SCRATCH_NAME = f"SCRATCH_{MOTION_PRESET}"
 
 job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=N_JOBS, progress_bar=True)
@@ -631,8 +631,14 @@ def run_probe(probe_src, probe_local, testing=False, skip_remove_opto=False):
     exported_alf_path = si_path.joinpath("kilosort4")
     probe_local.mkdir(parents=True, exist_ok=True)
     #
-    stream = si.get_neo_streams("spikeglx", probe_src)[0][0]
-    recording = se.read_spikeglx(probe_src, stream_id=stream)
+    is_compressed = len(list(probe_src.glob('*ap.cbin')))>0
+    if not is_compressed:
+        stream = si.get_neo_streams("spikeglx", probe_src)[0][0]
+        recording = se.read_spikeglx(probe_src, stream_id=stream)
+    elif is_compressed:
+        recording = se.read_cbin_ibl(probe_src, stream_name='ap')
+    else:
+        raise ValueError(f'Could not find raw data for {probe_src}')
     session_path = probe_src.parent.parent
 
     # =========== #
@@ -666,7 +672,7 @@ def run_probe(probe_src, probe_local, testing=False, skip_remove_opto=False):
 
     if sort_path.exists():
         _log.info("Found sorting. Loading...")
-        sort_rez = si.load(sort_path)
+        sort_rez = si.read_sorter_folder(sort_path)
     else:
         _log.info(f"Running {SORTER}")
         # job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=1, progress_bar=True)

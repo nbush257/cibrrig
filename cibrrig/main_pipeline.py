@@ -384,4 +384,4 @@ def cli(
 if __name__ == "__main__":
     cli()
 
-# TODO: Add tests for compressed archive workflow
+# TODO: Preproc and spikesort from archived cbin
