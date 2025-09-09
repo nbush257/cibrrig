@@ -698,6 +698,8 @@ def run_probe(probe_src, probe_local, testing=False, skip_remove_opto=False):
     sort_rez = si.remove_duplicated_spikes(
         sort_rez, method="keep_first_iterative", censored_period_ms=0.166
     )
+
+    # Remove units with less than 500 spikes
     spike_counts = sort_rez.count_num_spikes_per_unit()
     keep_units = [k for k in spike_counts if spike_counts[k] > 500]
     sort_rez = sort_rez.select_units(keep_units)
