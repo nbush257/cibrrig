@@ -89,18 +89,22 @@ Main entry points can be run from anywhere as long as the package has been pip i
 `npx_preproc <session_path>` - Just performs preprocessing and extraction.\
 `ephys_to_alf <run_path>` - Rename the recorded data to alf format\
 `spikesort <session_path>` - run spikesorting\
-`convert_ks_to_alf <session_path> <sorter>` - convert sorted neural data from kilosort (i.e., phy) to ALF format. <sorter> is the name of the sorting folder. Likely `kilosort4`\
+`convert_ks_to_alf <session_path> <sorter>` - update ALF format after manual curation in phy. Use `--update-only` to only update from existing phy output, or `--export-only` for initial export only\
 `ephys_qc <session_path>` - Run IBL ephys qc and plots
 
 In practice, it is easiest to simply run `npx_run_all` after recording. Previously run steps will be skipped or appropriately overwritten. Some users have shortcuts to batch scripts that activate the virtual environment and run this.
 
 > [!NOTE]  
-This sorts the data, but does not convert the sorted data to `alf` format in case the user needs to do a manual curation in  `phy` first. Once the manual curation is done, the user needs to run: `postprocess.convert_ks_to_alf` on the session. This can be done easily with:
+The pipeline automatically exports spike sorting results to ALF format, but if you perform manual curation in `phy`, you need to update the ALF tables with your curation results. After completing manual curation in phy, update the ALF format with:
 >```
 >cd </path/to/session>
->convert_ks_to_alf ./ <sorter>
+>convert_ks_to_alf ./ <sorter> --update-only
 >```
->where `<sorter>` is the name of the sorting folder. Should be `kilosort4`
+>where `<sorter>` is the name of the sorting folder (typically `kilosort4`). This will:
+>- Copy phy curation results to ALF format
+>- Handle cluster merges and label changes
+>- Maintain cluster UUIDs for tracking changes
+>- Preserve compatibility with existing ALF workflows
 
 **Data structure**\
 We save data in a way consistent with the **O**pen **N**europhysiology **E**nvironment ([**ONE**](https://github.com/int-brain-lab/ONE))
@@ -212,4 +216,13 @@ Many of the above pipeline elements can be run independently by the code in `./p
 
 ---
 
-##### At this point, any manual curation of the spike sorting can be done in phy. Steps after this will "freeze" the spike sorting, so any changes to cluster assignment will require a recomputation
+##### Manual Curation in Phy
+At this point, manual curation of the spike sorting can be performed in phy:
+
+1. Navigate to your session directory: `cd /path/to/session`
+2. Launch phy: `phy template-gui kilosort4/params.py` 
+3. Curate clusters (label as 'good', 'mua', 'noise', merge clusters, add notes)
+4. Save and exit phy
+5. Update ALF format: `convert_ks_to_alf ./ kilosort4 --update-only`
+
+The `convert_ks_to_alf` script handles cluster merges, label changes, and maintains compatibility with existing ALF workflows without requiring datajoint.
