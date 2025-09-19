@@ -351,13 +351,15 @@ def run(
     "--run_ephysqc", "-Q", is_flag=True, help="Run ephys QC during preprocessing"
 )
 @click.option("--no_local_compression", is_flag=True, help= 'Use legacy remote compression instead of local compression')
+@click.option("--on_sasquatch", is_flag=True, help= 'Use to turn off backup to RSS which is unaccessible on sasquatch')
 def cli(
     local_run_path,
     remote_working_path,
     remote_archive_path,
     remove_opto_artifact=False,
     run_ephysqc=False,
-    no_local_compression=False):
+    no_local_compression=False,
+    on_sasquatch=False):
     """
     Command line interface for running the main pipeline.
 
@@ -382,6 +384,7 @@ def cli(
         remove_opto_artifact,
         run_ephysqc,
         compress_locally=not no_local_compression,
+        on_sasquatch=on_sasquatch
     )
 
 
