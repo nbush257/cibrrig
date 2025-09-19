@@ -243,6 +243,7 @@ def run(
     remove_opto_artifact: bool,
     run_ephysQC: bool,
     compress_locally: bool = True,
+    on_sasquatch: bool = False,
 ):
     """Run the main pipeline
     1) Compress data locally (if compress_locally=True)
@@ -277,9 +278,12 @@ def run(
     is_alf = check_is_alf(local_run_path, gate_paths)
     if not is_alf:
         _log.debug("Not ALF Format")
-        _log.info(f"Backing up local data to {remote_archive_path}")
         # Pass compress_locally parameter to backup function
-        backup.no_gui(local_run_path, remote_archive_path, compress_locally=compress_locally)
+        if not on_sasquatch:
+            _log.info(f"Backing up local data to {remote_archive_path}")
+            backup.no_gui(local_run_path, remote_archive_path, compress_locally=compress_locally)
+        else:
+            _log.info("Skipping backup since running on sasquatch")
         # RUN RENAME
         _log.info("Renaming to ALF format")
         ephys_data_to_alf.run(local_run_path)
