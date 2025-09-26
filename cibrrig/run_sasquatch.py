@@ -56,17 +56,17 @@ print('Backup complete Copying to sasquatch.')
 
 # ==========
 # Copy to sasquatch
-# process = subprocess.Popen(
-#     f"scp -r {LOCAL_RUN_PATH} {user}@login-1.hpc.childrens.sea.kids:{SASQUATCH_WORKING_DIR.as_posix()} ",
-#     shell=True,
-# )
-# stdout, stderr = process.communicate()
+process = subprocess.Popen(
+    f"scp -r {LOCAL_RUN_PATH} {user}@login-1.hpc.childrens.sea.kids:{SASQUATCH_WORKING_DIR.as_posix()} ",
+    shell=True,
+)
+stdout, stderr = process.communicate()
 
-# if process.returncode != 0:
-#     print(f"Error: SCP command failed with return code {process.returncode}")
-#     print(stdout.decode())
-#     print(stderr.decode())
-#     exit(process.returncode)
+if process.returncode != 0:
+    print(f"Error: SCP command failed with return code {process.returncode}")
+    print(stdout.decode())
+    print(stderr.decode())
+    exit(process.returncode)
 
 print('\n')
 print('='*20)
