@@ -52,7 +52,6 @@ def gen_sbatch_script(
     run_folder: Path,
     helens_dest: Path,
     baker_dest_rss: Path | None = None,
-    move_final_cmd="",
     opto_flag=True,
     QC_flag=True,
 ) -> str:
@@ -88,7 +87,6 @@ def gen_sbatch_script(
 
     source activate iblenv
     npx_run_all_no_gui {run_folder} {helens_dest} {baker_dest_rss} {opto_flag} {QC_flag}
-    {move_final_cmd}
     """
     return sbatch_script
 
@@ -182,6 +180,27 @@ def from_baker(
     opto_flag=True,
     QC_flag=True,
 ):
+    '''
+    Run the pipeline on sasquatch from data already on baker.
+    Must be run from the login node.
+
+    This script is accessed by the entry point `pipeline_hpc` after installing cibrrig in a conda environment.
+    e.g.:
+        pipeline_hpc m2025-01
+
+    Best practice is to create a tmux session on login node since you will move large files, activate iblenv, then run this 
+
+    Args:
+        subject (str): Subject name, e.g. 'm2025-01'
+        sasquatch_working_dir (Path, optional): Path to sasquatch working directory. Defaults to SASQUATCH_WORKING_DIR.
+        helens_dest (Path, optional): Path to Helen's destination directory. Defaults to HELENS_DEST.
+        opto_flag (bool, optional): Whether to remove opto artifact. Defaults to True.
+        QC_flag (bool, optional): Whether to run ephys QC. Defaults to True.
+    Raises:
+        FileNotFoundError: If the baker path does not exist.
+    
+
+    '''
     baker_path = BAKER_DEST_RSS.joinpath(subject)
     if not baker_path.exists():
         raise FileNotFoundError(f"Baker path {baker_path} does not exist.")
@@ -193,19 +212,10 @@ def from_baker(
     subprocess.run(rsync_cmd_baker_to_sasquatch, shell=True, check=True)
 
     # # Generate batch script
-    # rsync_cmd_sasquatch_to_helens = f"""
-    # rsync -avz {run_dir.as_posix()}/ {helens_dest.as_posix()}/
-    # rm -rf {run_dir.as_posix()}
-    # """
-    rsync_cmd_sasquatch_to_helens = (
-        f"rsync -avz {run_dir.as_posix()}/ {helens_dest.as_posix()}"
-    )
-
     batch_script = gen_sbatch_script(
         job_params,
         run_dir,
         HELENS_DEST,
-        move_final_cmd=rsync_cmd_sasquatch_to_helens,
         opto_flag=opto_flag,
         QC_flag=QC_flag,
     )
@@ -214,11 +224,20 @@ def from_baker(
         f.write(batch_script)
 
     # Submit job with sbatch
-    slurm_submit_cmd = f"cd {run_dir.as_posix()} && sbatch run_job.sh"
+    slurm_submit_cmd = f"cd {run_dir.as_posix()} && sbatch --wait run_job.sh"
     # subprocess.run(slurm_submit_cmd, shell=True, check=True)
 
-    time.sleep(2)  # wait for file to be written
-    os.remove(batch_fn)
+    # rsync from sasquatch to helens
+    rsync_cmd_sasquatch_to_helens = (
+        f"rsync -rzP --remove-source-files {run_dir.as_posix()}/ {helens_dest.as_posix()}"
+    )
+    subprocess.run(rsync_cmd_sasquatch_to_helens, shell=True, check=True)
+    
+    # Remove run dir    
+    # os.rmdir(run_dir)
+
+    # Remove batch script   
+    # os.remove(batch_fn)
 
 if __name__ == "__main__":
     main()
