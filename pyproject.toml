@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cibrrig"
-version = "0.9.0"
+version = "0.10.0"
 description = "Tools for data analysis and organization of Neuropixel data recorded on the CIBR rig at SCRI. Influenced by the IBL"
 readme = "readme.md"
 requires-python = ">=3.10"
@@ -28,6 +28,7 @@ backup = "cibrrig.archiving.backup:main"
 npx_preproc = "cibrrig.preprocess.preproc_pipeline:cli"
 npx_run_all = "cibrrig.main_pipeline:main"
 npx_run_all_no_gui = "cibrrig.main_pipeline:cli"
+pipeline_hpc = "cibrrig.run_sasquatch:from_baker"
 
 ephys_to_alf = "cibrrig.archiving.ephys_data_to_alf:cli"
 spikesort = "cibrrig.sorting.spikeinterface_ks4:cli"

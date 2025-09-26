@@ -239,11 +239,10 @@ def main():
 def run(
     local_run_path: Path,
     remote_working_path: Path,
-    remote_archive_path: Path,
+    remote_archive_path: Path|None,
     remove_opto_artifact: bool,
     run_ephysQC: bool,
     compress_locally: bool = True,
-    on_sasquatch: bool = False,
 ):
     """Run the main pipeline
     1) Compress data locally (if compress_locally=True)
@@ -279,7 +278,7 @@ def run(
     if not is_alf:
         _log.debug("Not ALF Format")
         # Pass compress_locally parameter to backup function
-        if not on_sasquatch:
+        if remote_archive_path is not None:
             _log.info(f"Backing up local data to {remote_archive_path}")
             backup.no_gui(local_run_path, remote_archive_path, compress_locally=compress_locally)
         else:
@@ -340,7 +339,7 @@ def run(
 @click.command()
 @click.argument("local_run_path", type=click.Path(exists=True))
 @click.argument("remote_working_path", type=click.Path())
-@click.argument("remote_archive_path", type=click.Path())
+@click.option("remote_archive_path", type=click.Path(), default=None)
 @click.option(
     "--remove_opto_artifact",
     "-O",

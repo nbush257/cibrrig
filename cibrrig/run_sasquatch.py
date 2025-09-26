@@ -19,109 +19,206 @@ import subprocess
 import os
 from cibrrig.archiving import backup
 import time
+import click
 
 # === SET UP PATHS ===
-LOCAL_RUN_PATH = Path(r"D:\Subjects\test_subject")
 SASQUATCH_WORKING_DIR = Path("/data/hps/assoc/private/medullary/data/sorting_dir")
 BAKER_DEST = Path(
     r"\\baker.childrens.sea.kids\archive\ramirez_j\ramirezlab\alf_data_repo\ramirez\Subjects"
 )
-BAKER_DEST_RSS = Path('/data/rss/baker/ramirez_j/ramirezlab/alf_data_repo/ramirez/Subjects')
-HELENS_DEST = Path("/data/rss/helens/ramirez_j/ramirezlab/alf_data_repo/ramirez/Subjects")
+BAKER_DEST_RSS = Path(
+    "/data/rss/baker/ramirez_j/ramirezlab/alf_data_repo/ramirez/Subjects"
+)
+HELENS_DEST = Path(
+    "/data/rss/helens/ramirez_j/ramirezlab/alf_data_repo/ramirez/Subjects"
+)
 
-assert LOCAL_RUN_PATH.exists()
 
 # As is, not the most resource efficient. Would be better to to  request fewer cpu when on GPU, vice versa.
-# === JOB PARAMS ===
-ASSOC = " gpu-medullary-sponsored"
-user = os.environ["USERNAME"]
-
-run_name = LOCAL_RUN_PATH.name
-run_folder = SASQUATCH_WORKING_DIR.joinpath(run_name)
-nodes = 1
-ntasks_per_node = 1
-cpus_per_task = 64
-gpus = 1
-partition = "gpu-core-sponsored"
-memory = "128G"
-walltime = "08:00:00"
+job_params = {
+    "nodes": 1,
+    "ntasks_per_node": 1,
+    "cpus_per_task": 64,
+    "gpus": 1,
+    "partition": "gpu-core-sponsored",
+    "memory": "128G",
+    "walltime": "08:00:00",
+    "association": " gpu-medullary-sponsored",
+}
 
 
-# ==========
-# Backup
-backup.no_gui(LOCAL_RUN_PATH, BAKER_DEST, compress_locally=True)
-print('\n')
-print('='*20)
-print('Backup complete Copying to sasquatch.')
+def gen_sbatch_script(
+    job_params: dict,
+    run_folder: Path,
+    helens_dest: Path,
+    baker_dest_rss: Path | None = None,
+    move_final_cmd="",
+    opto_flag=True,
+    QC_flag=True,
+) -> str:
+    """Generate SLURM batch script as a string.
 
-# ==========
-# Copy to sasquatch
-process = subprocess.Popen(
-    f"scp -r {LOCAL_RUN_PATH} {user}@login-1.hpc.childrens.sea.kids:{SASQUATCH_WORKING_DIR.as_posix()} ",
-    shell=True,
-)
-stdout, stderr = process.communicate()
+    Args:
+        job_params (dict): Dictionary containing job parameters.
+        run_folder (Path): Path to the run folder on the remote server.
+        helens_dest (Path): Path to the destination folder on Helen's server.
+        baker_dest_rss (Path): Path to the destination folder on Baker's RSS server.
 
-if process.returncode != 0:
-    print(f"Error: SCP command failed with return code {process.returncode}")
-    print(stdout.decode())
-    print(stderr.decode())
-    exit(process.returncode)
+    Returns:
+        str: SLURM batch script as a string.
+    """
 
-print('\n')
-print('='*20)
-print('Data copy complete')
+    baker_dest_rss = "" if baker_dest_rss is None else baker_dest_rss.as_posix()
+    helens_dest = helens_dest.as_posix()
+    runname = "npx_pipeline_" + run_folder.name
+    run_folder = run_folder.as_posix()
+    opto_flag = "-O" if opto_flag else ""
+    QC_flag = "-Q" if QC_flag else ""
 
+    sbatch_script = f"""#!/bin/bash
+    #SBATCH --nodes={job_params["nodes"]}
+    #SBATCH --ntasks-per-node={job_params["ntasks_per_node"]}
+    #SBATCH --cpus-per-task={job_params["cpus_per_task"]}
+    #SBATCH --gpus={job_params["gpus"]}
+    #SBATCH --mem={job_params["memory"]}
+    #SBATCH --time={job_params["walltime"]}
+    #SBATCH -A {job_params["association"]}
+    #SBATCH --partition={job_params["partition"]}
+    #SBATCH --job-name= {runname}
 
-batch_script = f"""#!/bin/bash
-#SBATCH --nodes={nodes}
-#SBATCH --ntasks-per-node={ntasks_per_node}
-#SBATCH --cpus-per-task={cpus_per_task}
-#SBATCH --gpus={gpus}
-#SBATCH --mem={memory}
-#SBATCH --time={walltime}
-#SBATCH -A {ASSOC}
-#SBATCH --partition={partition}
-
-source activate iblenv
-npx_run_all_no_gui {run_folder.as_posix()} {HELENS_DEST.as_posix()} {BAKER_DEST_RSS.as_posix()} -O -Q --on_sasquatch
-
-"""
-# Write batch script locally 
-with open("run_job.sh", "w", newline="\n") as f:
-    f.write(batch_script)
-time.sleep(0.1)
-
-# Copy batch script to remote run folder
-process = subprocess.Popen(
-    f"scp run_job.sh {user}@login-1.hpc.childrens.sea.kids:{run_folder.as_posix()} ",
-    shell=True,
-    stdout=subprocess.PIPE,
-    stderr=subprocess.PIPE,
-).communicate()
-print('\n')
-print('='*20)
-print('Copy sbatch file complete. Submitting SLURM job.')
+    source activate iblenv
+    npx_run_all_no_gui {run_folder} {helens_dest} {baker_dest_rss} {opto_flag} {QC_flag}
+    {move_final_cmd}
+    """
+    return sbatch_script
 
 
-# Submit job with sbatch
-ssh_cmd = f'ssh {user}@login-1.hpc.childrens.sea.kids "cd \\"{run_folder.as_posix()}\\" && sbatch run_job.sh"'
-process = subprocess.Popen(
-    ssh_cmd,
-    shell=True,
-    stdout=subprocess.PIPE,
-    stderr=subprocess.PIPE,
-)
+@click.group()
+def main():
+    pass
 
-stdout, stderr = process.communicate()
-if process.returncode != 0:
-    print(f"Error: SSH command failed with return code {process.returncode}")
-    print(stdout.decode())
-    print(stderr.decode())
-    exit(process.returncode)
-else:
-    print(stdout.decode())
-    print(stderr.decode())
-    print("SLURM job submitted successfully.")
-os.remove("run_job.sh")
-    
+@main.command()
+@click.argument("local_run_path", type=click.Path(exists=True))
+def from_NPX(
+    local_run_path,
+    sasquatch_working_dir=SASQUATCH_WORKING_DIR,
+    helens_dest=HELENS_DEST,
+    baker_dest_rss=BAKER_DEST_RSS,
+    opto_flag=True,
+    QC_flag=True,
+):
+    user = os.environ.get("USERNAME", os.environ.get("USER", None))
+    run_folder = SASQUATCH_WORKING_DIR.joinpath(local_run_path.name)
+    # ==========
+    # Backup
+    backup.no_gui(local_run_path, BAKER_DEST, compress_locally=True)
+    print("\n")
+    print("=" * 20)
+    print("Backup complete Copying to sasquatch.")
+
+    # ==========
+    # Copy to sasquatch
+    process = subprocess.Popen(
+        f"scp -r {local_run_path} {user}@login-1.hpc.childrens.sea.kids:{SASQUATCH_WORKING_DIR.as_posix()} ",
+        shell=True,
+    )
+    stdout, stderr = process.communicate()
+
+    if process.returncode != 0:
+        print(f"Error: SCP command failed with return code {process.returncode}")
+        print(stdout.decode())
+        print(stderr.decode())
+        exit(process.returncode)
+
+    print("\n")
+    print("=" * 20)
+    print("Data copy complete")
+
+    # Write batch script locally
+    batch_script = gen_sbatch_script(
+        job_params, run_folder, HELENS_DEST, BAKER_DEST_RSS
+    )
+    with open("run_job.sh", "w", newline="\n") as f:
+        f.write(batch_script)
+
+    # Copy batch script to remote run folder
+    process = subprocess.Popen(
+        f"scp run_job.sh {user}@login-1.hpc.childrens.sea.kids:{run_folder.as_posix()} ",
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ).communicate()
+    print("\n")
+    print("=" * 20)
+    print("Copy sbatch file complete. Submitting SLURM job.")
+
+    # Submit job with sbatch
+    ssh_cmd = f'ssh {user}@login-1.hpc.childrens.sea.kids "cd \\"{run_folder.as_posix()}\\" && sbatch run_job.sh"'
+    process = subprocess.Popen(
+        ssh_cmd,
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+    stdout, stderr = process.communicate()
+    if process.returncode != 0:
+        print(f"Error: SSH command failed with return code {process.returncode}")
+        print(stdout.decode())
+        print(stderr.decode())
+        exit(process.returncode)
+    else:
+        print(stdout.decode())
+        print(stderr.decode())
+        print("SLURM job submitted successfully.")
+    os.remove("run_job.sh")
+
+@main.command()
+@click.argument("subject", type=str)
+def from_baker(
+    subject,
+    sasquatch_working_dir=SASQUATCH_WORKING_DIR,
+    helens_dest=HELENS_DEST,
+    opto_flag=True,
+    QC_flag=True,
+):
+    baker_path = BAKER_DEST_RSS.joinpath(subject)
+    if not baker_path.exists():
+        raise FileNotFoundError(f"Baker path {baker_path} does not exist.")
+    # RSYNC FROM BAKER TO SASQUATCH
+    run_dir = sasquatch_working_dir.joinpath(baker_path.name)
+    rsync_cmd_baker_to_sasquatch = (
+        f"rsync -rzP {baker_path.as_posix()}/ {run_dir.as_posix()}/"
+    )
+    subprocess.run(rsync_cmd_baker_to_sasquatch, shell=True, check=True)
+
+    # # Generate batch script
+    # rsync_cmd_sasquatch_to_helens = f"""
+    # rsync -avz {run_dir.as_posix()}/ {helens_dest.as_posix()}/
+    # rm -rf {run_dir.as_posix()}
+    # """
+    rsync_cmd_sasquatch_to_helens = (
+        f"rsync -avz {run_dir.as_posix()}/ {helens_dest.as_posix()}"
+    )
+
+    batch_script = gen_sbatch_script(
+        job_params,
+        run_dir,
+        HELENS_DEST,
+        move_final_cmd=rsync_cmd_sasquatch_to_helens,
+        opto_flag=opto_flag,
+        QC_flag=QC_flag,
+    )
+    batch_fn = run_dir.joinpath("run_job.sh")
+    with open(batch_fn, "w", newline="\n") as f:
+        f.write(batch_script)
+
+    # Submit job with sbatch
+    slurm_submit_cmd = f"cd {run_dir.as_posix()} && sbatch run_job.sh"
+    # subprocess.run(slurm_submit_cmd, shell=True, check=True)
+
+    time.sleep(2)  # wait for file to be written
+    os.remove(batch_fn)
+
+if __name__ == "__main__":
+    main()
