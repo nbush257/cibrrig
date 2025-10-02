@@ -113,7 +113,7 @@ def run(session_path, debug=False, no_display=False):
         sync_nidq = get_sync_fronts(sync_nidq, sync_map["imec_sync"])
 
         # Extract sync from the IMEC Stream for all probes
-        probe_fns = list(ephys_path.rglob(f"*{trig}.imec*.ap.bin"))
+        probe_fns = list(ephys_path.rglob(f"*{trig}.imec*.ap.*bin"))
         for probe_fn in probe_fns:
             _log.info(f"Extracting sync from {probe_fn}")
             md = spikeglx.read_meta_data(probe_fn.with_suffix(".meta"))
