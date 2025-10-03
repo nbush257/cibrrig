@@ -534,34 +534,39 @@ def postprocess_sorting(analyzer_path, recording, sort_rez):
     n_pca_jobs = N_JOBS if sys.platform == "linux" else 1
     
 
-    
-    # Create analyzer
-    analyzer = si.create_sorting_analyzer(
-        sorting=sort_rez,
-        recording=recording,
+    raw_analyzer_fn = analyzer_path.with_suffix(".raw.zarr")
+    if not raw_analyzer_fn.exists():
+        # Create analyzer
+        analyzer = si.create_sorting_analyzer(
+            sorting=sort_rez,
+            recording=recording,
         num_channels=12,
         method="best_channels",
     )
 
-    # Compute extensions
-    analyzer.compute_several_extensions(EXTENSIONS)
+        # Compute extensions
+        analyzer.compute_several_extensions(EXTENSIONS)
 
-    # Remove redundant units
-    clean_sort_rez = si.remove_redundant_units(analyzer)
-    analyzer = analyzer.select_units(clean_sort_rez.unit_ids)
+        # Remove redundant units
+        clean_sort_rez = si.remove_redundant_units(analyzer)
+        analyzer = analyzer.select_units(clean_sort_rez.unit_ids)
 
-    # Compute PCs
+        # Compute PCs
 
-    analyzer.compute(
-        "principal_components",
-        n_components=3,
-        mode="by_channel_local",
-        n_jobs=n_pca_jobs,
-    )
-    analyzer.compute("quality_metrics")
+        analyzer.compute(
+            "principal_components",
+            n_components=3,
+            mode="by_channel_local",
+            n_jobs=n_pca_jobs,
+        )
+        analyzer.compute("quality_metrics")
 
-    # Stash the pre-merged analyzer
-    analyzer.save_as(folder=analyzer_path.with_suffix(".raw.zarr"), format="zarr")
+        # Stash the pre-merged analyzer
+        analyzer.save_as(folder=analyzer_path.with_suffix(".raw.zarr"), format="zarr")
+    else:
+        _log.info("Found raw analyzer. Loading...")
+        analyzer = si.load_sorting_analyzer(folder=raw_analyzer_fn)
+
 
     # Auto_merge units
     analyzer = si.auto_merge_units(
