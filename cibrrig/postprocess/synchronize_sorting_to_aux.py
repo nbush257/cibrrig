@@ -63,7 +63,7 @@ def sync_spikes(ap_files, spikes):
     rec_idx = np.searchsorted(breaks_samps, spikes.samples, side="right") - 1
     all_times_adj = []
     for ii, ap_file in enumerate(ap_files):
-        parts = alfio.files.filename_parts(ap_file.name)
+        parts = alfio.path.filename_parts(ap_file.name)
         sync_file = alfio.filter_by(ap_file.parent, object=parts[1], extra="sync")[0][0]
         sync_file = ap_file.parent.joinpath(sync_file)
         this_rec_times = spikes.times[rec_idx == ii]
@@ -110,10 +110,10 @@ def run_session(session_path):
 
         # Save adjusted and original spike times
         _log.info("Saving adjusted and old spike times")
-        times_old_fn = alfio.files.spec.to_alf(
+        times_old_fn = alfio.path.spec.to_alf(
             object="spikes", attribute="times", timescale="ephysClock", extension="npy"
         )
-        times_adj_fn = alfio.files.spec.to_alf(
+        times_adj_fn = alfio.path.spec.to_alf(
             object="spikes", attribute="times", extension="npy"
         )
         np.save(probe_alf.joinpath(times_old_fn), spikes.times)
