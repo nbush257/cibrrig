@@ -463,17 +463,9 @@ def get_good_spikes(spikes, clusters):
 
 def get_gates(in_path):
 
-    gates = []
-    # guess that we will never have more than 99 gates. This is dirty, but works
-    gate_list_1 = list(in_path.glob("*_g[0-9]"))
-    gate_list_2 = list(in_path.glob("*_g[0-9][0-9]"))
-    gate_list_1.sort()
-    gate_list_2.sort()
-    gate_list = gate_list_1 + gate_list_2
-    for gate in gate_list:
-        gates.append(gate) if gate.is_dir() else None
-    
-    return gates
+    # Find all subdirectories matching the gate naming convention (_g followed by 1 or 2 digits)
+    gate_list = [p for p in in_path.rglob("*") if p.is_dir() and re.search(r"_g\d{1,2}$", p.name)]
+    return gate_list
 
 def check_is_gate(in_path, move_if_gate=False):
     '''

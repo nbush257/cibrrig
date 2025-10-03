@@ -42,15 +42,15 @@ job_params = {
     "gpus": 1,
     "partition": "gpu-core-sponsored",
     "memory": "128G",
-    "walltime": "08:00:00",
-    "association": " gpu-medullary-sponsored",
+    "walltime": "24:00:00",
+    "association": "gpu-medullary-sponsored",
 }
 
 
 def gen_sbatch_script(
     job_params: dict,
     run_folder: Path,
-    helens_dest: Path,
+    helens_dest: Path | None = None,
     baker_dest_rss: Path | None = None,
     opto_flag=True,
     QC_flag=True,
@@ -68,25 +68,25 @@ def gen_sbatch_script(
     """
 
     baker_dest_rss = "" if baker_dest_rss is None else baker_dest_rss.as_posix()
-    helens_dest = helens_dest.as_posix()
+    helens_dest = "" if helens_dest is None else helens_dest.as_posix()
     runname = "npx_pipeline_" + run_folder.name
     run_folder = run_folder.as_posix()
     opto_flag = "-O" if opto_flag else ""
     QC_flag = "-Q" if QC_flag else ""
 
     sbatch_script = f"""#!/bin/bash
-    #SBATCH --nodes={job_params["nodes"]}
-    #SBATCH --ntasks-per-node={job_params["ntasks_per_node"]}
-    #SBATCH --cpus-per-task={job_params["cpus_per_task"]}
-    #SBATCH --gpus={job_params["gpus"]}
-    #SBATCH --mem={job_params["memory"]}
-    #SBATCH --time={job_params["walltime"]}
-    #SBATCH -A {job_params["association"]}
-    #SBATCH --partition={job_params["partition"]}
-    #SBATCH --job-name= {runname}
+#SBATCH --nodes={job_params["nodes"]}
+#SBATCH --ntasks-per-node={job_params["ntasks_per_node"]}
+#SBATCH --cpus-per-task={job_params["cpus_per_task"]}
+#SBATCH --gpus={job_params["gpus"]}
+#SBATCH --mem={job_params["memory"]}
+#SBATCH --time={job_params["walltime"]}
+#SBATCH --account={job_params["association"]}
+#SBATCH --partition={job_params["partition"]}
+#SBATCH --job-name={runname}
 
-    source activate iblenv
-    npx_run_all_no_gui {run_folder} {helens_dest} {baker_dest_rss} {opto_flag} {QC_flag}
+source activate iblenv
+npx_run_all_no_gui {run_folder} {helens_dest} {baker_dest_rss} {opto_flag} {QC_flag}
     """
     return sbatch_script
 
@@ -105,6 +105,22 @@ def from_NPX(
     opto_flag=True,
     QC_flag=True,
 ):
+    """ Run the pipeline on sasquatch from the acquisition computer using SSH commands
+
+    Args:
+        local_run_path (Path): Path to the local run directory.
+        sasquatch_working_dir (Path, optional): Path to sasquatch working directory. Defaults to SASQUATCH_WORKING_DIR.
+        helens_dest (Path, optional): Path to Helen's destination directory. Defaults to HELENS_DEST.
+        baker_dest_rss (Path, optional): Path to Baker's RSS destination directory. Defaults to BAKER_DEST_RSS.
+        opto_flag (bool, optional): Whether to remove opto artifact. Defaults to True.
+        QC_flag (bool, optional): Whether to run ephys QC. Defaults to True.
+
+    Returns:
+        None
+        
+    Raises:
+        FileNotFoundError: If the local run path does not exist.
+    """
     user = os.environ.get("USERNAME", os.environ.get("USER", None))
     run_folder = SASQUATCH_WORKING_DIR.joinpath(local_run_path.name)
     # ==========
@@ -172,13 +188,17 @@ def from_NPX(
     os.remove("run_job.sh")
 
 @main.command()
-@click.argument("subject", type=str)
+@click.argument("run_src", type=click.Path(exists=True))
+@click.option("--sasquatch_working_dir", type=click.Path(), default=SASQUATCH_WORKING_DIR, help="Path to sasquatch working directory where sorting will occur.")
+@click.option("--helens_dest", type=click.Path(), default=HELENS_DEST, help="Path to Helens directory where data will be moved after sorting.")
+@click.option("--opto/--no-opto", default=True, help="Whether to remove opto artifact.")
+@click.option("--qc/--no-qc", default=True, help="Whether to run ephys QC.")
 def from_baker(
-    subject,
+    run_src,
     sasquatch_working_dir=SASQUATCH_WORKING_DIR,
     helens_dest=HELENS_DEST,
-    opto_flag=True,
-    QC_flag=True,
+    opto=True,
+    qc=True,
 ):
     '''
     Run the pipeline on sasquatch from data already on baker.
@@ -186,12 +206,12 @@ def from_baker(
 
     This script is accessed by the entry point `pipeline_hpc` after installing cibrrig in a conda environment.
     e.g.:
-        pipeline_hpc m2025-01
+        pipeline_hpc /data/rss/baker/ramirez_j/ramirezlab/alf_data_repo/ramirez/Subjects/m2025-01
 
     Best practice is to create a tmux session on login node since you will move large files, activate iblenv, then run this 
 
     Args:
-        subject (str): Subject name, e.g. 'm2025-01'
+        run_src (str): Source run path, e.g. '/data/rss/baker/ramirez_j/ramirezlab/alf_data_repo/ramirez/Subjects/m2025-01'
         sasquatch_working_dir (Path, optional): Path to sasquatch working directory. Defaults to SASQUATCH_WORKING_DIR.
         helens_dest (Path, optional): Path to Helen's destination directory. Defaults to HELENS_DEST.
         opto_flag (bool, optional): Whether to remove opto artifact. Defaults to True.
@@ -201,36 +221,37 @@ def from_baker(
     
 
     '''
-    baker_path = BAKER_DEST_RSS.joinpath(subject)
-    if not baker_path.exists():
-        raise FileNotFoundError(f"Baker path {baker_path} does not exist.")
+    run_src = Path(run_src)
+    if not run_src.exists():
+        raise FileNotFoundError(f"Run path {run_src} does not exist.")
     # RSYNC FROM BAKER TO SASQUATCH
-    run_dir = sasquatch_working_dir.joinpath(baker_path.name)
+    temp_dir = sasquatch_working_dir.joinpath(run_src.name)
     rsync_cmd_baker_to_sasquatch = (
-        f"rsync -rzP {baker_path.as_posix()}/ {run_dir.as_posix()}/"
+        f"rsync -rzP {run_src.as_posix()}/ {temp_dir.as_posix()}/"
     )
     subprocess.run(rsync_cmd_baker_to_sasquatch, shell=True, check=True)
 
-    # # Generate batch script
+    # Generate batch script
+    print('Generating batch script')
     batch_script = gen_sbatch_script(
         job_params,
-        run_dir,
-        HELENS_DEST,
-        opto_flag=opto_flag,
-        QC_flag=QC_flag,
+        temp_dir,
+        opto_flag=opto,
+        QC_flag=qc,
     )
-    batch_fn = run_dir.joinpath("run_job.sh")
+    batch_fn = temp_dir.joinpath("run_job.sh")
     with open(batch_fn, "w", newline="\n") as f:
         f.write(batch_script)
 
     # Submit job with sbatch
-    slurm_submit_cmd = f"cd {run_dir.as_posix()} && sbatch --wait run_job.sh"
-    # subprocess.run(slurm_submit_cmd, shell=True, check=True)
+    slurm_submit_cmd = f"cd {temp_dir.as_posix()} && sbatch --wait run_job.sh"
+    subprocess.run(slurm_submit_cmd, shell=True, check=True)
 
     # rsync from sasquatch to helens
     rsync_cmd_sasquatch_to_helens = (
-        f"rsync -rzP --remove-source-files {run_dir.as_posix()}/ {helens_dest.as_posix()}"
+        f"rsync -rzP --remove-source-files {temp_dir.as_posix()} {helens_dest.as_posix()}"
     )
+
     subprocess.run(rsync_cmd_sasquatch_to_helens, shell=True, check=True)
     
     # Remove run dir    
