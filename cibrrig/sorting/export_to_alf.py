@@ -95,10 +95,35 @@ class ALFExporter:
         self.sparse_templates = self.used_sparsity.sparsify_templates(
             self.templates.get_data()
         )
-        self.channel_indices = np.vstack(
-            [x for x in self.used_sparsity.unit_id_to_channel_indices.values()]
-        )
+        self.get_channel_indices()
         self.get_lfp_recording()
+
+    def get_channel_indices(self):
+        """
+        Get the channel indices for each unit.
+        """
+        n_chans = self.used_sparsity.max_num_active_channels
+        used_channels = self.analyzer.channel_ids_to_indices(self.analyzer.channel_ids)
+        channel_list = []
+        
+        for x in self.used_sparsity.unit_id_to_channel_indices.values():
+            n_chans_missing = n_chans - len(x)
+            if n_chans_missing > 0:
+                min_chan = min(x)
+                max_chan = max(x)
+                if (min_chan-n_chans_missing) >=0:
+                    append_chans = np.arange(min_chan-n_chans_missing, min_chan)
+                else:
+                    append_chans = np.arange(max_chan+1, max_chan+1+n_chans_missing)
+                x = np.concatenate((x, append_chans))
+            assert len(x) == n_chans, f"Channel indices length mismatch for unit {x}"
+            channel_list.append(x)
+        channel_indices = np.vstack(channel_list)
+        
+        assert np.unique(channel_indices) in used_channels, "Channel indices contain invalid channels."
+        assert channel_indices.shape[1] == n_chans, "Channel indices shape mismatch."
+            
+        self.channel_indices = channel_indices
 
     def get_lfp_recording(self):
         """
