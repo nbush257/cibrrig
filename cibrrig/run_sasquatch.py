@@ -91,6 +91,20 @@ npx_run_all_no_gui {run_folder} {helens_dest} {baker_dest_rss} {opto_flag} {QC_f
     return sbatch_script
 
 
+def remove_empty_folders(root_dir):
+    print(f"Removing empty folders in {root_dir.as_posix()}")
+    for path, dirs, files in os.walk(root_dir, topdown=False):
+        # Iterate from the deepest directories first (topdown=False)
+        for name in dirs:
+            dir_path = os.path.join(path, name)
+            if not os.listdir(dir_path):  # Check if the directory is empty
+                try:
+                    os.rmdir(dir_path)
+                    print(f"Removed empty directory: {dir_path}")
+                except OSError as e:
+                    print(f"Error removing {dir_path}: {e}")
+    os.rmdir(root_dir)
+
 @click.group()
 def main():
     pass
@@ -254,11 +268,9 @@ def from_baker(
 
     subprocess.run(rsync_cmd_sasquatch_to_helens, shell=True, check=True)
     
-    # Remove run dir    
-    # os.rmdir(run_dir)
+    # Remove temp dir on sasquatch
+    remove_empty_folders(temp_dir)
 
-    # Remove batch script   
-    # os.remove(batch_fn)
 
 if __name__ == "__main__":
     main()
