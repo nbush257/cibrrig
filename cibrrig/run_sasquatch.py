@@ -267,7 +267,7 @@ def from_baker(
     rsync_cmd_src_to_sasquatch = (
         f"rsync -rzP {run_src.as_posix()}/ {temp_dir.as_posix()}/"
     )
-    # subprocess.run(rsync_cmd_src_to_sasquatch, shell=True, check=True)
+    subprocess.run(rsync_cmd_src_to_sasquatch, shell=True, check=True)
 
     # ============== #
     # Generate batch script
