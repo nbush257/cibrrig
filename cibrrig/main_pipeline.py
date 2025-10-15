@@ -109,10 +109,10 @@ def check_data_organization(in_path):
     """
 
     is_alf = next(in_path.glob('*/*/raw_ephys_data'),False)
-    is_raw = next(in_path.glob(in_path.name+'_g*'),False)
-    is_archived = next(in_path.glob(f'*/{in_path.name}_g*'),False) 
+    is_archived = any(re.match(r"\d{4}-\d{2}-\d{2}", subdir.name) for subdir in in_path.iterdir() if subdir.is_dir())
+    is_raw = any(re.match(fr"{in_path.name}_g\d+", subdir.name) for subdir in in_path.iterdir() if subdir.is_dir())
 
-    assert sum([bool(is_alf), bool(is_raw), bool(is_archived)]) <= 1, "Unable to unequivocally determine data organization"
+    # assert sum([bool(is_alf), bool(is_raw), bool(is_archived)]) <= 1, "Unable to unequivocally determine data organization"
     if is_alf:
         return DataOrganization.ALF
     elif is_raw:
@@ -328,14 +328,18 @@ def run(
     _log.info(f'{data_organization = }')
     if data_organization == DataOrganization.RAW:
         # Pass compress_locally parameter to backup function
+        skip_backup_check = False
         if remote_archive_path is not None:
             _log.info(f"Backing up local data to {remote_archive_path}")
             backup.no_gui(local_run_path, remote_archive_path, compress_locally=compress_locally)
         else:
             _log.info("Skipping backup since running on sasquatch")
+            skip_backup_check  = True
+
         # RUN RENAME
         _log.info("Renaming to ALF format")
-        ephys_data_to_alf.run(local_run_path)
+
+        ephys_data_to_alf.run(local_run_path, skip_backup_check=skip_backup_check)
     elif data_organization == DataOrganization.ARCHIVED:
         date_dirs = [x for x in local_run_path.iterdir() if x.is_dir()]
         # if len(date_dirs)>1:
@@ -416,7 +420,8 @@ def cli(
     remote_archive_path=None,
     remove_opto_artifact=False,
     run_ephysqc=False,
-    no_local_compression=False):
+    no_local_compression=False,
+    ):
     """
     Command line interface for running the main pipeline.
 

@@ -30,7 +30,7 @@ else:
     N_JOBS = 12
     CHUNK_DUR = "1s"
 
-MOTION_PRESET = "kilosort_like"  # 'kilosort_like','dredge'
+MOTION_PRESET = "dredge"  # 'kilosort_like','dredge'
 SCRATCH_NAME = f"SCRATCH_{MOTION_PRESET}"
 
 job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=N_JOBS, progress_bar=True)

@@ -86,10 +86,34 @@ def gen_sbatch_script(
 #SBATCH --job-name={runname}
 
 source activate iblenv
-npx_run_all_no_gui {run_folder} {helens_dest} {baker_dest_rss} {opto_flag} {QC_flag}
+npx_run_all_no_gui {run_folder} {helens_dest} {baker_dest_rss} {opto_flag} {QC_flag} 
     """
     return sbatch_script
 
+def gen_tarball_script(run_folder: Path) -> str:
+    """Generate SLURM batch script as a string.
+
+    Args:
+        run_folder (Path): Path to the run folder on the remote server.
+    Returns:
+        str: SLURM batch script as a string.
+    """
+    runname = "tarball_spikeinterface_" + run_folder.name
+    run_folder = run_folder.as_posix()
+
+    sbatch_script = f"""#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=32G   
+#SBATCH --time=12:00:00
+#SBATCH --account=cpu-medullary-sponsored
+#SBATCH --partition=cpu-core-sponsored
+#SBATCH --job-name={runname}_tarball
+source activate iblenv
+tarball_spikeinterface {run_folder}
+    """
+    return sbatch_script
 
 def remove_empty_folders(root_dir):
     print(f"Removing empty folders in {root_dir.as_posix()}")
@@ -238,13 +262,14 @@ def from_baker(
     run_src = Path(run_src)
     if not run_src.exists():
         raise FileNotFoundError(f"Run path {run_src} does not exist.")
-    # RSYNC FROM BAKER TO SASQUATCH
+    # RSYNC FROM SRC TO SASQUATCH
     temp_dir = sasquatch_working_dir.joinpath(run_src.name)
-    rsync_cmd_baker_to_sasquatch = (
+    rsync_cmd_src_to_sasquatch = (
         f"rsync -rzP {run_src.as_posix()}/ {temp_dir.as_posix()}/"
     )
-    subprocess.run(rsync_cmd_baker_to_sasquatch, shell=True, check=True)
+    # subprocess.run(rsync_cmd_src_to_sasquatch, shell=True, check=True)
 
+    # ============== #
     # Generate batch script
     print('Generating batch script')
     batch_script = gen_sbatch_script(
@@ -257,10 +282,27 @@ def from_baker(
     with open(batch_fn, "w", newline="\n") as f:
         f.write(batch_script)
 
+    # ============== #
     # Submit job with sbatch
     slurm_submit_cmd = f"cd {temp_dir.as_posix()} && sbatch --wait run_job.sh"
-    subprocess.run(slurm_submit_cmd, shell=True, check=True)
+    result = subprocess.run(slurm_submit_cmd, shell=True)
+    if result.returncode != 0:
+        print(f"Error: SLURM job submission failed with return code {result.returncode}")
+        exit(result.returncode)
 
+    # ============== #
+    # Perform tarballing on sasquatch
+    tarball_script = gen_tarball_script(temp_dir)
+    tarball_fn = temp_dir.joinpath("tarball_job.sh")
+    with open(tarball_fn, "w", newline="\n") as f:
+        f.write(tarball_script)
+    tarball_submit_cmd = f"cd {temp_dir.as_posix()} && sbatch --wait tarball_job.sh"
+    result = subprocess.run(tarball_submit_cmd, shell=True, check=True)
+    if result.returncode != 0:
+        print(f"Error: Tarball job submission failed with return code {result.returncode}")
+        exit(result.returncode)
+    
+    # ============== #
     # rsync from sasquatch to helens
     rsync_cmd_sasquatch_to_helens = (
         f"rsync -rzP --remove-source-files {temp_dir.as_posix()} {helens_dest.as_posix()}"
