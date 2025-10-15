@@ -119,8 +119,8 @@ class ALFExporter:
             assert len(x) == n_chans, f"Channel indices length mismatch for unit {x}"
             channel_list.append(x)
         channel_indices = np.vstack(channel_list)
-        
-        assert np.unique(channel_indices) in used_channels, "Channel indices contain invalid channels."
+
+        assert np.all(np.isin(np.unique(channel_indices), used_channels)), "Channel indices contain invalid channels."
         assert channel_indices.shape[1] == n_chans, "Channel indices shape mismatch."
             
         self.channel_indices = channel_indices
