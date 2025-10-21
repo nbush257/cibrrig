@@ -27,7 +27,7 @@ The log file is a `.tsv` file with the name `_cibrrig_<run_name>.g<x>.t<x>.tsv`.
 ## Installation
 Create a virtual environment using mamba/conda.
 >[!WARNING]
->If on SCRI networks it is critically important to specify the python version here. This circumvents the SSL issue we have been running into. BE SURE YOU HAVE MODIFIED YOUR .condarc file (in `C:/Users/<user>`) appropriately 😉
+>If on SCRI networks it is critically important to specify the python version here. This circumvents the SSL issue we have been running into. BE SURE YOU HAVE MODIFIED YOUR .condarc file (in `C:/Users/<user>`) appropriately 
 
 ```
 mamba create -n cibrrig python=3.12
@@ -53,8 +53,10 @@ Then change directory to a place to install cibrrig locally.
 >(note the period)
 > **Once your virtual (mamba/conda) environment has been set up, `git pull` in the cibrrig directory will update `cibrrig` so you do not have to redo the pip install**
 
-Then, install phy:
-`pip install git+https://github.com/cortex-lab/phy.git`
+>[!WARNING]
+>To do manual spike curation, you will need to install `phy` into a seperate conda/mamba environment due to some dependency issues at the moment
+> See: https://github.com/cortex-lab/phy
+
 
 
 Then, make sure the GPU is working for Kilosort (See [kilosort install instructions](https://github.com/MouseLand/Kilosort) steps 7 and 8):
@@ -72,37 +74,61 @@ These include:
  - SALT ([Kvitsiani et al. 2013](https://www.nature.com/articles/nature12176))
 
 --- 
-## Quick start and Data structure 
+## :exclamation: Quick start and Data structure 
 
-**Quickstart** - From recording to data in two lines
-First, make sure helens and baker are mapped on your computer. You can modify the path in the GUI if your mapped drives do not match the defaults
-```
-mamba activate cibrrig
-npx_run_all
-```
+### From local computer :computer:
+> :warning: This performs all processing on the local computer and ties up the resources. This workflow can get backed up if things go sideways.
+
+> If you have recorded a dataset on the NPX computer you can simply open a command prompt and run:
+>```
+>mamba activate cibrrig
+>npx_run_all
+>```
+> This will open a GUI that prompts you to choose some options and point to where you want thie files saved.
+
+### From sasquatch (HPC) :monkey:
+> :warning: Performing the computation on sasquatch keeps the acquisition rig cleaner
+>**First**, compress and backup the dataset with:
+>```
+>mamba activate cibrrig
+>backup </local/run/path> <baker/path>
+>```
+>Example:
+>```
+>backup D:/Subjects/mickey_mouse \\baker.childrens.sea.kids/archive/ramirez_j/ramirezlab/alf_data_repo/ramirez/Subjects
+>```
+>**Second**, sing on to a sasquatch login node and run:
+>```
+>mamba activate iblenv
+> pipeline_hpc </baker/path> --no-qc
+>```
+>N.B. This rsyncs the data to the sasquatch drive, submits SLURM jobs on sasquatch nodes, then moves the data to the ramirezlab alf repository.
+
+>[!NOTE]
+> There is incomplete code to run the pipeline via a series of SSH commands (`run_sasquatch.from_NPX`), but is not finished. 
+
+
+
 
 ### Details:
 
-Main entry points can be run from anywhere as long as the package has been pip installed\
+Main entry points can be run from anywhere as long as the package has been pip installed
+#### :arrow_right:Pipelines (Commands involved in end to end processing)
 `npx_run_all` -  Opens a GUI to performs backup, preprocess, and spikesorting\
-`backup` - Just performs backup\
+`backup <local_run_path> <remote_subjects_path>` - Just performs backup\
+`pipeline_hpc <run_path>` - Copy from run path to sasquatch tempdir, run pipeline, move to ramirezlab alf repo
+#### Modules (Parts of the pipeline that can be run separately if needed)
 `npx_preproc <session_path>` - Just performs preprocessing and extraction.\
 `ephys_to_alf <run_path>` - Rename the recorded data to alf format\
 `spikesort <session_path>` - run spikesorting\
 `convert_ks_to_alf <session_path> <sorter>` - convert sorted neural data from kilosort (i.e., phy) to ALF format. <sorter> is the name of the sorting folder. Likely `kilosort4`\
 `ephys_qc <session_path>` - Run IBL ephys qc and plots
 
+
 In practice, it is easiest to simply run `npx_run_all` after recording. Previously run steps will be skipped or appropriately overwritten. Some users have shortcuts to batch scripts that activate the virtual environment and run this.
 
-> [!NOTE]  
-This sorts the data, but does not convert the sorted data to `alf` format in case the user needs to do a manual curation in  `phy` first. Once the manual curation is done, the user needs to run: `postprocess.convert_ks_to_alf` on the session. This can be done easily with:
->```
->cd </path/to/session>
->convert_ks_to_alf ./ <sorter>
->```
->where `<sorter>` is the name of the sorting folder. Should be `kilosort4`
 
-**Data structure**\
+## Data structure
 We save data in a way consistent with the **O**pen **N**europhysiology **E**nvironment ([**ONE**](https://github.com/int-brain-lab/ONE))
 For a detailed description of filenames and structure see:[ONE Naming](https://github.com/int-brain-lab/ONE/blob/main/docs/Open_Neurophysiology_Environment_Filename_Convention.pdf) 
 
@@ -136,6 +162,12 @@ To work with data, you should set up a `one` instance:
 from one.api import One
 one = One.setup(cache_dir=/path/to/alf_data_repo>)
 ```
+>[!CRITICAL]
+> Most commands either take a `run` or a `session` as input. There is an important distinction between a `run` and a `session`. 
+> - A `run` is in "SpikeGLX  refers to any number of "gates" as recorded by spikeGLX. This folder structure is: `<subject>/<subject>_g0...`
+> - A `session` is in ALF/ONE format and refers to a single gate recorded by SpikeGLX, but processed into the format above. 
+> Rule of thumb is, if you are working before spikesorting, you are working with `run` format. If you are after spikesorting, it is `session`
+
 
 ---
 ### For SCRI/Ramirelab users:
@@ -194,7 +226,7 @@ Run the pipeline from the cibrrig root with: `python main_pipeline.py`. This wil
 
 This pipeline runs:
 - Backup and compression of raw data
-- Conversion of data structure to **ONE** 
+- Conversion of raw data structure to **ONE** 
 - Extraction of auxiliary data
     - Synch data
     - Physiology (e.g. breathing)
@@ -202,14 +234,10 @@ This pipeline runs:
     - Laser data
 - Spike sorting with Kilosort 4 *via* spikeinterface
     - IBL destriping
-    - Motion estimation (for plotting, in Spikeinterface)
-    - Motion correction (in KS4)
+    - Motion correction (DREDGE, in Spikeinterface)
     - (Optional) Optogenetic artifact removal
+    - Spikesorting
     - QC metrics of the spikesorted data
-- Concatenation of multiple triggers of auxiliary data
-
-Many of the above pipeline elements can be run independently by the code in `./preprocess/`
-
----
-
-##### At this point, any manual curation of the spike sorting can be done in phy. Steps after this will "freeze" the spike sorting, so any changes to cluster assignment will require a recomputation
+    - UnitRefine assignment of Noise, MUA, SUA
+- Conversion of spikesorted data to ALF format
+- Concatenation of multiple triggers of auxiliary data and adjusting of time events across streams
