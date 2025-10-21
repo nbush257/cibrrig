@@ -162,7 +162,7 @@ To work with data, you should set up a `one` instance:
 from one.api import One
 one = One.setup(cache_dir=/path/to/alf_data_repo>)
 ```
->[!CRITICAL]
+>[!IMPORTANT]
 > Most commands either take a `run` or a `session` as input. There is an important distinction between a `run` and a `session`. 
 > - A `run` is in "SpikeGLX  refers to any number of "gates" as recorded by spikeGLX. This folder structure is: `<subject>/<subject>_g0...`
 > - A `session` is in ALF/ONE format and refers to a single gate recorded by SpikeGLX, but processed into the format above. 
