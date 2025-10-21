@@ -159,6 +159,9 @@ def from_NPX(
     Raises:
         FileNotFoundError: If the local run path does not exist.
     """
+    raise NotImplementedError("This function is not functional yet.")
+    # TODO: Verify workflow, should match closely with from_baker function
+
     user = os.environ.get("USERNAME", os.environ.get("USER", None))
     run_folder = SASQUATCH_WORKING_DIR.joinpath(local_run_path.name)
     # ==========
