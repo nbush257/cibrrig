@@ -97,7 +97,7 @@ These include:
 >```
 >backup D:/Subjects/mickey_mouse \\baker.childrens.sea.kids/archive/ramirez_j/ramirezlab/alf_data_repo/ramirez/Subjects
 >```
->**Second**, sing on to a sasquatch login node and run:
+>**Second**, sign on to a sasquatch login node and run:
 >```
 >mamba activate iblenv
 > pipeline_hpc </baker/path> --no-qc
