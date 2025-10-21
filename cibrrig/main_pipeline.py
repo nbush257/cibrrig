@@ -53,18 +53,30 @@ class Status(enum.IntEnum):
     SYNCHRONIZED = 40
     RESP_MOD_COMPUTED = 50
 
+class DataOrganization(enum.Enum):
+    RAW = 'raw'
+    ARCHIVED = 'archived'
+    ALF = 'alf'
 
 # TODO: Solve depth issue with insertions
 
 
-def check_is_alf(run_path, gate_paths):
+def check_is_alf(run_path):
     """Check if the run path is already in ALF format"""
+    gate_paths = utils.get_gates(run_path)
+
     sub_dirs = [x for x in run_path.iterdir() if x.is_dir()]
     # check to see if the subdirs are of the form "YYYY-MM-DD" using regex
     sub_dirs = [x for x in sub_dirs if re.match(r"\d{4}-\d{2}-\d{2}", x.name)]
 
+
     if len(sub_dirs) > 0 and len(gate_paths) == 0:
-        is_alf = True
+        for date_dir in sub_dirs:
+            gate_paths.extend(utils.get_gates(date_dir))
+        if len(gate_paths) > 0:
+            is_alf = False
+        else:
+            is_alf = True
     elif len(sub_dirs) == 0 and len(gate_paths) > 0:
         is_alf = False
     elif len(sub_dirs) > 0 and len(gate_paths) > 0:
@@ -75,6 +87,40 @@ def check_is_alf(run_path, gate_paths):
         raise ValueError("Something funny about the run directory")
 
     return is_alf
+
+def check_data_organization(in_path):
+    """
+    Check if data is in the raw spikeglx organization, the archived subject organziation, or alf
+
+    raw spikeglx organization:
+    /Subjects/<run>/<run_gate>/*.nidq.bin
+    /Subjects/<run>/<run_gate>/<run_gate_probe>/*.ap.bin
+    ...
+
+    archived subject organization:
+    /Subjects/<subject>/<date>/<run_gate>/*.nidq.bin
+    /Subjects/<subject>/<date>/<run_gate>/<run_gate_probe>/*.ap.bin
+    ...
+
+    alf organization:
+    /Subjects/<subject>/<date>/<session>/alf
+    /Subjects/<subject>/<date>/<session>/raw_ephys_data
+    ...
+    """
+
+    is_alf = next(in_path.glob('*/*/raw_ephys_data'),False)
+    is_archived = any(re.match(r"\d{4}-\d{2}-\d{2}", subdir.name) for subdir in in_path.iterdir() if subdir.is_dir())
+    is_raw = any(re.match(fr"{in_path.name}_g\d+", subdir.name) for subdir in in_path.iterdir() if subdir.is_dir())
+
+    # assert sum([bool(is_alf), bool(is_raw), bool(is_archived)]) <= 1, "Unable to unequivocally determine data organization"
+    if is_alf:
+        return DataOrganization.ALF
+    elif is_raw:
+        return DataOrganization.RAW
+    elif is_archived:
+        return DataOrganization.ARCHIVED
+    else:
+        raise ValueError("Could not determine data organization")
 
 
 def set_status(session, status):
@@ -238,12 +284,11 @@ def main():
 
 def run(
     local_run_path: Path,
-    remote_working_path: Path,
-    remote_archive_path: Path,
+    remote_working_path: Path | None,
+    remote_archive_path: Path | None,
     remove_opto_artifact: bool,
     run_ephysQC: bool,
     compress_locally: bool = True,
-    on_sasquatch: bool = False,
 ):
     """Run the main pipeline
     1) Compress data locally (if compress_locally=True)
@@ -271,22 +316,37 @@ def run(
     _log.info(f"{remove_opto_artifact = }")
     _log.info(f"{run_ephysQC = }")
     _log.info("Starting pipeline")
+    
+    if remote_working_path is None:
+        os.environ["OMP_NUM_THREADS"] = "1"
+        _log.warning("Setting OMP_NUM_THREADS=1")
+    
 
     is_gate, local_run_path = utils.check_is_gate(local_run_path, move_if_gate=True)
 
-    gate_paths = utils.get_gates(local_run_path)
-    is_alf = check_is_alf(local_run_path, gate_paths)
-    if not is_alf:
-        _log.debug("Not ALF Format")
+    data_organization = check_data_organization(local_run_path)
+    _log.info(f'{data_organization = }')
+    if data_organization == DataOrganization.RAW:
         # Pass compress_locally parameter to backup function
-        if not on_sasquatch:
+        skip_backup_check = False
+        if remote_archive_path is not None:
             _log.info(f"Backing up local data to {remote_archive_path}")
             backup.no_gui(local_run_path, remote_archive_path, compress_locally=compress_locally)
         else:
             _log.info("Skipping backup since running on sasquatch")
+            skip_backup_check  = True
+
         # RUN RENAME
         _log.info("Renaming to ALF format")
-        ephys_data_to_alf.run(local_run_path)
+
+        ephys_data_to_alf.run(local_run_path, skip_backup_check=skip_backup_check)
+    elif data_organization == DataOrganization.ARCHIVED:
+        date_dirs = [x for x in local_run_path.iterdir() if x.is_dir()]
+        # if len(date_dirs)>1:
+        #     raise NotImplementedError("More than one date is not supported yet")
+        ephys_data_to_alf.run(local_run_path,skip_backup_check=True)
+    else:
+        _log.info("Data already in ALF format, skipping rename")
 
     # Get all sessions
     sessions_paths = list(alfio.iter_sessions(local_run_path))
@@ -333,14 +393,17 @@ def run(
                 _log.warning(f"Respiratory modulation not computed for {session}")
 
     # Move all data to RSS
-    _log.info(f"Moving data to working directory {remote_working_path}")
-    shutil.move(local_run_path, remote_working_path)
+    if remote_working_path is not None:
+        _log.info(f"Moving data to working directory {remote_working_path}")
+        shutil.move(local_run_path, remote_working_path)
+    else:
+        _log.info("Skipping move to working directory since running on sasquatch or gate")
 
 
 @click.command()
 @click.argument("local_run_path", type=click.Path(exists=True))
-@click.argument("remote_working_path", type=click.Path())
-@click.argument("remote_archive_path", type=click.Path())
+@click.option("--remote_working_path", '-w',type=click.Path())
+@click.option("--remote_archive_path",'-a', type=click.Path())
 @click.option(
     "--remove_opto_artifact",
     "-O",
@@ -351,15 +414,14 @@ def run(
     "--run_ephysqc", "-Q", is_flag=True, help="Run ephys QC during preprocessing"
 )
 @click.option("--no_local_compression", is_flag=True, help= 'Use legacy remote compression instead of local compression')
-@click.option("--on_sasquatch", is_flag=True, help= 'Use to turn off backup to RSS which is unaccessible on sasquatch')
 def cli(
     local_run_path,
-    remote_working_path,
-    remote_archive_path,
+    remote_working_path=None,
+    remote_archive_path=None,
     remove_opto_artifact=False,
     run_ephysqc=False,
     no_local_compression=False,
-    on_sasquatch=False):
+    ):
     """
     Command line interface for running the main pipeline.
 
@@ -375,8 +437,10 @@ def cli(
         None
     """
     local_run_path = Path(local_run_path)
-    remote_working_path = Path(remote_working_path)
-    remote_archive_path = Path(remote_archive_path)
+    if remote_working_path is not None:
+        remote_working_path = Path(remote_working_path)
+    if remote_archive_path is not None:
+        remote_archive_path = Path(remote_archive_path)
     run(
         local_run_path,
         remote_working_path,
@@ -384,7 +448,6 @@ def cli(
         remove_opto_artifact,
         run_ephysqc,
         compress_locally=not no_local_compression,
-        on_sasquatch=on_sasquatch
     )
 
 

@@ -359,6 +359,8 @@ def sanity_check_plots(probe_path, bins, rates, sems, theta, L_dir):
 
     for ii, (l, u) in enumerate(zip(lb, ub)):  # NOQA
         df = df_full.query("L_dir>@l & L_dir<@u")
+        if df.shape[0] == 0:
+            continue
         idx = df.sort_values(["theta"]).index.values
         _ax = ax[ii]
         _ax.pcolormesh(
@@ -369,6 +371,7 @@ def sanity_check_plots(probe_path, bins, rates, sems, theta, L_dir):
         _ax.axvline(0, color="w")
         _ax.set_xlabel("Phase ($\phi$)")
         _ax.set_title(f"Mod = [{l:0.2f},{u:0.2f}]")
+        
     ax[0].set_ylabel("Unit")
     plt.tight_layout()
     plt.savefig(probe_path.joinpath("respMod_heatmap.png"))

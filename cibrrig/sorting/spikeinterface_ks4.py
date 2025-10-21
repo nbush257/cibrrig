@@ -30,7 +30,7 @@ else:
     N_JOBS = 12
     CHUNK_DUR = "1s"
 
-MOTION_PRESET = "kilosort_like"  # 'kilosort_like','dredge'
+MOTION_PRESET = "dredge"  # 'kilosort_like','dredge'
 SCRATCH_NAME = f"SCRATCH_{MOTION_PRESET}"
 
 job_kwargs = dict(chunk_duration=CHUNK_DUR, n_jobs=N_JOBS, progress_bar=True)
@@ -627,12 +627,12 @@ def run_probe(probe_src, probe_local, testing=False, skip_remove_opto=False):
 
 
     # Set paths
-    si_path = probe_local.joinpath(".si")
+    si_path = probe_local.joinpath("si")
     # Temporary paths that will not be coming with us?
-    preproc_path = si_path.joinpath(".preprocessed")
-    sort_path = si_path.joinpath(".sort")
-    motion_path = si_path.joinpath(".motion")
-    analyzer_path = si_path.joinpath(".analyzer")
+    preproc_path = si_path.joinpath("preprocessed")
+    sort_path = si_path.joinpath("sort")
+    motion_path = si_path.joinpath("motion")
+    analyzer_path = si_path.joinpath("analyzer")
     exported_alf_path = si_path.joinpath("kilosort4")
     probe_local.mkdir(parents=True, exist_ok=True)
     #
