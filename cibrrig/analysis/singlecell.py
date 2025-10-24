@@ -126,7 +126,7 @@ def get_all_phase_curves(spike_times, spike_clusters, cluster_ids, breaths, nbin
         rez = get_phase_curve(ts, breaths, phi_t, phi, nbins=nbins)
         return ii, rez["rate"], rez["rate_mean"], rez["rate_sem"], rez["bins"]
 
-    results = Parallel(n_jobs=-1)(
+    results = Parallel(n_jobs=-1,backend='threading')(
         delayed(process_cluster)(ii, clu) for ii, clu in enumerate(tqdm(cluster_ids))
     )
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cibrrig"
-version = "0.10.1"
+version = "0.10.2"
 description = "Tools for data analysis and organization of Neuropixel data recorded on the CIBR rig at SCRI. Influenced by the IBL"
 readme = "readme.md"
 requires-python = ">=3.10"
