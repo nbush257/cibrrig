@@ -354,6 +354,14 @@ class ALFExporter:
             f.write(f"sample_rate = {fs}\n")
             f.write(f"hp_filtered = {self.analyzer.is_filtered()}")
 
+    def save_depths(self):
+        """
+        Save the depths of each unit relative to channel 0
+        """
+        unit_locations = self.analyzer.get_extension("unit_locations").data['unit_locations']
+        depths = unit_locations[:, 1]
+        np.save(self.alf_path.joinpath("clusters.depths.npy"), depths)
+
     def run(self):
         """
         Run all steps to export sorting as ALF/IBL structure
@@ -373,3 +381,4 @@ class ALFExporter:
         self.write_params()
         self.create_pca_features()
         self.save_extracted_waveforms()
+        self.save_depths()

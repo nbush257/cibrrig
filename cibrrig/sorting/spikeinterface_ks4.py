@@ -75,7 +75,6 @@ def log_elapsed_time(start_time):
     _log.info(f"Elapsed time: {time.time() - start_time:0.0f} seconds")
 
 
-# TODO: test
 def move_motion_info(src, destination):
     """
     Rename the motion data computed by Spikeinterface into a alf-like format
@@ -475,7 +474,6 @@ def apply_preprocessing(
     return rec_out
 
 
-# TODO:  test
 def extract_breath_events(session_path, dest):
     """
     Create an 'events.csv' that has the times of each breath for the alf folder.
